@@ -113,6 +113,23 @@ emit python
 python -m pip install -e .
 ```
 
+
+## Incremental compilation (Phase 1.4)
+
+Vibe now includes deterministic local incremental compilation primitives for `compile`:
+
+- cache directory: `.vibe_cache/` (next to source files)
+- cache key material: source hash + typed SSA IR hash + emit target + compiler version
+- cache reuse only when prior verification passed
+- cache never overrides preservation truth
+
+Compile flags:
+
+- `--no-cache` disable cache for one compile
+- `--clean-cache` clear the file cache record before compile
+
+If cache metadata is corrupted, Vibe gracefully falls back to full revalidation and emission.
+
 ## Multi-target emission
 
 Vibe now emits from the typed SSA IR through pluggable backends.
