@@ -14,8 +14,8 @@ def test_explain_snapshot_includes_experimental_sections(capsys, tmp_path) -> No
     out = capsys.readouterr().out
     assert "AST:" in out
     assert "Normalized IR:" in out
-    assert '"tesla_victory_layer": true' in out
-    assert '"agentora_config"' in out
+    assert '"tesla_layer"' in out
+    assert '"agentora"' in out
     assert "tesla_enabled: True" in out
     assert "agent metrics:" in out
 

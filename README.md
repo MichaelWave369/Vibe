@@ -58,6 +58,15 @@ Vibe now uses a **formal grammar-backed front end** as the syntax source of trut
 `.vibe` files may optionally declare `vibe_version` at the top. If omitted, parsing remains backward-compatible with existing examples and defaults to current behavior.
 
 
+### Typed SSA IR (Phase 1.2)
+
+After parsing, Vibe now lowers AST into a **typed SSA-style IR**:
+
+`.vibe -> parse -> AST -> typed SSA IR -> verify -> emit -> report`
+
+Each IR value has a unique SSA ID, explicit type tag, and def-use references. Serialization is deterministic JSON for future incremental compilation workflows.
+
+
 Supported top-level blocks:
 - `intent`
 - `preserve`

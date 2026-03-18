@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import json
-from dataclasses import asdict
 from pathlib import Path
 
 from .generator_python import generate_python
-from .ir import ast_to_ir
+from .ir import ast_to_ir, serialize_ir
 from .parser import parse_source
 from .report import render_report, render_report_json
 from .verifier import verify
@@ -56,7 +54,7 @@ def _explain(path: Path) -> int:
     print("AST:")
     print(ast)
     print("\nNormalized IR:")
-    print(json.dumps(asdict(ir), indent=2, sort_keys=True))
+    print(serialize_ir(ir))
     print("\nPreservation reasoning:")
     print(render_report(result))
     return 0
