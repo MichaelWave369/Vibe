@@ -146,3 +146,17 @@ Vibe is licensed under **GNU AGPLv3 (AGPL-3.0-only)**.
 This preserves reciprocity for modified versions, including when the software is offered as a hosted or network service.
 
 Copyright (c) 2026 Michael Wave / Parallax
+
+
+## GitHub Pages
+
+Vibe includes a static public homepage under `docs/` for GitHub Pages deployment.
+
+- Homepage source: `docs/index.html`
+- Styles: `docs/styles.css`
+- Workflow: `.github/workflows/pages.yml`
+
+To enable Pages in GitHub:
+1. Go to **Settings → Pages**.
+2. Set **Source** to **GitHub Actions**.
+3. Push/merge to `main` and the workflow deploys automatically.
