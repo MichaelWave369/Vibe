@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .generator_python import generate_python
+from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
 from .parser import parse_source
 from .report import render_report, render_report_json
@@ -32,15 +32,15 @@ def _compile(path: Path, report: ReportMode) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
-    py_code = generate_python(ir)
-    result = verify(ir, py_code)
+    emitted_code, backend = emit_code(ir)
+    result = verify(ir, emitted_code)
     _print_report(result, report)
     if not result.passed:
         print("compile failed: bridge preservation threshold not met")
         return 1
 
-    out_path = path.with_suffix(".py")
-    out_path.write_text(py_code, encoding="utf-8")
+    out_path = output_path_for(path, backend)
+    out_path.write_text(emitted_code, encoding="utf-8")
     print(f"emitted: {out_path}")
     return 0
 
@@ -49,8 +49,8 @@ def _explain(path: Path) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
-    py_code = generate_python(ir)
-    result = verify(ir, py_code)
+    emitted_code, backend = emit_code(ir)
+    result = verify(ir, emitted_code)
     print("AST:")
     print(ast)
     print("\nNormalized IR:")
@@ -64,8 +64,8 @@ def _verify(path: Path, report: ReportMode) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
-    py_code = generate_python(ir)
-    result = verify(ir, py_code)
+    emitted_code, backend = emit_code(ir)
+    result = verify(ir, emitted_code)
     _print_report(result, report)
     return 0 if result.passed else 1
 

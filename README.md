@@ -113,6 +113,15 @@ emit python
 python -m pip install -e .
 ```
 
+## Multi-target emission
+
+Vibe now emits from the typed SSA IR through pluggable backends.
+
+Current supported targets: `python`, `typescript`.
+
+- Target selection comes from the source `emit` block.
+- Experimental Tesla/Agentora/AgentCeption content lowers to structured config/stub output (no runtime autonomy).
+
 ## CLI usage
 
 ```bash
@@ -121,6 +130,7 @@ vibec verify vibe/examples/payment_router.vibe
 vibec verify vibe/examples/payment_router.vibe --report json
 vibec compile vibe/examples/payment_router.vibe
 vibec compile vibe/examples/payment_router.vibe --report json
+vibec compile vibe/examples/edge_contract_ts.vibe
 ```
 
 ## Bridge report output
@@ -141,7 +151,7 @@ Vibe reports:
 ## Current limitations
 
 - v0.1 grammar is intentionally small and hand-written.
-- Only `emit python` is supported.
+- Emission currently supports `python` and `typescript` only.
 - Verification is heuristic (deterministic and explainable), not a formal proof system.
 - Generation includes TODO markers where ambiguity remains.
 
