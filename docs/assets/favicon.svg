@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Vibe favicon">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#24d8d8"/>
+      <stop offset="100%" stop-color="#8d74ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="24" fill="#070b17"/>
+  <path d="M24 30h16l20 58 20-58h16L66 96H54z" fill="url(#g)"/>
+</svg>
