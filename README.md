@@ -48,6 +48,16 @@ Where:
 
 ## Language surface (v0.1)
 
+
+## Parser Foundation (Phase 1.1)
+
+Vibe now uses a **formal grammar-backed front end** as the syntax source of truth (`vibe/grammar.py`) with a PEG-style parser implementation in `vibe/parser.py`.
+
+### `vibe_version`
+
+`.vibe` files may optionally declare `vibe_version` at the top. If omitted, parsing remains backward-compatible with existing examples and defaults to current behavior.
+
+
 Supported top-level blocks:
 - `intent`
 - `preserve`

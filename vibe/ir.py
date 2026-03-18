@@ -29,6 +29,12 @@ class IR:
     agentception_config: dict[str, object] = field(default_factory=dict)
     delegation_tree: dict[str, object] = field(default_factory=dict)
     merge_strategy: str = ""
+    vibe_version: str | None = None
+    imports: list[str] = field(default_factory=list)
+    modules: list[str] = field(default_factory=list)
+    types: list[str] = field(default_factory=list)
+    enums: list[str] = field(default_factory=list)
+    interfaces: list[str] = field(default_factory=list)
 
 
 
@@ -127,4 +133,10 @@ def ast_to_ir(program: Program) -> IR:
         agentception_config=agentception_cfg,
         delegation_tree=delegation_tree,
         merge_strategy=merge_strategy,
+        vibe_version=program.vibe_version,
+        imports=list(program.imports),
+        modules=list(program.modules),
+        types=list(program.types),
+        enums=list(program.enums),
+        interfaces=list(program.interfaces),
     )

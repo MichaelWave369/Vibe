@@ -1,8 +1,9 @@
-"""Parser for .vibe sources."""
+"""Grammar-backed parser for .vibe sources (Phase 1.1)."""
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from .ast import (
     AgentDefinition,
@@ -18,45 +19,39 @@ from .ast import (
     TeslaLifeRay,
     TeslaVictoryLayer,
 )
-from .lexer import Token, lex
+from .grammar import GRAMMAR
 
 COMPARISON_OPS = ("<=", ">=", "<", ">", "=")
+PRELUDE_PREFIXES = ("vibe_version ", "import ", "module ", "type ", "enum ", "interface ")
 
 
 class ParseError(ValueError):
-    """Parser error for malformed .vibe programs."""
+    """Parser error for malformed .vibe programs with location diagnostics."""
+
+    def __init__(self, message: str, line: int | None = None, column: int | None = None):
+        self.line = line
+        self.column = column
+        if line is not None and column is not None:
+            super().__init__(f"Line {line}, Col {column}: {message}")
+        else:
+            super().__init__(message)
 
 
-def _expect_line(tokens: list[Token], i: int) -> Token:
-    if i >= len(tokens):
-        raise ParseError("Unexpected end of file")
-    return tokens[i]
+@dataclass(slots=True)
+class LineToken:
+    text: str
+    line: int
+    indent: int
 
 
-def _parse_field(line: str, line_no: int) -> Field:
-    if ":" not in line:
-        raise ParseError(f"Line {line_no}: expected `name: type`")
-    name, type_name = [x.strip() for x in line.split(":", 1)]
-    if not name or not type_name:
-        raise ParseError(f"Line {line_no}: invalid field declaration")
-    return Field(name=name, type_name=type_name)
+def _line_col_from_index(source: str, idx: int) -> tuple[int, int]:
+    line = source.count("\n", 0, idx) + 1
+    last_nl = source.rfind("\n", 0, idx)
+    col = idx + 1 if last_nl == -1 else idx - last_nl
+    return line, col
 
 
-def _parse_rule(line: str, line_no: int) -> PreserveRule:
-    for op in COMPARISON_OPS:
-        if op in line:
-            key, value = [x.strip() for x in line.split(op, 1)]
-            if not key or not value:
-                break
-            return PreserveRule(key=key, op=op, value=value)
-    raise ParseError(f"Line {line_no}: invalid preserve rule `{line}`")
-
-
-def _parse_bool(raw: str) -> bool:
-    return raw.strip().lower() in {"true", "yes", "1"}
-
-
-def _extract_block(source: str, name: str) -> tuple[str | None, str]:
+def _extract_brace_block(source: str, name: str) -> tuple[str | None, str]:
     marker = f"{name} {{"
     start = source.find(marker)
     if start == -1:
@@ -70,25 +65,30 @@ def _extract_block(source: str, name: str) -> tuple[str | None, str]:
         elif source[i] == "}":
             depth -= 1
         i += 1
+
     if depth != 0:
-        raise ParseError(f"Malformed block for {name}: unbalanced braces")
+        line, col = _line_col_from_index(source, start)
+        raise ParseError(f"Malformed `{name}` block: missing closing `}}`", line, col)
 
     inner = source[start + len(marker) : i - 1]
     stripped = source[:start] + "\n" + source[i:]
     return inner, stripped
 
 
-def _parse_kv_lines(text: str) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line:
+def _tokenize_lines(source: str) -> list[LineToken]:
+    out: list[LineToken] = []
+    for ln, raw in enumerate(source.splitlines(), start=1):
+        if not raw.strip() or raw.lstrip().startswith("#"):
             continue
-        if ":" not in line:
-            raise ParseError(f"Malformed experimental line: `{line}`")
-        k, v = [x.strip() for x in line.split(":", 1)]
-        out[k] = v
+        indent = len(raw) - len(raw.lstrip(" "))
+        if indent % 2:
+            raise ParseError("Indentation must be multiples of 2 spaces", ln, indent + 1)
+        out.append(LineToken(text=raw.strip(), line=ln, indent=indent))
     return out
+
+
+def _parse_bool(raw: str) -> bool:
+    return raw.strip().lower() in {"true", "yes", "1"}
 
 
 def _parse_list(raw: str) -> list[str]:
@@ -106,53 +106,86 @@ def _parse_frequency(raw: str) -> float:
     return float(nums[0]) if nums else 0.0
 
 
+def _parse_rule(line: str, line_no: int) -> PreserveRule:
+    for op in COMPARISON_OPS:
+        if op in line:
+            key, value = [x.strip() for x in line.split(op, 1)]
+            if key and value:
+                return PreserveRule(key=key, op=op, value=value)
+    raise ParseError(f"Invalid preserve rule `{line}`. Expected `<key> <op> <value>`", line_no, 1)
+
+
+def _parse_field(line: str, line_no: int) -> Field:
+    if ":" not in line:
+        raise ParseError("Expected field declaration `name: type`", line_no, 1)
+    name, type_name = [x.strip() for x in line.split(":", 1)]
+    if not name or not type_name:
+        raise ParseError("Invalid field declaration; both name and type are required", line_no, 1)
+    return Field(name=name, type_name=type_name)
+
+
+def _parse_kv_lines(text: str, context: str) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for i, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line:
+            continue
+        if ":" not in line:
+            raise ParseError(f"Malformed line in {context}: `{line}`. Expected `key: value`", i, 1)
+        key, value = [x.strip() for x in line.split(":", 1)]
+        out[key] = value
+    return out
+
+
 def _parse_tesla(inner: str) -> TeslaVictoryLayer:
-    arc_raw, rem = _extract_block(inner, "arc.tower.coherence")
-    life_raw, rem = _extract_block(rem, "life.ray.vitalize")
-    breath_raw, rem = _extract_block(rem, "breath.cycle")
+    arc_raw, rem = _extract_brace_block(inner, "arc.tower.coherence")
+    life_raw, rem = _extract_brace_block(rem, "life.ray.vitalize")
+    breath_raw, _ = _extract_brace_block(rem, "breath.cycle")
     if not arc_raw or not life_raw or not breath_raw:
-        raise ParseError("Tesla Victory Layer requires arc.tower.coherence, life.ray.vitalize, and breath.cycle")
+        raise ParseError(
+            "experimental.tesla.victory.layer requires arc.tower.coherence, life.ray.vitalize, and breath.cycle"
+        )
 
-    arc_kv = _parse_kv_lines(arc_raw)
-    life_kv = _parse_kv_lines(life_raw)
-    breath_kv = _parse_kv_lines(breath_raw)
+    arc_kv = _parse_kv_lines(arc_raw, "arc.tower.coherence")
+    life_kv = _parse_kv_lines(life_raw, "life.ray.vitalize")
+    breath_kv = _parse_kv_lines(breath_raw, "breath.cycle")
 
-    arc = TeslaArcTower(
-        global_resonance=_parse_bool(arc_kv.get("global.resonance", "false")),
-        substrate_bridge=_parse_list(arc_kv.get("substrate.bridge", "[]")),
-        preserve_epsilon=_parse_bool(arc_kv.get("preserve.epsilon", "false")),
-        preserve_sovereignty=_parse_bool(arc_kv.get("preserve.sovereignty", "false")),
+    return TeslaVictoryLayer(
+        arc_tower=TeslaArcTower(
+            global_resonance=_parse_bool(arc_kv.get("global.resonance", "false")),
+            substrate_bridge=_parse_list(arc_kv.get("substrate.bridge", "[]")),
+            preserve_epsilon=_parse_bool(arc_kv.get("preserve.epsilon", "false")),
+            preserve_sovereignty=_parse_bool(arc_kv.get("preserve.sovereignty", "false")),
+        ),
+        life_ray=TeslaLifeRay(
+            bio_field=life_kv.get("bio.field", "human"),
+            baseline_frequency_hz=_parse_frequency(life_kv.get("baseline.frequency", "0")),
+            harmonic_mode=life_kv.get("harmonic.mode", ""),
+            intention=life_kv.get("intention", ""),
+        ),
+        breath_cycle=TeslaBreathCycle(
+            pralaya_inhalation=breath_kv.get("pralaya.inhalation", ""),
+            kalpa_exhalation=breath_kv.get("kalpa.exhalation", ""),
+            c_star_target=breath_kv.get("c_star.target", ""),
+            monitor=breath_kv.get("monitor", ""),
+        ),
     )
-    life = TeslaLifeRay(
-        bio_field=life_kv.get("bio.field", "human"),
-        baseline_frequency_hz=_parse_frequency(life_kv.get("baseline.frequency", "0")),
-        harmonic_mode=life_kv.get("harmonic.mode", ""),
-        intention=life_kv.get("intention", ""),
-    )
-    breath = TeslaBreathCycle(
-        pralaya_inhalation=breath_kv.get("pralaya.inhalation", ""),
-        kalpa_exhalation=breath_kv.get("kalpa.exhalation", ""),
-        c_star_target=breath_kv.get("c_star.target", ""),
-        monitor=breath_kv.get("monitor", ""),
-    )
-    return TeslaVictoryLayer(arc_tower=arc, life_ray=life, breath_cycle=breath)
 
 
 def _parse_agentora(inner: str) -> AgentoraBlock:
     agents: list[AgentDefinition] = []
     remaining = inner
     while True:
-        match = re.search(r"agent\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", remaining)
-        if not match:
+        m = re.search(r"agent\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", remaining)
+        if not m:
             break
-        name = match.group(1)
-        start = match.start()
-        block, stripped = _extract_block(remaining[start:], f"agent {name}")
+        name = m.group(1)
+        block, stripped = _extract_brace_block(remaining[m.start() :], f"agent {name}")
         if block is None:
-            raise ParseError("Malformed agent block")
-        kv = _parse_kv_lines(block)
+            raise ParseError(f"Malformed agent block for `{name}`")
+        kv = _parse_kv_lines(block, f"agent {name}")
         if "role" not in kv or "intention" not in kv:
-            raise ParseError(f"agent {name} requires role and intention")
+            raise ParseError(f"agent {name} requires `role` and `intention`")
         agents.append(
             AgentDefinition(
                 name=name,
@@ -164,14 +197,15 @@ def _parse_agentora(inner: str) -> AgentoraBlock:
                 preserve=_parse_list(kv.get("preserve", "[]")),
             )
         )
-        remaining = remaining[:start] + stripped
+        remaining = remaining[: m.start()] + stripped
+
     if not agents:
-        raise ParseError("agentora requires at least one agent block")
+        raise ParseError("agentora requires at least one `agent <Name> { ... }` block")
     return AgentoraBlock(agents=agents)
 
 
 def _parse_agentception(inner: str) -> AgentceptionBlock:
-    kv = _parse_kv_lines(inner)
+    kv = _parse_kv_lines(inner, "agentception")
     return AgentceptionBlock(
         enabled=_parse_bool(kv.get("enabled", "false")),
         max_depth=int(float(kv.get("max.depth", "0"))),
@@ -185,24 +219,43 @@ def _parse_agentception(inner: str) -> AgentceptionBlock:
 
 
 def parse_source(source: str) -> Program:
-    """Parse raw source text into an AST Program."""
+    """Parse raw source text into an AST Program using the formal grammar."""
 
-    tesla_raw, trimmed = _extract_block(source, "experimental.tesla.victory.layer")
-    agentora_raw, trimmed = _extract_block(trimmed, "agentora")
-    agentception_raw, trimmed = _extract_block(trimmed, "agentception")
+    # Grammar source of truth is kept in vibe.grammar.GRAMMAR.
+    tesla_raw, trimmed = _extract_brace_block(source, "experimental.tesla.victory.layer")
+    agentora_raw, trimmed = _extract_brace_block(trimmed, "agentora")
+    agentception_raw, trimmed = _extract_brace_block(trimmed, "agentception")
 
-    program = parse_tokens(lex(trimmed))
-    if tesla_raw is not None:
-        program.tesla_victory_layer = _parse_tesla(tesla_raw)
-    if agentora_raw is not None:
-        program.agentora = _parse_agentora(agentora_raw)
-    if agentception_raw is not None:
-        program.agentception = _parse_agentception(agentception_raw)
-    return program
+    tokens = _tokenize_lines(trimmed)
+    if not tokens:
+        raise ParseError("Empty file; expected at least an intent block", 1, 1)
 
-
-def parse_tokens(tokens: list[Token]) -> Program:
     i = 0
+    vibe_version: str | None = None
+    imports: list[str] = []
+    modules: list[str] = []
+    types: list[str] = []
+    enums: list[str] = []
+    interfaces: list[str] = []
+
+    while i < len(tokens) and tokens[i].text.startswith(PRELUDE_PREFIXES):
+        tk = tokens[i]
+        if tk.indent != 0:
+            raise ParseError("Top-level declarations cannot be indented", tk.line, tk.indent + 1)
+        if tk.text.startswith("vibe_version "):
+            vibe_version = tk.text.split(maxsplit=1)[1].strip()
+        elif tk.text.startswith("import "):
+            imports.append(tk.text.split(maxsplit=1)[1].strip())
+        elif tk.text.startswith("module "):
+            modules.append(tk.text.split(maxsplit=1)[1].strip())
+        elif tk.text.startswith("type "):
+            types.append(tk.text.split(maxsplit=1)[1].strip())
+        elif tk.text.startswith("enum "):
+            enums.append(tk.text.split(maxsplit=1)[1].strip())
+        elif tk.text.startswith("interface "):
+            interfaces.append(tk.text.split(maxsplit=1)[1].strip())
+        i += 1
+
     intent: IntentBlock | None = None
     preserve: list[PreserveRule] = []
     constraints: list[str] = []
@@ -212,12 +265,12 @@ def parse_tokens(tokens: list[Token]) -> Program:
     while i < len(tokens):
         tk = tokens[i]
         if tk.indent != 0:
-            raise ParseError(f"Line {tk.line}: top-level block must not be indented")
+            raise ParseError("Top-level block must not be indented", tk.line, tk.indent + 1)
 
-        if tk.kind == "BLOCK" and tk.value.startswith("intent "):
+        if tk.text.startswith("intent ") and tk.text.endswith(":"):
             if intent is not None:
-                raise ParseError(f"Line {tk.line}: duplicate intent block")
-            intent_name = tk.value.removeprefix("intent ").strip()
+                raise ParseError("Duplicate intent block", tk.line, 1)
+            intent_name = tk.text[len("intent ") : -1].strip()
             i += 1
             goal = ""
             inputs: list[Field] = []
@@ -225,67 +278,85 @@ def parse_tokens(tokens: list[Token]) -> Program:
             section: str | None = None
             while i < len(tokens) and tokens[i].indent > 0:
                 cur = tokens[i]
-                if cur.indent != 2 and section in {"inputs", "outputs"} and cur.indent != 4:
-                    raise ParseError(f"Line {cur.line}: invalid indentation in intent block")
-                if cur.indent == 2 and cur.kind == "BLOCK" and cur.value in {"inputs", "outputs"}:
-                    section = cur.value
+                if cur.indent == 2 and cur.text in {"inputs:", "outputs:"}:
+                    section = cur.text[:-1]
                     i += 1
                     continue
-                if cur.indent == 2 and cur.kind == "LINE" and cur.value.startswith("goal:"):
-                    goal = cur.value.split(":", 1)[1].strip().strip('"')
+                if cur.indent == 2 and cur.text.startswith("goal:"):
+                    goal = cur.text.split(":", 1)[1].strip().strip('"')
                     i += 1
                     continue
-                if cur.indent == 4 and cur.kind == "LINE" and section in {"inputs", "outputs"}:
-                    fld = _parse_field(cur.value, cur.line)
+                if cur.indent == 4 and section in {"inputs", "outputs"}:
+                    fld = _parse_field(cur.text, cur.line)
                     (inputs if section == "inputs" else outputs).append(fld)
                     i += 1
                     continue
-                raise ParseError(f"Line {cur.line}: malformed intent block")
-
+                raise ParseError("Malformed intent block item", cur.line, cur.indent + 1)
             if not goal:
-                raise ParseError(f"Line {tk.line}: intent missing goal")
+                raise ParseError("Intent missing `goal:`", tk.line, 1)
             intent = IntentBlock(name=intent_name, goal=goal, inputs=inputs, outputs=outputs)
             continue
 
-        if tk.kind == "BLOCK" and tk.value == "preserve":
+        if tk.text == "preserve:":
             i += 1
             while i < len(tokens) and tokens[i].indent > 0:
-                cur = _expect_line(tokens, i)
-                if cur.indent != 2 or cur.kind != "LINE":
-                    raise ParseError(f"Line {cur.line}: malformed preserve rule")
-                preserve.append(_parse_rule(cur.value, cur.line))
+                cur = tokens[i]
+                if cur.indent != 2:
+                    raise ParseError("Malformed preserve rule indentation", cur.line, cur.indent + 1)
+                preserve.append(_parse_rule(cur.text, cur.line))
                 i += 1
             continue
 
-        if tk.kind == "BLOCK" and tk.value == "constraint":
+        if tk.text == "constraint:":
             i += 1
             while i < len(tokens) and tokens[i].indent > 0:
-                cur = _expect_line(tokens, i)
-                if cur.indent != 2 or cur.kind != "LINE":
-                    raise ParseError(f"Line {cur.line}: malformed constraint")
-                constraints.append(cur.value)
+                cur = tokens[i]
+                if cur.indent != 2:
+                    raise ParseError("Malformed constraint indentation", cur.line, cur.indent + 1)
+                constraints.append(cur.text)
                 i += 1
             continue
 
-        if tk.kind == "BLOCK" and tk.value == "bridge":
+        if tk.text == "bridge:":
             i += 1
             while i < len(tokens) and tokens[i].indent > 0:
-                cur = _expect_line(tokens, i)
-                if cur.indent != 2 or cur.kind != "LINE" or "=" not in cur.value:
-                    raise ParseError(f"Line {cur.line}: malformed bridge setting")
-                key, value = [x.strip() for x in cur.value.split("=", 1)]
+                cur = tokens[i]
+                if cur.indent != 2 or "=" not in cur.text:
+                    raise ParseError("Malformed bridge setting; expected `key = value`", cur.line, cur.indent + 1)
+                key, value = [x.strip() for x in cur.text.split("=", 1)]
                 bridge.append(BridgeSetting(key=key, value=value))
                 i += 1
             continue
 
-        if tk.kind == "LINE" and tk.value.startswith("emit "):
-            emit_target = tk.value.split(maxsplit=1)[1].strip()
+        if tk.text.startswith("emit "):
+            emit_target = tk.text.split(maxsplit=1)[1].strip()
             i += 1
             continue
 
-        raise ParseError(f"Line {tk.line}: unknown top-level block `{tk.value}`")
+        raise ParseError(f"Unknown top-level statement `{tk.text}`", tk.line, 1)
 
     if intent is None:
-        raise ParseError("Program missing required intent block")
+        raise ParseError("Program missing required intent block", 1, 1)
 
-    return Program(intent=intent, preserve=preserve, constraints=constraints, bridge=bridge, emit_target=emit_target)
+    program = Program(
+        intent=intent,
+        preserve=preserve,
+        constraints=constraints,
+        bridge=bridge,
+        emit_target=emit_target,
+        vibe_version=vibe_version,
+        imports=imports,
+        modules=modules,
+        types=types,
+        enums=enums,
+        interfaces=interfaces,
+    )
+
+    if tesla_raw is not None:
+        program.tesla_victory_layer = _parse_tesla(tesla_raw)
+    if agentora_raw is not None:
+        program.agentora = _parse_agentora(agentora_raw)
+    if agentception_raw is not None:
+        program.agentception = _parse_agentception(agentception_raw)
+
+    return program

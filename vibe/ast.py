@@ -101,3 +101,9 @@ class Program:
     tesla_victory_layer: TeslaVictoryLayer | None = None
     agentora: AgentoraBlock | None = None
     agentception: AgentceptionBlock | None = None
+    vibe_version: str | None = None
+    imports: list[str] = field(default_factory=list)
+    modules: list[str] = field(default_factory=list)
+    types: list[str] = field(default_factory=list)
+    enums: list[str] = field(default_factory=list)
+    interfaces: list[str] = field(default_factory=list)

@@ -92,8 +92,9 @@ def test_parse_tesla_agent_blocks() -> None:
 
 def test_parse_rejects_malformed_tesla() -> None:
     bad = SOURCE.replace("breath.cycle {", "breath.cycle ")
-    with pytest.raises(ParseError):
+    with pytest.raises(ParseError) as exc:
         parse_source(bad)
+    assert "Line" in str(exc.value) and "Col" in str(exc.value)
 
 
 def test_ir_normalizes_experimental_fields() -> None:
