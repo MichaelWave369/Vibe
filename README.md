@@ -165,6 +165,16 @@ To publish manually in GitHub:
 > Note: the previous Actions-based Pages workflow has been disabled for now to avoid setup errors on repositories where Pages is not yet Actions-configured.
 
 
+
+## Language Map
+
+`Nevora -> Agentora -> AgentCeption -> Vibe`
+
+- **Nevora**: translator lineage proving intent-to-starter-code workflows.
+- **Agentora**: native orchestration layer for named specialist agents.
+- **AgentCeption**: recursive delegation layer with inheritance and merge-preservation checks.
+- **Vibe**: compiler-law system where emission is gated by bridge preservation.
+
 ## Experimental Modules
 
 ### Tesla Victory Layer (experimental.tesla.victory.layer)

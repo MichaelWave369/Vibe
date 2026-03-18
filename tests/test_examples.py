@@ -10,6 +10,9 @@ from vibe.verifier import verify
 EXAMPLES = [
     Path("vibe/examples/payment_router.vibe"),
     Path("vibe/examples/csv_api.vibe"),
+    Path("vibe/examples/tesla_victory_layer.vibe"),
+    Path("vibe/examples/agentora_agentception.vibe"),
+    Path("vibe/examples/sovereign_bridge.vibe"),
 ]
 
 
