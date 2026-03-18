@@ -64,6 +64,7 @@ def render_report(result: VerificationResult, show_obligations: bool = True) -> 
         f"  version: {result.backend_version}",
         f"  mode: {result.backend_mode}",
         f"  capabilities: {result.backend_capabilities}",
+        f"  details: {result.backend_details}",
     ])
     if result.backend_error:
         lines.append(f"  backend_error: {result.backend_error}")

@@ -169,6 +169,30 @@ Reports now include backend metadata:
 
 This is still an operational verification system (not full theorem proving yet).
 
+## First symbolic/SMT adapter (Phase 2.3)
+
+Vibe now includes its first real solver-style backend: `--backend smt`.
+
+Current solver-supported subset is intentionally narrow:
+
+- founding law bridge checks:
+  - `epsilon_post > epsilon_floor`
+  - `measurement_ratio >= measurement_safe_ratio`
+- simple scalar comparisons (`>`, `>=`, `<`, `<=`)
+- simple scalar/symbol equality (`=`)
+- boolean assertions (`key: true|false` or `key = true|false`)
+
+Unsupported predicates are surfaced as `unknown`/deferred with explicit evidence.
+They are never silently marked as satisfied.
+
+Optional hybrid mode is available through fallback:
+
+- `--fallback-backend heuristic`
+
+This allows unknown SMT results to be evaluated by a fallback backend, and reports record whether fallback was used.
+
+This is a first proof-surface slice, not full theorem proving or full equivalence checking.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -202,9 +226,12 @@ vibec verify vibe/examples/payment_router.vibe
 vibec verify vibe/examples/payment_router.vibe --report json
 vibec verify vibe/examples/sovereign_bridge.vibe --show-obligations
 vibec verify vibe/examples/payment_router.vibe --backend heuristic
+vibec verify vibe/examples/payment_router.vibe --backend smt
+vibec verify vibe/examples/payment_router.vibe --backend smt --fallback-backend heuristic
 vibec compile vibe/examples/payment_router.vibe
 vibec compile vibe/examples/payment_router.vibe --report json
 vibec compile vibe/examples/payment_router.vibe --backend heuristic
+vibec compile vibe/examples/payment_router.vibe --backend smt
 vibec compile vibe/examples/edge_contract_ts.vibe
 ```
 

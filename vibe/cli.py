@@ -43,6 +43,7 @@ def _compile(
     clean_cache: bool = False,
     show_obligations: bool = True,
     verification_backend: str = "heuristic",
+    fallback_backend: str | None = None,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
@@ -78,7 +79,7 @@ def _compile(
         else:
             print("cache: miss")
 
-    result = verify(ir, emitted_code, backend=verification_backend)
+    result = verify(ir, emitted_code, backend=verification_backend, fallback_backend=fallback_backend)
     _print_report(result, report, show_obligations=show_obligations)
 
     if not result.passed:
@@ -142,12 +143,13 @@ def _verify(
     report: ReportMode,
     show_obligations: bool = True,
     verification_backend: str = "heuristic",
+    fallback_backend: str | None = None,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
     emitted_code, _ = emit_code(ir)
-    result = verify(ir, emitted_code, backend=verification_backend)
+    result = verify(ir, emitted_code, backend=verification_backend, fallback_backend=fallback_backend)
     _print_report(result, report, show_obligations=show_obligations)
     if result.backend_error:
         print(f"verify failed: {result.backend_error}")
@@ -165,6 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--clean-cache", action="store_true", help="Remove cache record before compiling")
     cp.add_argument("--show-obligations", action="store_true", help="Show full obligation list in human report")
     cp.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
+    cp.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
 
     ex = sub.add_parser("explain", help="Explain AST and IR")
     ex.add_argument("path", type=Path)
@@ -174,6 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("--report", choices=["human", "json"], default="human")
     vf.add_argument("--show-obligations", action="store_true", help="Show full obligation list in human report")
     vf.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
+    vf.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
 
     return parser
 
@@ -190,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
             clean_cache=args.clean_cache,
             show_obligations=args.show_obligations,
             verification_backend=args.backend,
+            fallback_backend=args.fallback_backend,
         )
     if args.command == "explain":
         return _explain(args.path)
@@ -199,6 +204,7 @@ def main(argv: list[str] | None = None) -> int:
             args.report,
             show_obligations=args.show_obligations,
             verification_backend=args.backend,
+            fallback_backend=args.fallback_backend,
         )
 
     parser.error("unknown command")
