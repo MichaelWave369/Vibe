@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .ir import DEFAULT_EPSILON_FLOOR, DEFAULT_MEASUREMENT_SAFE_RATIO, IR
+
+ObligationStatus = str
+
+
+@dataclass(slots=True)
+class VerificationObligation:
+    obligation_id: str
+    category: str
+    description: str
+    source_location: str | None
+    status: ObligationStatus
+    evidence: str | None = None
 
 
 @dataclass(slots=True)
@@ -35,14 +47,28 @@ class VerificationResult:
     delegation_integrity: float = 1.0
     merge_preservation: float = 1.0
     agent_bridge_score: float = 1.0
+    obligations: list[VerificationObligation] = field(default_factory=list)
+    obligation_counts: dict[str, int] = field(default_factory=dict)
+
 
 
 def _clamp(x: float) -> float:
     return max(0.0, min(1.0, x))
 
 
-def verify(ir: IR, generated_python: str) -> VerificationResult:
-    """Compute heuristic bridge preservation metrics for v0.1."""
+def _status_for_bool(value: bool, evidence: str) -> tuple[str, str]:
+    return ("satisfied", evidence) if value else ("violated", evidence)
+
+
+def _compute_obligation_counts(obligations: list[VerificationObligation]) -> dict[str, int]:
+    counts = {"satisfied": 0, "violated": 0, "unknown": 0, "not_applicable": 0}
+    for o in obligations:
+        counts[o.status] = counts.get(o.status, 0) + 1
+    return counts
+
+
+def verify(ir: IR, generated_code: str) -> VerificationResult:
+    """Compute heuristic bridge preservation metrics for v0.x."""
 
     epsilon_floor = float(ir.bridge_config.get("epsilon_floor", DEFAULT_EPSILON_FLOOR))
     measurement_safe_ratio = float(
@@ -53,7 +79,7 @@ def verify(ir: IR, generated_python: str) -> VerificationResult:
     epsilon_pre = 0.35 + 0.55 * c_bar
 
     constraint_hits = 0
-    lower_code = generated_python.lower()
+    lower_code = generated_code.lower()
     for constraint in ir.constraints:
         c = constraint.lower()
         if "deterministic" in c and ("sort(" in lower_code or "sorted(" in lower_code):
@@ -67,7 +93,7 @@ def verify(ir: IR, generated_python: str) -> VerificationResult:
 
     constraint_score = 1.0 if not ir.constraints else constraint_hits / len(ir.constraints)
     deterministic_score = 1.0 if ("sort(" in lower_code or "sorted(" in lower_code) else 0.8
-    readability_score = 1.0 if "\n    " in generated_python and '"""' in generated_python else 0.85
+    readability_score = 1.0 if "\n" in generated_code and ("def " in generated_code or "export function" in generated_code) else 0.85
     preserve_score = 1.0 if ir.preserve_rules else 0.9
 
     tesla_factor = 0.0
@@ -130,10 +156,142 @@ def verify(ir: IR, generated_python: str) -> VerificationResult:
     else:
         verdict = "MULTIMODAL_BRIDGE_STABLE"
 
-    passed = epsilon_post > epsilon_floor and measurement_ratio >= measurement_safe_ratio
+    obligations: list[VerificationObligation] = []
+
+    for idx, (key, op, value) in enumerate(ir.preserve_rules, start=1):
+        status = "unknown"
+        evidence = "No formal solver bound yet; preserved as heuristic surface"
+        if key.lower() in {"readability", "testability"}:
+            status = "satisfied" if readability_score >= 0.85 else "violated"
+            evidence = f"readability_score={readability_score:.3f}"
+        obligations.append(
+            VerificationObligation(
+                obligation_id=f"preserve.{idx}",
+                category="preserve",
+                description=f"Preserve rule `{key} {op} {value}`",
+                source_location=None,
+                status=status,
+                evidence=evidence,
+            )
+        )
+
+    for idx, c in enumerate(ir.constraints, start=1):
+        matched = c.lower() in lower_code or (
+            "deterministic" in c.lower() and ("sort(" in lower_code or "sorted(" in lower_code)
+        ) or ("no hardcoded secrets" in c.lower() and "secret" not in lower_code) or (
+            "fallback" in c.lower() and "fallback" in lower_code
+        ) or (
+            "preserve parent constraints" in c.lower()
+            and bool(ir.agentception_config.get("inherit_constraints", False))
+        )
+        status, evidence = _status_for_bool(matched, "heuristic generated-code pattern match")
+        obligations.append(
+            VerificationObligation(
+                obligation_id=f"constraint.{idx}",
+                category="constraint",
+                description=f"Constraint `{c}`",
+                source_location=None,
+                status=status,
+                evidence=evidence,
+            )
+        )
+
+    obligations.append(
+        VerificationObligation(
+            obligation_id="bridge.founding.epsilon_post_gt_floor",
+            category="bridge",
+            description="Founding law: epsilon_post > epsilon_floor",
+            source_location=None,
+            status="satisfied" if epsilon_post > epsilon_floor else "violated",
+            evidence=f"epsilon_post={epsilon_post:.4f}, epsilon_floor={epsilon_floor:.4f}",
+        )
+    )
+    obligations.append(
+        VerificationObligation(
+            obligation_id="bridge.founding.measurement_ratio_safe",
+            category="bridge",
+            description="Founding law: measurement_ratio >= measurement_safe_ratio",
+            source_location=None,
+            status="satisfied" if measurement_ratio >= measurement_safe_ratio else "violated",
+            evidence=f"measurement_ratio={measurement_ratio:.4f}, threshold={measurement_safe_ratio:.4f}",
+        )
+    )
+
+    if ir.tesla_victory_layer and bool(ir.arc_tower_policy.get("preserve_sovereignty", False)):
+        obligations.append(
+            VerificationObligation(
+                obligation_id="sovereignty.preserve",
+                category="sovereignty",
+                description="Tesla sovereignty preservation must hold when declared",
+                source_location=None,
+                status="satisfied" if sovereignty_preserved else "violated",
+                evidence="heuristic sovereignty marker check",
+            )
+        )
+    else:
+        obligations.append(
+            VerificationObligation(
+                obligation_id="sovereignty.preserve",
+                category="sovereignty",
+                description="Sovereignty obligation not declared",
+                source_location=None,
+                status="not_applicable",
+                evidence="preserve.sovereignty not requested",
+            )
+        )
+
+    if ir.agentception_config.get("enabled"):
+        obligations.append(
+            VerificationObligation(
+                obligation_id="delegation.inherit_bridge",
+                category="delegation",
+                description="Child delegation inherits preserve/constraint/bridge protections",
+                source_location=None,
+                status="satisfied" if inherit_ok else "violated",
+                evidence="inherit flags from agentception config",
+            )
+        )
+        obligations.append(
+            VerificationObligation(
+                obligation_id="delegation.integrity",
+                category="delegation",
+                description="Delegation integrity must remain above operational floor",
+                source_location=None,
+                status="satisfied" if delegation_integrity >= 0.7 else "violated",
+                evidence=f"delegation_integrity={delegation_integrity:.3f}",
+            )
+        )
+    else:
+        obligations.append(
+            VerificationObligation(
+                obligation_id="delegation.inherit_bridge",
+                category="delegation",
+                description="Delegation not enabled",
+                source_location=None,
+                status="not_applicable",
+                evidence="agentception disabled",
+            )
+        )
+
+    counts = _compute_obligation_counts(obligations)
+    critical_unknown = any(
+        o.status == "unknown" and o.category in {"bridge", "sovereignty", "delegation"} for o in obligations
+    )
+    critical_violation = any(
+        o.status == "violated" and o.category in {"bridge", "sovereignty", "delegation"}
+        for o in obligations
+    )
+
+    passed = (
+        epsilon_post > epsilon_floor
+        and measurement_ratio >= measurement_safe_ratio
+        and bridge_score >= measurement_safe_ratio
+    )
     if sovereignty_preserved is False:
         passed = False
     if ir.agentception_config.get("enabled") and not inherit_ok:
+        passed = False
+    if critical_violation or critical_unknown:
         passed = False
 
     return VerificationResult(
@@ -163,4 +321,6 @@ def verify(ir: IR, generated_python: str) -> VerificationResult:
         delegation_integrity=delegation_integrity,
         merge_preservation=merge_preservation,
         agent_bridge_score=agent_bridge_score,
+        obligations=obligations,
+        obligation_counts=counts,
     )

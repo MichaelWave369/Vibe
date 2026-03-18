@@ -114,6 +114,26 @@ python -m pip install -e .
 ```
 
 
+
+## Formal verification surfaces (Phase 2.1)
+
+Vibe now exposes explicit verification obligations as a proof-surface layer alongside bridge metrics.
+
+Obligation categories currently include:
+- preserve
+- constraint
+- bridge (including founding-law thresholds)
+- sovereignty
+- delegation
+
+Each obligation includes stable ID, category, description, status, and evidence.
+
+Statuses: `satisfied`, `violated`, `unknown`, `not_applicable`.
+
+Current obligation discharge is operational/heuristic (not full SMT/theorem proving yet).
+
+Unknown obligations are surfaced explicitly and are never silently treated as satisfied for critical layers.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -145,6 +165,7 @@ Current supported targets: `python`, `typescript`.
 vibec explain vibe/examples/payment_router.vibe
 vibec verify vibe/examples/payment_router.vibe
 vibec verify vibe/examples/payment_router.vibe --report json
+vibec verify vibe/examples/sovereign_bridge.vibe --show-obligations
 vibec compile vibe/examples/payment_router.vibe
 vibec compile vibe/examples/payment_router.vibe --report json
 vibec compile vibe/examples/edge_contract_ts.vibe

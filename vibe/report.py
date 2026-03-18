@@ -8,13 +8,13 @@ from dataclasses import asdict
 from .verifier import VerificationResult
 
 
-def report_dict(result: VerificationResult) -> dict[str, float | str | bool | list[str] | None]:
+def report_dict(result: VerificationResult) -> dict[str, object]:
     """Return a JSON-serializable bridge report payload."""
 
     return asdict(result)
 
 
-def render_report(result: VerificationResult) -> str:
+def render_report(result: VerificationResult, show_obligations: bool = True) -> str:
     """Render a detailed human-readable bridge report."""
 
     lines = [
@@ -57,6 +57,15 @@ def render_report(result: VerificationResult) -> str:
                 f"  agent_bridge_score: {result.agent_bridge_score:.4f}",
             ]
         )
+
+    lines.append("obligations:")
+    lines.append(f"  counts: {result.obligation_counts}")
+    if show_obligations:
+        for o in result.obligations:
+            lines.append(f"  - [{o.status}] {o.obligation_id} ({o.category}) :: {o.description}")
+            if o.evidence:
+                lines.append(f"      evidence: {o.evidence}")
+
     lines.extend([f"verdict: {result.verdict}", f"pass: {result.passed}"])
     return "\n".join(lines)
 

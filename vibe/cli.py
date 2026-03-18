@@ -29,14 +29,14 @@ def _load(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _print_report(result, report: ReportMode) -> None:
+def _print_report(result, report: ReportMode, show_obligations: bool = True) -> None:
     if report == "json":
         print(render_report_json(result))
     else:
-        print(render_report(result))
+        print(render_report(result, show_obligations=show_obligations))
 
 
-def _compile(path: Path, report: ReportMode, no_cache: bool = False, clean_cache: bool = False) -> int:
+def _compile(path: Path, report: ReportMode, no_cache: bool = False, clean_cache: bool = False, show_obligations: bool = True) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
@@ -72,7 +72,7 @@ def _compile(path: Path, report: ReportMode, no_cache: bool = False, clean_cache
             print("cache: miss")
 
     result = verify(ir, emitted_code)
-    _print_report(result, report)
+    _print_report(result, report, show_obligations=show_obligations)
 
     if not result.passed:
         print("compile failed: bridge preservation threshold not met")
@@ -124,17 +124,17 @@ def _explain(path: Path) -> int:
     print("\nNormalized IR:")
     print(serialize_ir(ir))
     print("\nPreservation reasoning:")
-    print(render_report(result))
+    print(render_report(result, show_obligations=True))
     return 0
 
 
-def _verify(path: Path, report: ReportMode) -> int:
+def _verify(path: Path, report: ReportMode, show_obligations: bool = True) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
     emitted_code, _ = emit_code(ir)
     result = verify(ir, emitted_code)
-    _print_report(result, report)
+    _print_report(result, report, show_obligations=show_obligations)
     return 0 if result.passed else 1
 
 
@@ -147,6 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--report", choices=["human", "json"], default="human")
     cp.add_argument("--no-cache", action="store_true", help="Disable incremental cache for this compile")
     cp.add_argument("--clean-cache", action="store_true", help="Remove cache record before compiling")
+    cp.add_argument("--show-obligations", action="store_true", help="Show full obligation list in human report")
 
     ex = sub.add_parser("explain", help="Explain AST and IR")
     ex.add_argument("path", type=Path)
@@ -154,6 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
     vf = sub.add_parser("verify", help="Run verifier without emission")
     vf.add_argument("path", type=Path)
     vf.add_argument("--report", choices=["human", "json"], default="human")
+    vf.add_argument("--show-obligations", action="store_true", help="Show full obligation list in human report")
 
     return parser
 
@@ -163,11 +165,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "compile":
-        return _compile(args.path, args.report, no_cache=args.no_cache, clean_cache=args.clean_cache)
+        return _compile(args.path, args.report, no_cache=args.no_cache, clean_cache=args.clean_cache, show_obligations=args.show_obligations)
     if args.command == "explain":
         return _explain(args.path)
     if args.command == "verify":
-        return _verify(args.path, args.report)
+        return _verify(args.path, args.report, show_obligations=args.show_obligations)
 
     parser.error("unknown command")
     return 2
