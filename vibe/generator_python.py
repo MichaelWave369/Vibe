@@ -95,4 +95,15 @@ def generate_python(ir: IR) -> str:
                 ret_vals.append(f"payload.get('{out}')")
         lines.append("    return " + ", ".join(ret_vals))
 
+
+    lines.append("")
+    lines.append("# Experimental research/operational stubs (non-hardware, non-biological control).")
+    if ir.tesla_victory_layer:
+        lines.append(f"TESLA_VICTORY_LAYER = {ir.arc_tower_policy | ir.life_ray_protocol | ir.breath_cycle_protocol!r}")
+    if ir.agentora_config.get("enabled"):
+        lines.append(f"AGENTORA_CONFIG = {ir.agentora_config!r}")
+        lines.append(f"AGENT_DEFINITIONS = {ir.agent_definitions!r}")
+    if ir.agentception_config:
+        lines.append(f"AGENTCEPTION_CONFIG = {ir.agentception_config!r}")
+
     return "\n".join(lines) + "\n"

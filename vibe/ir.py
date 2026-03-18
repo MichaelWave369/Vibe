@@ -20,6 +20,15 @@ class IR:
     constraints: list[str] = field(default_factory=list)
     bridge_config: dict[str, str] = field(default_factory=dict)
     emit_target: str = "python"
+    tesla_victory_layer: bool = False
+    arc_tower_policy: dict[str, object] = field(default_factory=dict)
+    life_ray_protocol: dict[str, object] = field(default_factory=dict)
+    breath_cycle_protocol: dict[str, object] = field(default_factory=dict)
+    agentora_config: dict[str, object] = field(default_factory=dict)
+    agent_definitions: list[dict[str, object]] = field(default_factory=list)
+    agentception_config: dict[str, object] = field(default_factory=dict)
+    delegation_tree: dict[str, object] = field(default_factory=dict)
+    merge_strategy: str = ""
 
 
 
@@ -34,6 +43,72 @@ def ast_to_ir(program: Program) -> IR:
     for item in program.bridge:
         bridge_config[item.key] = item.value
 
+    tesla_enabled = program.tesla_victory_layer is not None
+    arc_policy: dict[str, object] = {}
+    life_protocol: dict[str, object] = {}
+    breath_protocol: dict[str, object] = {}
+    if program.tesla_victory_layer:
+        arc = program.tesla_victory_layer.arc_tower
+        life = program.tesla_victory_layer.life_ray
+        breath = program.tesla_victory_layer.breath_cycle
+        if arc:
+            arc_policy = {
+                "global_resonance": arc.global_resonance,
+                "substrate_bridge": list(arc.substrate_bridge),
+                "preserve_epsilon": arc.preserve_epsilon,
+                "preserve_sovereignty": arc.preserve_sovereignty,
+            }
+        if life:
+            life_protocol = {
+                "bio_field": life.bio_field,
+                "baseline_frequency_hz": life.baseline_frequency_hz,
+                "harmonic_mode": life.harmonic_mode,
+                "intention": life.intention,
+            }
+        if breath:
+            breath_protocol = {
+                "pralaya_inhalation": breath.pralaya_inhalation,
+                "kalpa_exhalation": breath.kalpa_exhalation,
+                "c_star_target": breath.c_star_target,
+                "monitor": breath.monitor,
+            }
+
+    agent_defs: list[dict[str, object]] = []
+    if program.agentora:
+        for a in program.agentora.agents:
+            agent_defs.append(
+                {
+                    "name": a.name,
+                    "role": a.role,
+                    "tools": list(a.tools),
+                    "memory": a.memory,
+                    "intention": a.intention,
+                    "constraints": list(a.constraints),
+                    "preserve": list(a.preserve),
+                }
+            )
+
+    agentception_cfg: dict[str, object] = {}
+    merge_strategy = ""
+    if program.agentception:
+        agentception_cfg = {
+            "enabled": program.agentception.enabled,
+            "max_depth": program.agentception.max_depth,
+            "spawn_policy": program.agentception.spawn_policy,
+            "inherit_preserve": program.agentception.inherit_preserve,
+            "inherit_constraints": program.agentception.inherit_constraints,
+            "inherit_bridge": program.agentception.inherit_bridge,
+            "merge_strategy": program.agentception.merge_strategy,
+            "stop_when": program.agentception.stop_when,
+        }
+        merge_strategy = program.agentception.merge_strategy
+
+    delegation_tree = {
+        "root_intent": program.intent.name,
+        "agent_count": len(agent_defs),
+        "max_depth": int(agentception_cfg.get("max_depth", 0)),
+    }
+
     return IR(
         intent_name=program.intent.name,
         goal=program.intent.goal,
@@ -43,4 +118,13 @@ def ast_to_ir(program: Program) -> IR:
         constraints=list(program.constraints),
         bridge_config=bridge_config,
         emit_target=program.emit_target,
+        tesla_victory_layer=tesla_enabled,
+        arc_tower_policy=arc_policy,
+        life_ray_protocol=life_protocol,
+        breath_cycle_protocol=breath_protocol,
+        agentora_config={"enabled": bool(agent_defs), "agent_count": len(agent_defs)},
+        agent_definitions=agent_defs,
+        agentception_config=agentception_cfg,
+        delegation_tree=delegation_tree,
+        merge_strategy=merge_strategy,
     )

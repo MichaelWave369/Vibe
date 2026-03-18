@@ -163,3 +163,23 @@ To publish manually in GitHub:
 4. Save and wait for the publish URL.
 
 > Note: the previous Actions-based Pages workflow has been disabled for now to avoid setup errors on repositories where Pages is not yet Actions-configured.
+
+
+## Experimental Modules
+
+### Tesla Victory Layer (experimental.tesla.victory.layer)
+
+Vibe includes an **experimental research/operational layer** for resonance-field modeling:
+- `arc.tower.coherence`
+- `life.ray.vitalize`
+- `breath.cycle`
+
+This module is bridge-gated and never bypasses founding-law checks. It adds Tesla-aware reporting fields (including sovereignty preservation) while remaining non-physical in emitted code (config/stubs only).
+
+### Agentora + AgentCeption
+
+As a tribute to the Agentora lineage and recursive agent-system influence:
+- **Agentora** = native multi-agent orchestration declarations.
+- **AgentCeption** = recursive delegation declarations with inheritance controls.
+
+Both are Vibe-native and bridge-gated. Child delegation cannot bypass preservation law; verifier/report include delegation integrity metrics.
