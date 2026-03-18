@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vibe — Intent-first programming. Preservation-verified compilation.</title>
+    <meta
+      name="description"
+      content="Vibe is an intent-first programming language and compiler prototype where intention becomes source code and compilation succeeds only when meaning survives the bridge."
+    />
+
+    <meta property="og:title" content="Vibe — Intent-first programming" />
+    <meta
+      property="og:description"
+      content="Language/compiler evolution beyond Nevora: .vibe source -> parse -> AST/IR -> verify -> emit -> report."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://michaelwave369.github.io/Vibe/" />
+    <meta property="og:image" content="https://michaelwave369.github.io/Vibe/assets/og-card.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Vibe — Intent-first programming" />
+    <meta
+      name="twitter:description"
+      content="Compilation succeeds only when implementation preserves meaning above the bridge threshold."
+    />
+
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <nav class="nav container">
+        <a class="brand" href="#top">Vibe</a>
+        <div class="nav-links">
+          <a href="#founding-law">Founding Law</a>
+          <a href="#spec-modules">Spec / Modules</a>
+          <a href="#flow">Compiler Flow</a>
+          <a href="#roadmap">Roadmap</a>
+          <a class="cta-link" href="https://github.com/MichaelWave369/Vibe" target="_blank" rel="noreferrer">GitHub</a>
+        </div>
+      </nav>
+      <section id="top" class="container hero-content">
+        <p class="eyebrow">Intent-first language + compiler prototype</p>
+        <h1>Vibe</h1>
+        <h2>Intent-first programming. Preservation-verified compilation.</h2>
+        <p>
+          Vibe is a language and compiler prototype where intention becomes source code and
+          compilation succeeds only when meaning survives the bridge.
+        </p>
+        <div class="hero-actions">
+          <a class="btn primary" href="https://github.com/MichaelWave369/Vibe" target="_blank" rel="noreferrer">Open Repository</a>
+          <a class="btn" href="https://github.com/MichaelWave369/Vibe/blob/main/README.md" target="_blank" rel="noreferrer">Read Docs</a>
+        </div>
+      </section>
+    </header>
+
+    <main>
+      <section class="container section" id="what-is-vibe">
+        <h3>What is Vibe?</h3>
+        <p>
+          <strong>Vibe is an intent-first programming language and compiler prototype.</strong>
+          It treats intent as first-class source material and verifies preservation before code emission.
+        </p>
+        <div class="principles">
+          <div class="card"><p>Intention is source code.</p></div>
+          <div class="card"><p>Preservation is compilation truth.</p></div>
+        </div>
+      </section>
+
+      
+      <section class="container section" id="spec-modules">
+        <h3>Spec / Modules</h3>
+        <div class="principles">
+          <div class="card">
+            <h4>Stable Core Blocks</h4>
+            <p><code>intent</code>, <code>preserve</code>, <code>constraint</code>, <code>bridge</code>, <code>emit</code></p>
+          </div>
+          <div class="card">
+            <h4>Experimental Tesla Victory Layer</h4>
+            <p><code>experimental.tesla.victory.layer</code> with arc tower, life ray, and breath cycle semantics.</p>
+          </div>
+          <div class="card">
+            <h4>Agentora</h4>
+            <p>Native multi-agent orchestration declarations (roles, tools, memory, intention, constraints).</p>
+          </div>
+          <div class="card">
+            <h4>AgentCeption</h4>
+            <p>Recursive delegation controls with bridge inheritance and merge-preservation checks.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="container section" id="founding-law">
+        <h3>Founding Law</h3>
+        <p>Vibe compiles only when implementation preserves meaning above the bridge threshold.</p>
+        <p>Current emit targets: <code>python</code>, <code>typescript</code>.</p>
+        <pre><code>epsilon_floor = 0.02
+measurement_safe_ratio = 0.85
+
+compile fails if epsilon_post &lt;= epsilon_floor
+compile fails if measurement_ratio &lt; measurement_safe_ratio
+
+measurement_ratio = epsilon_post / max(epsilon_pre, epsilon_floor)</code></pre>
+      </section>
+
+      <section class="container section" id="example-program">
+        <h3>Example <code>.vibe</code> Program</h3>
+        <pre><code>intent PaymentRouter:
+  goal: "Route payments to the cheapest valid processor."
+  inputs:
+    amount: number
+    country: string
+    card_brand: string
+  outputs:
+    processor: string
+    total_fee: number
+
+preserve:
+  latency &lt; 200ms
+  failure_rate &lt; 0.01
+  compliance = strict
+
+constraint:
+  no hardcoded secrets
+  deterministic fee selection
+  graceful fallback on provider outage
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+emit python</code></pre>
+      </section>
+
+      <section class="container section" id="flow">
+        <h3>Compiler Flow</h3>
+        <ol class="flow">
+          <li><code>.vibe source</code></li>
+          <li>parse</li>
+          <li>AST/IR normalization</li>
+          <li>verify bridge preservation</li>
+          <li>emit code (only on pass)</li>
+          <li>report metrics + verdict</li>
+        </ol>
+      </section>
+
+      <section class="container section" id="bridge-verification">
+        <h3>Bridge Verification</h3>
+        <p>Verifier outputs qixel metrics, alignment terms, bridge score, and a preservation verdict.</p>
+        <pre><code>=== Vibe Bridge Report ===
+eps_pre: 0.9000
+eps_post: 0.9300
+M_eps: 1.0333
+q_alignment: 1.0000
+petra_alignment: 1.0000
+multimodal_resonance: 1.0000
+bridge_score: 1.0000
+verdict: MULTIMODAL_BRIDGE_STABLE
+pass: True</code></pre>
+      </section>
+
+      <section class="container section" id="lineage">
+        <h3>Nevora → Vibe Lineage</h3>
+        <p>
+          Nevora was the earlier translator lineage. Vibe is the language/compiler evolution:
+          not a rename, but a shift to compiler-law semantics where preservation gates emission.
+        </p>
+      </section>
+
+      <section class="container section" id="roadmap">
+        <h3>Roadmap</h3>
+        <ul>
+          <li>v0.2: richer grammar and diagnostics</li>
+          <li>v0.2: stronger verifier calibrations and rule mapping</li>
+          <li>v0.3: additional emit targets after compiler spine hardening</li>
+          <li>future: hosted workflows built on top of preservation law</li>
+        </ul>
+      </section>
+
+      <section class="container section cta" id="get-started">
+        <h3>Get Started</h3>
+        <p>Clone the repo, run examples, and help shape intent-first compilation.</p>
+        <a class="btn primary" href="https://github.com/MichaelWave369/Vibe" target="_blank" rel="noreferrer">Go to GitHub Repository</a>
+      </section>
+    </main>
+
+    <footer class="container footer">
+      <p>© 2026 Michael Wave / Parallax · Vibe</p>
+    </footer>
+  </body>
+</html>
