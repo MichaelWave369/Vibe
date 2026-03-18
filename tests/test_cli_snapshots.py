@@ -18,6 +18,7 @@ def test_explain_snapshot_includes_experimental_sections(capsys, tmp_path) -> No
     assert '"agentora"' in out
     assert "tesla_enabled: True" in out
     assert "agent metrics:" in out
+    assert "equivalence/drift:" in out
 
 
 def test_verify_json_snapshot_contains_bridge_and_agent_metrics(capsys, tmp_path) -> None:
@@ -35,6 +36,7 @@ def test_verify_json_snapshot_contains_bridge_and_agent_metrics(capsys, tmp_path
     assert '"bridge_score"' in out
     assert '"passed": true' in out
     assert '"verification_backend": "heuristic"' in out
+    assert '"intent_equivalence_score"' in out
 
 
 def test_verify_symbolic_backend_fails_gracefully(capsys, tmp_path) -> None:

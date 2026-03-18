@@ -29,11 +29,22 @@ def _load(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _print_report(result, report: ReportMode, show_obligations: bool = True) -> None:
+def _print_report(
+    result,
+    report: ReportMode,
+    show_obligations: bool = True,
+    show_equivalence: bool = False,
+) -> None:
     if report == "json":
         print(render_report_json(result))
     else:
-        print(render_report(result, show_obligations=show_obligations))
+        print(
+            render_report(
+                result,
+                show_obligations=show_obligations,
+                show_equivalence=show_equivalence,
+            )
+        )
 
 
 def _compile(
@@ -42,6 +53,7 @@ def _compile(
     no_cache: bool = False,
     clean_cache: bool = False,
     show_obligations: bool = True,
+    show_equivalence: bool = False,
     verification_backend: str = "heuristic",
     fallback_backend: str | None = None,
 ) -> int:
@@ -80,7 +92,12 @@ def _compile(
             print("cache: miss")
 
     result = verify(ir, emitted_code, backend=verification_backend, fallback_backend=fallback_backend)
-    _print_report(result, report, show_obligations=show_obligations)
+    _print_report(
+        result,
+        report,
+        show_obligations=show_obligations,
+        show_equivalence=show_equivalence,
+    )
 
     if not result.passed:
         if result.backend_error:
@@ -134,7 +151,7 @@ def _explain(path: Path) -> int:
     print("\nNormalized IR:")
     print(serialize_ir(ir))
     print("\nPreservation reasoning:")
-    print(render_report(result, show_obligations=True))
+    print(render_report(result, show_obligations=True, show_equivalence=True))
     return 0
 
 
@@ -142,6 +159,7 @@ def _verify(
     path: Path,
     report: ReportMode,
     show_obligations: bool = True,
+    show_equivalence: bool = False,
     verification_backend: str = "heuristic",
     fallback_backend: str | None = None,
 ) -> int:
@@ -150,7 +168,12 @@ def _verify(
     ir = ast_to_ir(ast)
     emitted_code, _ = emit_code(ir)
     result = verify(ir, emitted_code, backend=verification_backend, fallback_backend=fallback_backend)
-    _print_report(result, report, show_obligations=show_obligations)
+    _print_report(
+        result,
+        report,
+        show_obligations=show_obligations,
+        show_equivalence=show_equivalence,
+    )
     if result.backend_error:
         print(f"verify failed: {result.backend_error}")
     return 0 if result.passed else 1
@@ -166,6 +189,7 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--no-cache", action="store_true", help="Disable incremental cache for this compile")
     cp.add_argument("--clean-cache", action="store_true", help="Remove cache record before compiling")
     cp.add_argument("--show-obligations", action="store_true", help="Show full obligation list in human report")
+    cp.add_argument("--show-equivalence", action="store_true", help="Show detailed equivalence/diff entries in human report")
     cp.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
     cp.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
 
@@ -176,6 +200,7 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("path", type=Path)
     vf.add_argument("--report", choices=["human", "json"], default="human")
     vf.add_argument("--show-obligations", action="store_true", help="Show full obligation list in human report")
+    vf.add_argument("--show-equivalence", action="store_true", help="Show detailed equivalence/diff entries in human report")
     vf.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
     vf.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
 
@@ -193,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
             no_cache=args.no_cache,
             clean_cache=args.clean_cache,
             show_obligations=args.show_obligations,
+            show_equivalence=args.show_equivalence,
             verification_backend=args.backend,
             fallback_backend=args.fallback_backend,
         )
@@ -203,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
             args.path,
             args.report,
             show_obligations=args.show_obligations,
+            show_equivalence=args.show_equivalence,
             verification_backend=args.backend,
             fallback_backend=args.fallback_backend,
         )

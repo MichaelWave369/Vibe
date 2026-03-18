@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import re
 from typing import Protocol
 
+from .equivalence import CorrespondenceEntry, analyze_intent_equivalence
 from .ir import DEFAULT_EPSILON_FLOOR, DEFAULT_MEASUREMENT_SAFE_RATIO, IR
 
 ObligationStatus = str
@@ -115,6 +116,16 @@ class VerificationResult:
     backend_capabilities: list[str] = field(default_factory=list)
     backend_details: dict[str, object] = field(default_factory=dict)
     backend_error: str | None = None
+    intent_items_total: int = 0
+    intent_items_matched: int = 0
+    intent_items_partial: int = 0
+    intent_items_missing: int = 0
+    intent_items_extra: int = 0
+    intent_items_unknown: int = 0
+    intent_equivalence_score: float = 0.0
+    drift_score: float = 1.0
+    mapping_notes: list[str] = field(default_factory=list)
+    correspondence_entries: list[CorrespondenceEntry] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -766,6 +777,7 @@ def normalize_obligations(obligations: list[NormalizedObligation]) -> list[Norma
 
 def _build_result(
     ir: IR,
+    generated_code: str,
     metrics: _MetricSnapshot,
     obligations: list[VerificationObligation],
     metadata: VerificationBackendMetadata,
@@ -783,6 +795,8 @@ def _build_result(
         and not critical_unknown
         and backend_error is None
     )
+
+    equivalence = analyze_intent_equivalence(ir, generated_code)
 
     return VerificationResult(
         c_bar=metrics.c_bar,
@@ -819,6 +833,16 @@ def _build_result(
         backend_capabilities=list(metadata.capabilities),
         backend_details=dict(metadata.details),
         backend_error=backend_error,
+        intent_items_total=equivalence.intent_items_total,
+        intent_items_matched=equivalence.intent_items_matched,
+        intent_items_partial=equivalence.intent_items_partial,
+        intent_items_missing=equivalence.intent_items_missing,
+        intent_items_extra=equivalence.intent_items_extra,
+        intent_items_unknown=equivalence.intent_items_unknown,
+        intent_equivalence_score=equivalence.intent_equivalence_score,
+        drift_score=equivalence.drift_score,
+        mapping_notes=list(equivalence.mapping_notes),
+        correspondence_entries=list(equivalence.correspondences),
     )
 
 
@@ -914,6 +938,7 @@ def verify(
         ]
         return _build_result(
             ir,
+            generated_code,
             metrics,
             fallback_obligations,
             metadata,
@@ -957,7 +982,7 @@ def verify(
                 metadata.details["fallback_backend"] = fallback_backend
                 metadata.details["fallback_error"] = str(exc)
 
-        return _build_result(ir, metrics, obligations, metadata, backend_error=None)
+        return _build_result(ir, generated_code, metrics, obligations, metadata, backend_error=None)
     except NotImplementedError as exc:
         metadata = VerificationBackendMetadata(
             name=backend,
@@ -979,6 +1004,7 @@ def verify(
         ]
         return _build_result(
             ir,
+            generated_code,
             metrics,
             fallback_obligations,
             metadata,

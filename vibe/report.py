@@ -14,7 +14,11 @@ def report_dict(result: VerificationResult) -> dict[str, object]:
     return asdict(result)
 
 
-def render_report(result: VerificationResult, show_obligations: bool = True) -> str:
+def render_report(
+    result: VerificationResult,
+    show_obligations: bool = True,
+    show_equivalence: bool = False,
+) -> str:
     """Render a detailed human-readable bridge report."""
 
     lines = [
@@ -68,6 +72,30 @@ def render_report(result: VerificationResult, show_obligations: bool = True) -> 
     ])
     if result.backend_error:
         lines.append(f"  backend_error: {result.backend_error}")
+
+    lines.extend(
+        [
+            "equivalence/drift:",
+            f"  intent_items_total: {result.intent_items_total}",
+            f"  intent_items_matched: {result.intent_items_matched}",
+            f"  intent_items_partial: {result.intent_items_partial}",
+            f"  intent_items_missing: {result.intent_items_missing}",
+            f"  intent_items_extra: {result.intent_items_extra}",
+            f"  intent_items_unknown: {result.intent_items_unknown}",
+            f"  intent_equivalence_score: {result.intent_equivalence_score:.4f}",
+            f"  drift_score: {result.drift_score:.4f}",
+        ]
+    )
+    if result.mapping_notes:
+        lines.append(f"  notes: {result.mapping_notes}")
+    if show_equivalence:
+        lines.append("  correspondence:")
+        for c in result.correspondence_entries:
+            lines.append(
+                "    - "
+                f"[{c.status}] ({c.category}) {c.source_item} -> {c.output_item} "
+                f"sev={c.drift_severity} :: {c.evidence}"
+            )
 
     lines.append("obligations:")
     lines.append(f"  counts: {result.obligation_counts}")

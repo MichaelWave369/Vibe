@@ -39,10 +39,14 @@ def test_cli_smoke_report_modes(capsys, tmp_path) -> None:
     verify_code = main(["verify", str(path), "--report", "json"])
     assert verify_code == 0
 
+    verify_human = main(["verify", str(path), "--show-equivalence"])
+    assert verify_human == 0
+
     compile_code = main(["compile", str(path), "--report", "json"])
     assert compile_code == 0
 
     out = capsys.readouterr().out
     assert "Normalized IR" in out
     assert '"bridge_score"' in out
+    assert "correspondence:" in out
     assert "emitted:" in out

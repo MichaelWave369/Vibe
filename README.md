@@ -193,6 +193,34 @@ This allows unknown SMT results to be evaluated by a fallback backend, and repor
 
 This is a first proof-surface slice, not full theorem proving or full equivalence checking.
 
+## Equivalence + intent-diff surfaces (Phase 2.4)
+
+Vibe now reports a structural intent/emission correspondence layer in addition to obligation outcomes.
+
+This phase is correspondence-oriented (not full behavioral equivalence proving). The report now includes:
+
+- per-item correspondence statuses:
+  - `matched`
+  - `partially_matched`
+  - `missing_in_output`
+  - `extra_in_output`
+  - `unknown`
+- intent/diff summary metrics:
+  - `intent_items_total`
+  - `intent_items_matched`
+  - `intent_items_partial`
+  - `intent_items_missing`
+  - `intent_items_extra`
+  - `intent_items_unknown`
+  - `intent_equivalence_score`
+  - `drift_score`
+
+Target-aware structural mapping is implemented for both Python and TypeScript emission surfaces.
+
+This layer strengthens drift visibility and does not replace bridge truth:
+- founding-law and critical obligations remain authoritative for pass/fail.
+- equivalence/diff is an additional inspectable verification surface.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -228,10 +256,12 @@ vibec verify vibe/examples/sovereign_bridge.vibe --show-obligations
 vibec verify vibe/examples/payment_router.vibe --backend heuristic
 vibec verify vibe/examples/payment_router.vibe --backend smt
 vibec verify vibe/examples/payment_router.vibe --backend smt --fallback-backend heuristic
+vibec verify vibe/examples/payment_router.vibe --show-equivalence
 vibec compile vibe/examples/payment_router.vibe
 vibec compile vibe/examples/payment_router.vibe --report json
 vibec compile vibe/examples/payment_router.vibe --backend heuristic
 vibec compile vibe/examples/payment_router.vibe --backend smt
+vibec compile vibe/examples/payment_router.vibe --show-equivalence
 vibec compile vibe/examples/edge_contract_ts.vibe
 ```
 
