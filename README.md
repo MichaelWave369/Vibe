@@ -154,9 +154,12 @@ Vibe includes a static public homepage under `docs/` for GitHub Pages deployment
 
 - Homepage source: `docs/index.html`
 - Styles: `docs/styles.css`
-- Workflow: `.github/workflows/pages.yml`
+- Favicon: `docs/assets/favicon.svg`
 
-To enable Pages in GitHub:
+To publish manually in GitHub:
 1. Go to **Settings → Pages**.
-2. Set **Source** to **GitHub Actions**.
-3. Push/merge to `main` and the workflow deploys automatically.
+2. Set **Source** to **Deploy from a branch**.
+3. Set **Branch** to `main` and **Folder** to `/docs`.
+4. Save and wait for the publish URL.
+
+> Note: the previous Actions-based Pages workflow has been disabled for now to avoid setup errors on repositories where Pages is not yet Actions-configured.
