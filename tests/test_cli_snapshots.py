@@ -34,3 +34,16 @@ def test_verify_json_snapshot_contains_bridge_and_agent_metrics(capsys, tmp_path
     assert '"delegation_integrity"' in out
     assert '"bridge_score"' in out
     assert '"passed": true' in out
+    assert '"verification_backend": "heuristic"' in out
+
+
+def test_verify_unimplemented_backend_fails_gracefully(capsys, tmp_path) -> None:
+    src = Path("vibe/examples/payment_router.vibe")
+    case = tmp_path / "payment_router.vibe"
+    case.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+
+    code = main(["verify", str(case), "--backend", "smt"])
+    assert code == 1
+
+    out = capsys.readouterr().out
+    assert "not implemented yet" in out

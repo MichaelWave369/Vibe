@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Protocol
 
 from .ir import DEFAULT_EPSILON_FLOOR, DEFAULT_MEASUREMENT_SAFE_RATIO, IR
 
@@ -17,6 +18,60 @@ class VerificationObligation:
     source_location: str | None
     status: ObligationStatus
     evidence: str | None = None
+    critical: bool = False
+
+
+@dataclass(slots=True)
+class NormalizedObligation:
+    obligation_id: str
+    category: str
+    description: str
+    source_location: str | None
+    subject_ref: str | None
+    expected_predicate: dict[str, object]
+    severity: str
+    critical: bool = False
+
+
+@dataclass(slots=True)
+class VerificationBackendMetadata:
+    name: str
+    version: str
+    mode: str
+    capabilities: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ObligationEvaluationContext:
+    epsilon_floor: float
+    measurement_safe_ratio: float
+    lower_code: str
+    readability_score: float
+    epsilon_post: float
+    measurement_ratio: float
+    delegation_integrity: float
+    sovereignty_required: bool
+    sovereignty_preserved: bool | None
+    agentception_enabled: bool
+    inherit_constraints: bool
+    inherit_ok: bool
+
+
+@dataclass(slots=True)
+class BackendEvaluationResult:
+    obligations: list[VerificationObligation]
+    metadata: VerificationBackendMetadata
+
+
+class ObligationBackend(Protocol):
+    backend_name: str
+
+    def evaluate(
+        self,
+        ir: IR,
+        obligations: list[NormalizedObligation],
+        context: ObligationEvaluationContext,
+    ) -> BackendEvaluationResult: ...
 
 
 @dataclass(slots=True)
@@ -49,15 +104,48 @@ class VerificationResult:
     agent_bridge_score: float = 1.0
     obligations: list[VerificationObligation] = field(default_factory=list)
     obligation_counts: dict[str, int] = field(default_factory=dict)
+    verification_backend: str = "heuristic"
+    backend_version: str = "v1"
+    backend_mode: str = "operational"
+    backend_capabilities: list[str] = field(default_factory=list)
+    backend_error: str | None = None
 
+
+@dataclass(slots=True)
+class _MetricSnapshot:
+    c_bar: float
+    epsilon_pre: float
+    epsilon_post: float
+    measurement_ratio: float
+    q_persistence: float
+    q_spatial_consistency: float
+    q_cohesion: float
+    q_alignment: float
+    q_intent_constant: float
+    petra_alignment: float
+    multimodal_resonance: float
+    bridge_score: float
+    verdict: str
+    tesla_enabled: bool
+    substrate_bridge: list[str]
+    baseline_frequency_hz: float
+    harmonic_mode: str
+    breath_monitor: str
+    sovereignty_required: bool
+    sovereignty_preserved: bool | None
+    agent_count: int
+    spawn_depth: int
+    child_alignment: float
+    delegation_integrity: float
+    merge_preservation: float
+    agent_bridge_score: float
+    inherit_ok: bool
+    epsilon_floor: float
+    measurement_safe_ratio: float
 
 
 def _clamp(x: float) -> float:
     return max(0.0, min(1.0, x))
-
-
-def _status_for_bool(value: bool, evidence: str) -> tuple[str, str]:
-    return ("satisfied", evidence) if value else ("violated", evidence)
 
 
 def _compute_obligation_counts(obligations: list[VerificationObligation]) -> dict[str, int]:
@@ -67,9 +155,144 @@ def _compute_obligation_counts(obligations: list[VerificationObligation]) -> dic
     return counts
 
 
-def verify(ir: IR, generated_code: str) -> VerificationResult:
-    """Compute heuristic bridge preservation metrics for v0.x."""
+def _constraint_match(constraint: str, lower_code: str, inherit_constraints: bool) -> bool:
+    c = constraint.lower()
+    return (
+        (c in lower_code)
+        or ("deterministic" in c and ("sort(" in lower_code or "sorted(" in lower_code))
+        or ("no hardcoded secrets" in c and "secret" not in lower_code)
+        or ("fallback" in c and "fallback" in lower_code)
+        or ("preserve parent constraints" in c and inherit_constraints)
+    )
 
+
+class HeuristicObligationBackend:
+    backend_name = "heuristic"
+
+    def evaluate(
+        self,
+        ir: IR,
+        obligations: list[NormalizedObligation],
+        context: ObligationEvaluationContext,
+    ) -> BackendEvaluationResult:
+        evaluated: list[VerificationObligation] = []
+        for o in obligations:
+            status: ObligationStatus = "unknown"
+            evidence = "No backend evidence"
+            pred = o.expected_predicate
+            kind = str(pred.get("kind", ""))
+
+            if kind == "readability_min":
+                threshold = float(pred.get("min", 0.85))
+                status = "satisfied" if context.readability_score >= threshold else "violated"
+                evidence = f"readability_score={context.readability_score:.3f}"
+            elif kind == "heuristic_preserve_surface":
+                status = "unknown"
+                evidence = "No formal solver bound yet; preserved as heuristic surface"
+            elif kind == "constraint_pattern":
+                text = str(pred.get("text", ""))
+                matched = _constraint_match(text, context.lower_code, context.inherit_constraints)
+                status = "satisfied" if matched else "violated"
+                evidence = "heuristic generated-code pattern match"
+            elif kind == "epsilon_post_gt_floor":
+                status = "satisfied" if context.epsilon_post > context.epsilon_floor else "violated"
+                evidence = (
+                    f"epsilon_post={context.epsilon_post:.4f}, "
+                    f"epsilon_floor={context.epsilon_floor:.4f}"
+                )
+            elif kind == "measurement_ratio_safe":
+                status = (
+                    "satisfied"
+                    if context.measurement_ratio >= context.measurement_safe_ratio
+                    else "violated"
+                )
+                evidence = (
+                    f"measurement_ratio={context.measurement_ratio:.4f}, "
+                    f"threshold={context.measurement_safe_ratio:.4f}"
+                )
+            elif kind == "sovereignty_required":
+                status = "satisfied" if context.sovereignty_preserved else "violated"
+                evidence = "heuristic sovereignty marker check"
+            elif kind == "sovereignty_not_declared":
+                status = "not_applicable"
+                evidence = "preserve.sovereignty not requested"
+            elif kind == "delegation_inherit_flags":
+                status = "satisfied" if context.inherit_ok else "violated"
+                evidence = "inherit flags from agentception config"
+            elif kind == "delegation_integrity_floor":
+                floor = float(pred.get("min", 0.7))
+                status = "satisfied" if context.delegation_integrity >= floor else "violated"
+                evidence = f"delegation_integrity={context.delegation_integrity:.3f}"
+            elif kind == "delegation_not_enabled":
+                status = "not_applicable"
+                evidence = "agentception disabled"
+
+            evaluated.append(
+                VerificationObligation(
+                    obligation_id=o.obligation_id,
+                    category=o.category,
+                    description=o.description,
+                    source_location=o.source_location,
+                    status=status,
+                    evidence=evidence,
+                    critical=o.critical,
+                )
+            )
+
+        return BackendEvaluationResult(
+            obligations=evaluated,
+            metadata=VerificationBackendMetadata(
+                name="heuristic",
+                version="v1",
+                mode="operational",
+                capabilities=["pattern_match", "bridge_thresholds", "delegation_checks"],
+            ),
+        )
+
+
+class SymbolicObligationBackend:
+    backend_name = "symbolic"
+
+    def evaluate(
+        self,
+        ir: IR,
+        obligations: list[NormalizedObligation],
+        context: ObligationEvaluationContext,
+    ) -> BackendEvaluationResult:
+        raise NotImplementedError("verification backend `symbolic` is not implemented yet")
+
+
+class SMTObligationBackend:
+    backend_name = "smt"
+
+    def evaluate(
+        self,
+        ir: IR,
+        obligations: list[NormalizedObligation],
+        context: ObligationEvaluationContext,
+    ) -> BackendEvaluationResult:
+        raise NotImplementedError("verification backend `smt` is not implemented yet")
+
+
+_BACKENDS: dict[str, ObligationBackend] = {
+    "heuristic": HeuristicObligationBackend(),
+    "symbolic": SymbolicObligationBackend(),
+    "smt": SMTObligationBackend(),
+}
+
+
+def available_backends() -> list[str]:
+    return sorted(_BACKENDS.keys())
+
+
+def get_backend(name: str) -> ObligationBackend:
+    backend = _BACKENDS.get(name)
+    if backend is None:
+        raise ValueError(f"unknown verification backend `{name}`")
+    return backend
+
+
+def _compute_metrics(ir: IR, generated_code: str) -> _MetricSnapshot:
     epsilon_floor = float(ir.bridge_config.get("epsilon_floor", DEFAULT_EPSILON_FLOOR))
     measurement_safe_ratio = float(
         ir.bridge_config.get("measurement_safe_ratio", DEFAULT_MEASUREMENT_SAFE_RATIO)
@@ -78,30 +301,31 @@ def verify(ir: IR, generated_code: str) -> VerificationResult:
     c_bar = sum(bool(x) for x in [ir.goal, ir.inputs, ir.outputs]) / 3
     epsilon_pre = 0.35 + 0.55 * c_bar
 
-    constraint_hits = 0
     lower_code = generated_code.lower()
-    for constraint in ir.constraints:
-        c = constraint.lower()
-        if "deterministic" in c and ("sort(" in lower_code or "sorted(" in lower_code):
-            constraint_hits += 1
-        elif "no hardcoded secrets" in c and "secret" not in lower_code:
-            constraint_hits += 1
-        elif "fallback" in c and "fallback" in lower_code:
-            constraint_hits += 1
-        elif c and c in lower_code:
-            constraint_hits += 1
+    constraint_hits = sum(
+        1 for constraint in ir.constraints if _constraint_match(constraint, lower_code, bool(ir.agentception_config.get("inherit_constraints", False)))
+    )
 
     constraint_score = 1.0 if not ir.constraints else constraint_hits / len(ir.constraints)
     deterministic_score = 1.0 if ("sort(" in lower_code or "sorted(" in lower_code) else 0.8
-    readability_score = 1.0 if "\n" in generated_code and ("def " in generated_code or "export function" in generated_code) else 0.85
+    readability_score = (
+        1.0
+        if "\n" in generated_code and ("def " in generated_code or "export function" in generated_code)
+        else 0.85
+    )
     preserve_score = 1.0 if ir.preserve_rules else 0.9
 
     tesla_factor = 0.0
+    sovereignty_required = False
     sovereignty_preserved: bool | None = None
     if ir.tesla_victory_layer:
         tesla_factor = 0.04
         sovereignty_required = bool(ir.arc_tower_policy.get("preserve_sovereignty", False))
-        sovereignty_preserved = ("sovereignty" in lower_code or "preserve" in lower_code) if sovereignty_required else True
+        sovereignty_preserved = (
+            ("sovereignty" in lower_code or "preserve" in lower_code)
+            if sovereignty_required
+            else True
+        )
         if sovereignty_required and not sovereignty_preserved:
             tesla_factor = -0.08
 
@@ -122,14 +346,23 @@ def verify(ir: IR, generated_code: str) -> VerificationResult:
     q_spatial_consistency = _clamp(0.5 * deterministic_score + 0.5 * constraint_score)
     q_cohesion = _clamp(0.5 * readability_score + 0.5 * c_bar)
     q_alignment = _clamp((q_persistence + q_spatial_consistency + q_cohesion) / 3 + tesla_factor)
-    q_intent_constant = _clamp(0.65 * c_bar + 0.25 * constraint_score + 0.10 * agent_bridge_score + tesla_factor)
+    q_intent_constant = _clamp(
+        0.65 * c_bar + 0.25 * constraint_score + 0.10 * agent_bridge_score + tesla_factor
+    )
 
     petra_alignment = _clamp(0.55 * q_alignment + 0.35 * q_intent_constant + 0.10 * agent_bridge_score)
-    multimodal_resonance = _clamp(0.55 * q_cohesion + 0.25 * readability_score + 0.20 * agent_bridge_score + tesla_factor)
+    multimodal_resonance = _clamp(
+        0.55 * q_cohesion + 0.25 * readability_score + 0.20 * agent_bridge_score + tesla_factor
+    )
 
     epsilon_post = _clamp(
         epsilon_pre
-        * (0.70 * q_alignment + 0.1 * constraint_score + 0.1 * deterministic_score + 0.1 * readability_score)
+        * (
+            0.70 * q_alignment
+            + 0.1 * constraint_score
+            + 0.1 * deterministic_score
+            + 0.1 * readability_score
+        )
         + 0.02 * c_bar
     )
     measurement_ratio = epsilon_post / max(epsilon_pre, epsilon_floor)
@@ -156,145 +389,7 @@ def verify(ir: IR, generated_code: str) -> VerificationResult:
     else:
         verdict = "MULTIMODAL_BRIDGE_STABLE"
 
-    obligations: list[VerificationObligation] = []
-
-    for idx, (key, op, value) in enumerate(ir.preserve_rules, start=1):
-        status = "unknown"
-        evidence = "No formal solver bound yet; preserved as heuristic surface"
-        if key.lower() in {"readability", "testability"}:
-            status = "satisfied" if readability_score >= 0.85 else "violated"
-            evidence = f"readability_score={readability_score:.3f}"
-        obligations.append(
-            VerificationObligation(
-                obligation_id=f"preserve.{idx}",
-                category="preserve",
-                description=f"Preserve rule `{key} {op} {value}`",
-                source_location=None,
-                status=status,
-                evidence=evidence,
-            )
-        )
-
-    for idx, c in enumerate(ir.constraints, start=1):
-        matched = c.lower() in lower_code or (
-            "deterministic" in c.lower() and ("sort(" in lower_code or "sorted(" in lower_code)
-        ) or ("no hardcoded secrets" in c.lower() and "secret" not in lower_code) or (
-            "fallback" in c.lower() and "fallback" in lower_code
-        ) or (
-            "preserve parent constraints" in c.lower()
-            and bool(ir.agentception_config.get("inherit_constraints", False))
-        )
-        status, evidence = _status_for_bool(matched, "heuristic generated-code pattern match")
-        obligations.append(
-            VerificationObligation(
-                obligation_id=f"constraint.{idx}",
-                category="constraint",
-                description=f"Constraint `{c}`",
-                source_location=None,
-                status=status,
-                evidence=evidence,
-            )
-        )
-
-    obligations.append(
-        VerificationObligation(
-            obligation_id="bridge.founding.epsilon_post_gt_floor",
-            category="bridge",
-            description="Founding law: epsilon_post > epsilon_floor",
-            source_location=None,
-            status="satisfied" if epsilon_post > epsilon_floor else "violated",
-            evidence=f"epsilon_post={epsilon_post:.4f}, epsilon_floor={epsilon_floor:.4f}",
-        )
-    )
-    obligations.append(
-        VerificationObligation(
-            obligation_id="bridge.founding.measurement_ratio_safe",
-            category="bridge",
-            description="Founding law: measurement_ratio >= measurement_safe_ratio",
-            source_location=None,
-            status="satisfied" if measurement_ratio >= measurement_safe_ratio else "violated",
-            evidence=f"measurement_ratio={measurement_ratio:.4f}, threshold={measurement_safe_ratio:.4f}",
-        )
-    )
-
-    if ir.tesla_victory_layer and bool(ir.arc_tower_policy.get("preserve_sovereignty", False)):
-        obligations.append(
-            VerificationObligation(
-                obligation_id="sovereignty.preserve",
-                category="sovereignty",
-                description="Tesla sovereignty preservation must hold when declared",
-                source_location=None,
-                status="satisfied" if sovereignty_preserved else "violated",
-                evidence="heuristic sovereignty marker check",
-            )
-        )
-    else:
-        obligations.append(
-            VerificationObligation(
-                obligation_id="sovereignty.preserve",
-                category="sovereignty",
-                description="Sovereignty obligation not declared",
-                source_location=None,
-                status="not_applicable",
-                evidence="preserve.sovereignty not requested",
-            )
-        )
-
-    if ir.agentception_config.get("enabled"):
-        obligations.append(
-            VerificationObligation(
-                obligation_id="delegation.inherit_bridge",
-                category="delegation",
-                description="Child delegation inherits preserve/constraint/bridge protections",
-                source_location=None,
-                status="satisfied" if inherit_ok else "violated",
-                evidence="inherit flags from agentception config",
-            )
-        )
-        obligations.append(
-            VerificationObligation(
-                obligation_id="delegation.integrity",
-                category="delegation",
-                description="Delegation integrity must remain above operational floor",
-                source_location=None,
-                status="satisfied" if delegation_integrity >= 0.7 else "violated",
-                evidence=f"delegation_integrity={delegation_integrity:.3f}",
-            )
-        )
-    else:
-        obligations.append(
-            VerificationObligation(
-                obligation_id="delegation.inherit_bridge",
-                category="delegation",
-                description="Delegation not enabled",
-                source_location=None,
-                status="not_applicable",
-                evidence="agentception disabled",
-            )
-        )
-
-    counts = _compute_obligation_counts(obligations)
-    critical_unknown = any(
-        o.status == "unknown" and o.category in {"bridge", "sovereignty", "delegation"} for o in obligations
-    )
-    critical_violation = any(
-        o.status == "violated" and o.category in {"bridge", "sovereignty", "delegation"}
-        for o in obligations
-    )
-
-    passed = (
-        epsilon_post > epsilon_floor
-        and measurement_ratio >= measurement_safe_ratio
-        and bridge_score >= measurement_safe_ratio
-    )
-    if sovereignty_preserved is False:
-        passed = False
-    if ir.agentception_config.get("enabled") and not inherit_ok:
-        passed = False
-    if critical_violation or critical_unknown:
-        passed = False
-
-    return VerificationResult(
+    return _MetricSnapshot(
         c_bar=c_bar,
         epsilon_pre=epsilon_pre,
         epsilon_post=epsilon_post,
@@ -308,12 +403,12 @@ def verify(ir: IR, generated_code: str) -> VerificationResult:
         multimodal_resonance=multimodal_resonance,
         bridge_score=bridge_score,
         verdict=verdict,
-        passed=passed,
         tesla_enabled=ir.tesla_victory_layer,
         substrate_bridge=list(ir.arc_tower_policy.get("substrate_bridge", [])) if ir.arc_tower_policy else [],
         baseline_frequency_hz=float(ir.life_ray_protocol.get("baseline_frequency_hz", 0.0)) if ir.life_ray_protocol else 0.0,
         harmonic_mode=str(ir.life_ray_protocol.get("harmonic_mode", "")) if ir.life_ray_protocol else "",
         breath_monitor=str(ir.breath_cycle_protocol.get("monitor", "")) if ir.breath_cycle_protocol else "",
+        sovereignty_required=sovereignty_required,
         sovereignty_preserved=sovereignty_preserved,
         agent_count=agent_count,
         spawn_depth=spawn_depth,
@@ -321,6 +416,297 @@ def verify(ir: IR, generated_code: str) -> VerificationResult:
         delegation_integrity=delegation_integrity,
         merge_preservation=merge_preservation,
         agent_bridge_score=agent_bridge_score,
+        inherit_ok=inherit_ok,
+        epsilon_floor=epsilon_floor,
+        measurement_safe_ratio=measurement_safe_ratio,
+    )
+
+
+def generate_normalized_obligations(ir: IR) -> list[NormalizedObligation]:
+    obligations: list[NormalizedObligation] = []
+
+    for idx, (key, op, value) in enumerate(ir.preserve_rules, start=1):
+        key_lower = key.lower()
+        if key_lower in {"readability", "testability"}:
+            predicate = {"kind": "readability_min", "metric": "readability_score", "min": 0.85}
+        else:
+            predicate = {"kind": "heuristic_preserve_surface", "operator": op, "value": value}
+        obligations.append(
+            NormalizedObligation(
+                obligation_id=f"preserve.{idx}",
+                category="preserve",
+                description=f"Preserve rule `{key} {op} {value}`",
+                source_location=None,
+                subject_ref=f"preserve.{idx}",
+                expected_predicate=predicate,
+                severity="advisory",
+                critical=False,
+            )
+        )
+
+    for idx, constraint in enumerate(ir.constraints, start=1):
+        obligations.append(
+            NormalizedObligation(
+                obligation_id=f"constraint.{idx}",
+                category="constraint",
+                description=f"Constraint `{constraint}`",
+                source_location=None,
+                subject_ref=f"constraint.{idx}",
+                expected_predicate={"kind": "constraint_pattern", "text": constraint},
+                severity="advisory",
+                critical=False,
+            )
+        )
+
+    obligations.append(
+        NormalizedObligation(
+            obligation_id="bridge.founding.epsilon_post_gt_floor",
+            category="bridge",
+            description="Founding law: epsilon_post > epsilon_floor",
+            source_location=None,
+            subject_ref="bridge.epsilon_floor",
+            expected_predicate={"kind": "epsilon_post_gt_floor"},
+            severity="error",
+            critical=True,
+        )
+    )
+    obligations.append(
+        NormalizedObligation(
+            obligation_id="bridge.founding.measurement_ratio_safe",
+            category="bridge",
+            description="Founding law: measurement_ratio >= measurement_safe_ratio",
+            source_location=None,
+            subject_ref="bridge.measurement_safe_ratio",
+            expected_predicate={"kind": "measurement_ratio_safe"},
+            severity="error",
+            critical=True,
+        )
+    )
+
+    if ir.tesla_victory_layer and bool(ir.arc_tower_policy.get("preserve_sovereignty", False)):
+        obligations.append(
+            NormalizedObligation(
+                obligation_id="sovereignty.preserve",
+                category="sovereignty",
+                description="Tesla sovereignty preservation must hold when declared",
+                source_location=None,
+                subject_ref="arc_tower.preserve_sovereignty",
+                expected_predicate={"kind": "sovereignty_required"},
+                severity="error",
+                critical=True,
+            )
+        )
+    else:
+        obligations.append(
+            NormalizedObligation(
+                obligation_id="sovereignty.preserve",
+                category="sovereignty",
+                description="Sovereignty obligation not declared",
+                source_location=None,
+                subject_ref="arc_tower.preserve_sovereignty",
+                expected_predicate={"kind": "sovereignty_not_declared"},
+                severity="info",
+                critical=False,
+            )
+        )
+
+    if ir.agentception_config.get("enabled"):
+        obligations.append(
+            NormalizedObligation(
+                obligation_id="delegation.inherit_bridge",
+                category="delegation",
+                description="Child delegation inherits preserve/constraint/bridge protections",
+                source_location=None,
+                subject_ref="agentception.inherit_*",
+                expected_predicate={"kind": "delegation_inherit_flags"},
+                severity="error",
+                critical=True,
+            )
+        )
+        obligations.append(
+            NormalizedObligation(
+                obligation_id="delegation.integrity",
+                category="delegation",
+                description="Delegation integrity must remain above operational floor",
+                source_location=None,
+                subject_ref="agentception.delegation_integrity",
+                expected_predicate={"kind": "delegation_integrity_floor", "min": 0.7},
+                severity="error",
+                critical=True,
+            )
+        )
+    else:
+        obligations.append(
+            NormalizedObligation(
+                obligation_id="delegation.inherit_bridge",
+                category="delegation",
+                description="Delegation not enabled",
+                source_location=None,
+                subject_ref="agentception.enabled",
+                expected_predicate={"kind": "delegation_not_enabled"},
+                severity="info",
+                critical=False,
+            )
+        )
+
+    return obligations
+
+
+def normalize_obligations(obligations: list[NormalizedObligation]) -> list[NormalizedObligation]:
+    """Normalize obligations for backend consumption (deterministic serializable form)."""
+
+    normalized: list[NormalizedObligation] = []
+    for o in obligations:
+        normalized.append(
+            NormalizedObligation(
+                obligation_id=o.obligation_id,
+                category=o.category,
+                description=o.description,
+                source_location=o.source_location,
+                subject_ref=o.subject_ref,
+                expected_predicate=dict(o.expected_predicate),
+                severity=o.severity,
+                critical=o.critical,
+            )
+        )
+    return normalized
+
+
+def _build_result(
+    ir: IR,
+    metrics: _MetricSnapshot,
+    obligations: list[VerificationObligation],
+    metadata: VerificationBackendMetadata,
+    backend_error: str | None,
+) -> VerificationResult:
+    counts = _compute_obligation_counts(obligations)
+    critical_unknown = any(o.status == "unknown" and o.critical for o in obligations)
+    critical_violation = any(o.status == "violated" and o.critical for o in obligations)
+
+    passed = (
+        metrics.epsilon_post > metrics.epsilon_floor
+        and metrics.measurement_ratio >= metrics.measurement_safe_ratio
+        and metrics.bridge_score >= metrics.measurement_safe_ratio
+        and not critical_violation
+        and not critical_unknown
+        and backend_error is None
+    )
+
+    return VerificationResult(
+        c_bar=metrics.c_bar,
+        epsilon_pre=metrics.epsilon_pre,
+        epsilon_post=metrics.epsilon_post,
+        measurement_ratio=metrics.measurement_ratio,
+        q_persistence=metrics.q_persistence,
+        q_spatial_consistency=metrics.q_spatial_consistency,
+        q_cohesion=metrics.q_cohesion,
+        q_alignment=metrics.q_alignment,
+        q_intent_constant=metrics.q_intent_constant,
+        petra_alignment=metrics.petra_alignment,
+        multimodal_resonance=metrics.multimodal_resonance,
+        bridge_score=metrics.bridge_score,
+        verdict=metrics.verdict if backend_error is None else "VERIFICATION_BACKEND_ERROR",
+        passed=passed,
+        tesla_enabled=metrics.tesla_enabled,
+        substrate_bridge=metrics.substrate_bridge,
+        baseline_frequency_hz=metrics.baseline_frequency_hz,
+        harmonic_mode=metrics.harmonic_mode,
+        breath_monitor=metrics.breath_monitor,
+        sovereignty_preserved=metrics.sovereignty_preserved,
+        agent_count=metrics.agent_count,
+        spawn_depth=metrics.spawn_depth,
+        child_alignment=metrics.child_alignment,
+        delegation_integrity=metrics.delegation_integrity,
+        merge_preservation=metrics.merge_preservation,
+        agent_bridge_score=metrics.agent_bridge_score,
         obligations=obligations,
         obligation_counts=counts,
+        verification_backend=metadata.name,
+        backend_version=metadata.version,
+        backend_mode=metadata.mode,
+        backend_capabilities=list(metadata.capabilities),
+        backend_error=backend_error,
     )
+
+
+def verify(ir: IR, generated_code: str, backend: str = "heuristic") -> VerificationResult:
+    """Compute bridge preservation metrics and evaluate obligations via backend."""
+
+    metrics = _compute_metrics(ir, generated_code)
+    context = ObligationEvaluationContext(
+        epsilon_floor=metrics.epsilon_floor,
+        measurement_safe_ratio=metrics.measurement_safe_ratio,
+        lower_code=generated_code.lower(),
+        readability_score=1.0
+        if "\n" in generated_code and ("def " in generated_code or "export function" in generated_code)
+        else 0.85,
+        epsilon_post=metrics.epsilon_post,
+        measurement_ratio=metrics.measurement_ratio,
+        delegation_integrity=metrics.delegation_integrity,
+        sovereignty_required=metrics.sovereignty_required,
+        sovereignty_preserved=metrics.sovereignty_preserved,
+        agentception_enabled=bool(ir.agentception_config.get("enabled")),
+        inherit_constraints=bool(ir.agentception_config.get("inherit_constraints", False)),
+        inherit_ok=metrics.inherit_ok,
+    )
+
+    normalized = normalize_obligations(generate_normalized_obligations(ir))
+
+    try:
+        evaluator = get_backend(backend)
+    except ValueError as exc:
+        metadata = VerificationBackendMetadata(
+            name=backend,
+            version="n/a",
+            mode="invalid",
+            capabilities=[],
+        )
+        fallback_obligations = [
+            VerificationObligation(
+                obligation_id=o.obligation_id,
+                category=o.category,
+                description=o.description,
+                source_location=o.source_location,
+                status="unknown",
+                evidence="backend unavailable",
+                critical=o.critical,
+            )
+            for o in normalized
+        ]
+        return _build_result(
+            ir,
+            metrics,
+            fallback_obligations,
+            metadata,
+            backend_error=str(exc),
+        )
+
+    try:
+        evaluated = evaluator.evaluate(ir, normalized, context)
+        return _build_result(ir, metrics, evaluated.obligations, evaluated.metadata, backend_error=None)
+    except NotImplementedError as exc:
+        metadata = VerificationBackendMetadata(
+            name=backend,
+            version="stub",
+            mode="not_implemented",
+            capabilities=[],
+        )
+        fallback_obligations = [
+            VerificationObligation(
+                obligation_id=o.obligation_id,
+                category=o.category,
+                description=o.description,
+                source_location=o.source_location,
+                status="unknown",
+                evidence="evaluation unavailable",
+                critical=o.critical,
+            )
+            for o in normalized
+        ]
+        return _build_result(
+            ir,
+            metrics,
+            fallback_obligations,
+            metadata,
+            backend_error=str(exc),
+        )

@@ -141,7 +141,8 @@ emit python</code></pre>
           <li>parse</li>
           <li>AST/IR normalization</li>
           <li>validate + incremental cache compare</li>
-          <li>verify bridge preservation</li>
+          <li>generate + normalize obligations</li>
+          <li>evaluate obligations via verification backend</li>
           <li>emit code (only on pass)</li>
           <li>report metrics + verdict</li>
         </ol>
@@ -149,7 +150,14 @@ emit python</code></pre>
 
       <section class="container section" id="bridge-verification">
         <h3>Bridge Verification</h3>
-        <p>Verifier outputs qixel metrics, alignment terms, bridge score, and a preservation verdict.</p>
+        <p>
+          Verifier outputs qixel metrics, alignment terms, bridge score, obligation summaries,
+          backend metadata, and a preservation verdict.
+        </p>
+        <p>
+          Default backend: <code>heuristic</code>. Architecture includes placeholder
+          <code>symbolic</code> and <code>smt</code> backends for future solver integration.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

@@ -58,6 +58,16 @@ def render_report(result: VerificationResult, show_obligations: bool = True) -> 
             ]
         )
 
+    lines.extend([
+        "verification backend:",
+        f"  name: {result.verification_backend}",
+        f"  version: {result.backend_version}",
+        f"  mode: {result.backend_mode}",
+        f"  capabilities: {result.backend_capabilities}",
+    ])
+    if result.backend_error:
+        lines.append(f"  backend_error: {result.backend_error}")
+
     lines.append("obligations:")
     lines.append(f"  counts: {result.obligation_counts}")
     if show_obligations:

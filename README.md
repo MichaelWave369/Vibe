@@ -134,6 +134,41 @@ Current obligation discharge is operational/heuristic (not full SMT/theorem prov
 
 Unknown obligations are surfaced explicitly and are never silently treated as satisfied for critical layers.
 
+## SMT-ready backend abstraction (Phase 2.2)
+
+Verification is now split into explicit lifecycle stages:
+
+1. obligation generation
+2. obligation normalization
+3. backend evaluation
+4. result aggregation + preservation gating
+5. reporting
+
+The default backend is currently:
+
+- `heuristic` (operational checks; existing behavior preserved)
+
+Planned backend surfaces (architecture is present, implementation is stubbed):
+
+- `symbolic` (placeholder)
+- `smt` (placeholder)
+
+Backends that are not implemented yet fail safely with a clear message and never bypass preservation law.
+
+Normalized obligations now include solver-ready fields such as:
+- `subject_ref`
+- `expected_predicate`
+- `severity`
+- `critical`
+
+Reports now include backend metadata:
+- `verification_backend`
+- `backend_version`
+- `backend_mode`
+- backend capabilities and backend errors (if any)
+
+This is still an operational verification system (not full theorem proving yet).
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -166,8 +201,10 @@ vibec explain vibe/examples/payment_router.vibe
 vibec verify vibe/examples/payment_router.vibe
 vibec verify vibe/examples/payment_router.vibe --report json
 vibec verify vibe/examples/sovereign_bridge.vibe --show-obligations
+vibec verify vibe/examples/payment_router.vibe --backend heuristic
 vibec compile vibe/examples/payment_router.vibe
 vibec compile vibe/examples/payment_router.vibe --report json
+vibec compile vibe/examples/payment_router.vibe --backend heuristic
 vibec compile vibe/examples/edge_contract_ts.vibe
 ```
 
