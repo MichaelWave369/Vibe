@@ -1,0 +1,28 @@
+intent PaymentRouter:
+  goal: "Route payments to the cheapest valid processor."
+  inputs:
+    amount: number
+    country: string
+    card_brand: string
+  outputs:
+    processor: string
+    total_fee: number
+
+preserve:
+  latency < 200ms
+  failure_rate < 0.01
+  compliance = strict
+  readability = high
+  testability = high
+
+constraint:
+  no hardcoded secrets
+  deterministic fee selection
+  graceful fallback on provider outage
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+emit python
