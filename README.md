@@ -84,6 +84,7 @@ Primary commands:
 
 - `vibec compile <file.vibe>` — verify + emit when preservation passes.
 - `vibec verify <file.vibe>` — verification only.
+- `vibec verify --snapshot <sha256> --snapshot-store <dir>` — verify blob content by content hash.
 - `vibec verify-proof <file.vibe>` — verification + proof artifact write.
 - `vibec inspect-proof <file.vibe.proof.json>` — inspect proof summary.
 - `vibec diff <old.vibe> <new.vibe>` — semantic intent diff.

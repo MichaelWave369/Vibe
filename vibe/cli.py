@@ -23,7 +23,7 @@ from .diff import compute_intent_diff, render_intent_diff_human, render_intent_d
 from .domain_profiles import domain_summary_json
 from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
-from .parser import parse_source
+from .parser import ParseError, parse_source
 from .package_manager import (
     apply_package_defaults_to_source,
     build_project,
@@ -78,6 +78,7 @@ from .refinement import (
 )
 from .report import render_report, render_report_json
 from .verification_flow import prepare_verification_input
+from .snapshot_store import SnapshotResolutionError, default_snapshot_store, resolve_snapshot
 from .merge_verify import (
     merge_verify_payload,
     merge_verify,
@@ -104,11 +105,23 @@ def _print_report(
     report: ReportMode,
     show_obligations: bool = True,
     show_equivalence: bool = False,
-    spec_path: str = "<unknown>",
+    spec_path: str | None = "<unknown>",
     proof_artifact_path: str | None = None,
+    input_mode: str = "path",
+    snapshot_id: str | None = None,
+    snapshot_store: str | None = None,
 ) -> None:
     if report == "json":
-        print(render_report_json(result, spec_path=spec_path, proof_artifact_path=proof_artifact_path))
+        print(
+            render_report_json(
+                result,
+                spec_path=spec_path,
+                proof_artifact_path=proof_artifact_path,
+                input_mode=input_mode,
+                snapshot_id=snapshot_id,
+                snapshot_store=snapshot_store,
+            )
+        )
     else:
         print(render_report(result, show_obligations=show_obligations, show_equivalence=show_equivalence))
 
@@ -444,7 +457,7 @@ def _explain(
 
 
 def _verify(
-    path: Path,
+    path: Path | None,
     report: ReportMode,
     show_obligations: bool = True,
     show_equivalence: bool = False,
@@ -454,11 +467,87 @@ def _verify(
     write_proof: bool = False,
     candidate_count: int = 3,
     with_tests: bool = False,
+    snapshot: str | None = None,
+    snapshot_store: Path | None = None,
 ) -> int:
-    prepared = prepare_verification_input(path=path)
-    source = prepared.source_text
-    ir = prepared.ir
-    pkg_ctx = prepared.package_context
+    if path is not None and snapshot is not None:
+        err = {
+            "schema_version": "v1",
+            "report_type": "verify",
+            "error_type": "invalid_arguments",
+            "error": "cannot use positional path and --snapshot together",
+        }
+        if report == "json":
+            import json
+
+            print(json.dumps(err, indent=2, sort_keys=True))
+        else:
+            print("verify failed: cannot use positional path and --snapshot together")
+        return 1
+    input_mode = "path"
+    snapshot_id = None
+    snapshot_store_str = None
+    try:
+        if snapshot is not None:
+            resolved = resolve_snapshot(snapshot, snapshot_store)
+            prepared = prepare_verification_input(
+                source_text=resolved.source_text,
+                source_name=f"snapshot:{resolved.snapshot_id}",
+            )
+            source = prepared.source_text
+            ir = prepared.ir
+            pkg_ctx = prepared.package_context
+            input_mode = "snapshot"
+            snapshot_id = resolved.snapshot_id
+            snapshot_store_str = str(resolved.store_path)
+            spec_path_for_report: str | None = None
+            effective_path_for_proof = resolved.store_path / f"{resolved.snapshot_id}.vibe.proof.json"
+            source_ref_path = Path(f"snapshot.{resolved.snapshot_id}.vibe")
+        else:
+            if path is None:
+                raise ValueError("missing required input: provide a path or --snapshot <sha256>")
+            prepared = prepare_verification_input(path=path)
+            source = prepared.source_text
+            ir = prepared.ir
+            pkg_ctx = prepared.package_context
+            spec_path_for_report = str(path)
+            effective_path_for_proof = default_proof_path(path)
+            source_ref_path = path
+    except SnapshotResolutionError as exc:
+        err = {
+            "schema_version": "v1",
+            "report_type": "verify",
+            "input_mode": "snapshot",
+            "snapshot_id": snapshot,
+            "snapshot_store": str((snapshot_store or default_snapshot_store()).resolve()),
+            "error_type": exc.code,
+            "error": str(exc),
+        }
+        if report == "json":
+            import json
+
+            print(json.dumps(err, indent=2, sort_keys=True))
+        else:
+            print(f"verify failed: {exc}")
+        return 1
+    except Exception as exc:
+        error_type = "parse_error" if isinstance(exc, ParseError) else "input_resolution_error"
+        err = {
+            "schema_version": "v1",
+            "report_type": "verify",
+            "input_mode": input_mode,
+            "snapshot_id": snapshot_id,
+            "snapshot_store": snapshot_store_str,
+            "error_type": error_type,
+            "error": str(exc),
+        }
+        if report == "json":
+            import json
+
+            print(json.dumps(err, indent=2, sort_keys=True))
+        else:
+            print(f"verify failed: {exc}")
+        return 1
     candidates = generate_candidates(ir, candidate_count)
     evaluations = [
         rank_candidate(
@@ -497,7 +586,7 @@ def _verify(
     ]
     if with_tests:
         emitted_code, backend = emit_code(ir)
-        projected_path = output_path_for(path, backend)
+        projected_path = output_path_for(path or Path("snapshot_input.vibe"), backend)
         generated_suite = generate_intent_guided_tests(
             ir=ir,
             output_path=projected_path,
@@ -511,10 +600,10 @@ def _verify(
         result.uncovered_items = list(generated_suite.uncovered_items)
         result.partial_coverage_items = list(generated_suite.partial_coverage_items)
         result.test_generation_notes = list(generated_suite.notes)
-    proof_path = default_proof_path(path)
+    proof_path = effective_path_for_proof
     if write_proof:
         proof = build_proof_artifact(
-            path,
+            source_ref_path,
             source,
             ir,
             result,
@@ -528,8 +617,11 @@ def _verify(
         report,
         show_obligations=show_obligations,
         show_equivalence=show_equivalence,
-        spec_path=str(path),
+        spec_path=spec_path_for_report,
         proof_artifact_path=str(proof_path) if write_proof else None,
+        input_mode=input_mode,
+        snapshot_id=snapshot_id,
+        snapshot_store=snapshot_store_str,
     )
     if result.backend_error:
         print(f"verify failed: {result.backend_error}")
@@ -1235,7 +1327,9 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--show-genomics", action="store_true", help="Show genomics summary/issues/obligations")
 
     vf = sub.add_parser("verify", help="Run verifier without emission")
-    vf.add_argument("path", type=Path)
+    vf.add_argument("path", type=Path, nargs="?", default=None)
+    vf.add_argument("--snapshot", type=str, default=None, help="Verify from content-addressed snapshot sha256")
+    vf.add_argument("--snapshot-store", type=Path, default=None, help="Snapshot store directory (default ./.vibe_snapshots or VIBE_SNAPSHOT_STORE)")
     vf.add_argument("--report", choices=["human", "json"], default="human")
     vf.add_argument("--show-obligations", action="store_true", help="Show full obligation list in human report")
     vf.add_argument("--show-equivalence", action="store_true", help="Show detailed equivalence/diff entries in human report")
@@ -1455,6 +1549,8 @@ def main(argv: list[str] | None = None) -> int:
             write_proof=args.write_proof,
             candidate_count=args.candidates,
             with_tests=args.with_tests,
+            snapshot=args.snapshot,
+            snapshot_store=args.snapshot_store,
         )
     if args.command == "calibrate":
         return _calibrate(args.corpus_path)

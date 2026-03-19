@@ -27,6 +27,32 @@ Each `obligations[]` row includes:
 
 The payload also preserves legacy top-level verification fields for compatibility.
 
+### Snapshot verification mode (Phase 3A)
+
+`vibec verify` now supports local content-addressed verification:
+
+- `vibec verify --snapshot <sha256> --snapshot-store <dir> --report json`
+
+Snapshot adapter behavior:
+
+- resolves blobs from local store paths `<dir>/<sha256>` or `<dir>/<sha256>.vibe`
+- re-hashes loaded content and enforces exact sha256 match
+- fails machine-readably for:
+  - `snapshot_not_found`
+  - `snapshot_hash_mismatch`
+  - `parse_error` / other input-resolution errors
+
+Additive verify JSON fields in both path and snapshot mode:
+
+- `input_mode` (`path` or `snapshot`)
+- `snapshot_id` (`null` in path mode)
+- `snapshot_store` (`null` in path mode)
+
+In snapshot mode:
+
+- `spec_path` is `null` (input is blob-addressed, not filesystem-path addressed)
+- proof artifact writing uses deterministic snapshot-scoped output path in the snapshot store (`<store>/<sha256>.vibe.proof.json`)
+
 ## `vibec diff --report json`
 
 Top-level contract fields:

@@ -32,9 +32,12 @@ def _obligation_severity(result_row: dict[str, object]) -> str:
 def verify_contract_payload(
     result: VerificationResult,
     *,
-    spec_path: str,
+    spec_path: str | None,
     proof_artifact_path: str | None = None,
     proof_sha256: str | None = None,
+    input_mode: str = "path",
+    snapshot_id: str | None = None,
+    snapshot_store: str | None = None,
 ) -> dict[str, object]:
     """Stable, versioned verify JSON contract used by Muse integration."""
 
@@ -58,6 +61,9 @@ def verify_contract_payload(
     payload["schema_version"] = VERIFY_REPORT_SCHEMA_VERSION
     payload["report_type"] = "verify"
     payload["spec_path"] = spec_path
+    payload["input_mode"] = input_mode
+    payload["snapshot_id"] = snapshot_id
+    payload["snapshot_store"] = snapshot_store
     payload["bridge_score"] = result.bridge_score
     payload["epsilon_post"] = result.epsilon_post
     payload["measurement_ratio"] = result.measurement_ratio
@@ -338,8 +344,11 @@ def render_report(
 def render_report_json(
     result: VerificationResult,
     *,
-    spec_path: str | Path = "<unknown>",
+    spec_path: str | Path | None = "<unknown>",
     proof_artifact_path: str | Path | None = None,
+    input_mode: str = "path",
+    snapshot_id: str | None = None,
+    snapshot_store: str | Path | None = None,
 ) -> str:
     """Render a deterministic JSON bridge report."""
 
@@ -350,8 +359,11 @@ def render_report_json(
             proof_sha256 = sha256_text(proof_text)
     payload = verify_contract_payload(
         result,
-        spec_path=str(spec_path),
+        spec_path=str(spec_path) if spec_path is not None else None,
         proof_artifact_path=str(proof_artifact_path) if proof_artifact_path is not None else None,
         proof_sha256=proof_sha256,
+        input_mode=input_mode,
+        snapshot_id=snapshot_id,
+        snapshot_store=str(snapshot_store) if snapshot_store is not None else None,
     )
     return json.dumps(payload, indent=2, sort_keys=True)
