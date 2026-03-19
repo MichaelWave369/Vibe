@@ -150,6 +150,14 @@ def render_report(
             f"  resource_type_obligations: {result.resource_type_obligations}",
         ]
     )
+    lines.extend(
+        [
+            "inference types:",
+            f"  inference_type_summary: {result.inference_type_summary}",
+            f"  inference_type_issues: {result.inference_type_issues}",
+            f"  inference_type_obligations: {result.inference_type_obligations}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

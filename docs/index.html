@@ -200,6 +200,15 @@ emit python</code></pre>
           nondeterministic/network/fallback/bridge-critical) and reports effect mismatches as compile-time
           obligations while keeping unknown effects visible.
         </p>
+        <p>
+          Phase 4.3 adds resource types: Vibe reports inferred resource profiles (memory/cpu/latency/allocation/
+          iteration hints) and surfaces resource mismatches as preservation obligations.
+        </p>
+        <p>
+          Phase 4.4 adds intent-seeded type inference: declared intent IO + preserve/constraint/bridge/declaration
+          surfaces seed deterministic inferred bindings, unresolved points, and inference-derived obligations.
+          Inference remains partial and explicit; preservation law still governs emission truth.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

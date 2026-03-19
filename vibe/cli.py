@@ -300,7 +300,13 @@ def _compile(
     return 0
 
 
-def _explain(path: Path, show_types: bool = False, show_effects: bool = False, show_resources: bool = False) -> int:
+def _explain(
+    path: Path,
+    show_types: bool = False,
+    show_effects: bool = False,
+    show_resources: bool = False,
+    show_inference: bool = False,
+) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
@@ -324,6 +330,10 @@ def _explain(path: Path, show_types: bool = False, show_effects: bool = False, s
         print("\nResource types:")
         print(f"summary: {ir.module.resource_summary}")
         print(f"issues: {ir.module.resource_issues}")
+    if show_inference:
+        print("\nInference types:")
+        print(f"summary: {ir.module.inference_summary}")
+        print(f"issues: {ir.module.inference_issues}")
     return 0
 
 
@@ -504,6 +514,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--show-types", action="store_true", help="Show semantic type summary and issues")
     ex.add_argument("--show-effects", action="store_true", help="Show effect type summary and issues")
     ex.add_argument("--show-resources", action="store_true", help="Show resource type summary and issues")
+    ex.add_argument("--show-inference", action="store_true", help="Show inference type summary and issues")
 
     vf = sub.add_parser("verify", help="Run verifier without emission")
     vf.add_argument("path", type=Path)
@@ -568,6 +579,7 @@ def main(argv: list[str] | None = None) -> int:
             show_types=args.show_types,
             show_effects=args.show_effects,
             show_resources=args.show_resources,
+            show_inference=args.show_inference,
         )
     if args.command == "verify":
         return _verify(

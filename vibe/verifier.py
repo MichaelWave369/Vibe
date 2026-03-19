@@ -26,6 +26,12 @@ from .resources import (
     resource_issues_to_obligation_rows,
     resource_summary_payload,
 )
+from .type_inference import (
+    check_inference_issues,
+    inference_issues_to_obligation_rows,
+    inference_summary_payload,
+    issues_as_dicts as inference_issues_as_dicts,
+)
 from .semantic_types import (
     check_semantic_type_issues,
     issues_as_dicts,
@@ -183,6 +189,9 @@ class VerificationResult:
     resource_type_summary: dict[str, object] = field(default_factory=dict)
     resource_type_issues: list[dict[str, object]] = field(default_factory=list)
     resource_type_obligations: list[dict[str, object]] = field(default_factory=list)
+    inference_type_summary: dict[str, object] = field(default_factory=dict)
+    inference_type_issues: list[dict[str, object]] = field(default_factory=list)
+    inference_type_obligations: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -886,7 +895,24 @@ def _build_result(
         )
         for row in resource_rows
     ]
-    all_obligations = list(obligations) + semantic_obligations + effect_obligations + resource_obligations
+    inference_issues = check_inference_issues(ir, generated_code)
+    ir.module.inference_issues = inference_issues_as_dicts(inference_issues)
+    inference_rows = inference_issues_to_obligation_rows(inference_issues)
+    inference_obligations = [
+        VerificationObligation(
+            obligation_id=str(row["obligation_id"]),
+            category=str(row["category"]),
+            description=str(row["description"]),
+            source_location=str(row["source_location"]) if row.get("source_location") is not None else None,
+            status=str(row["status"]),
+            evidence=str(row["evidence"]) if row.get("evidence") is not None else None,
+            critical=bool(row["critical"]),
+        )
+        for row in inference_rows
+    ]
+    all_obligations = (
+        list(obligations) + semantic_obligations + effect_obligations + resource_obligations + inference_obligations
+    )
 
     counts = _compute_obligation_counts(all_obligations)
     critical_unknown = any(o.status == "unknown" and o.critical for o in all_obligations)
@@ -962,6 +988,9 @@ def _build_result(
         resource_type_summary=resource_summary_payload(ir),
         resource_type_issues=resource_issues_as_dicts(resource_issues),
         resource_type_obligations=resource_rows,
+        inference_type_summary=inference_summary_payload(ir),
+        inference_type_issues=inference_issues_as_dicts(inference_issues),
+        inference_type_obligations=inference_rows,
     )
 
 

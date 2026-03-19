@@ -50,6 +50,7 @@ def generate_typescript(ir: IR) -> str:
         "// SEMANTIC_QUALIFIERS: " + repr(ir.module.semantic_summary.get("binding_qualifiers", {})).replace("'", '"'),
         "// EFFECT_PROFILE: " + repr(ir.module.effect_summary).replace("'", '"'),
         "// RESOURCE_PROFILE: " + repr(ir.module.resource_summary).replace("'", '"'),
+        "// INFERENCE_PROFILE: " + repr(ir.module.inference_summary).replace("'", '"'),
         "",
         f"/** {ir.goal} */",
         f"export function {fn_name}({params}): {ret} {{",

@@ -131,6 +131,8 @@ class IRModule:
     effect_issues: list[dict[str, object]] = field(default_factory=list)
     resource_summary: dict[str, object] = field(default_factory=dict)
     resource_issues: list[dict[str, object]] = field(default_factory=list)
+    inference_summary: dict[str, object] = field(default_factory=dict)
+    inference_issues: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -485,6 +487,18 @@ def ast_to_ir(program: Program) -> IR:
         "value_resources": resources.summary.value_resources,
         "propagation_notes": resources.summary.propagation_notes,
     }
+    from .type_inference import annotate_type_inference
+
+    inference = annotate_type_inference(ir)
+    ir.module.inference_summary = {
+        "declared_types": inference.summary.declared_types,
+        "inferred_bindings": inference.summary.inferred_bindings,
+        "helper_profiles": ir.module.inference_summary.get("helper_profiles", []),
+        "unresolved_points": inference.summary.unresolved_points,
+        "contradiction_count": inference.summary.contradiction_count,
+        "unresolved_count": inference.summary.unresolved_count,
+        "propagation_notes": inference.summary.propagation_notes,
+    }
     validate_ir(ir)
     return ir
 
@@ -568,5 +582,7 @@ def serialize_ir(ir: IR) -> str:
         "effect_issues": list(ir.module.effect_issues),
         "resource_summary": dict(ir.module.resource_summary),
         "resource_issues": list(ir.module.resource_issues),
+        "inference_summary": dict(ir.module.inference_summary),
+        "inference_issues": list(ir.module.inference_issues),
     }
     return json.dumps(payload, indent=2, sort_keys=True)

@@ -380,6 +380,37 @@ Vibe now adds first-pass effect types as a compile-time preservation surface.
 
 This is a deterministic compile-time effect profile, not full runtime behavioral proof.
 
+## Resource types (Phase 4.3)
+
+Vibe adds first-pass resource type profiling as another preservation surface.
+
+- resource profiles are inferred from preserve/constraints/bridge/effect surfaces
+- resource mismatch diagnostics become explicit resource-type obligations
+- summaries/issues are visible in IR/report/proof/diff/explain
+
+This is a deterministic estimate surface, not a runtime resource bound proof.
+
+## Type inference from intent (Phase 4.4)
+
+Vibe now performs deterministic type inference seeded from declared intent surfaces:
+
+- intent input/output declarations
+- preserve and constraint clauses
+- bridge settings
+- declaration surfaces (type/enum/interface/module where available)
+- semantic/effect/resource summaries
+
+Inference output is explicitly split into:
+
+- declared types
+- inferred bindings
+- unresolved inference points
+- inference-derived issues and obligations
+
+Inference failures are preservation-surface diagnostics (intent violations), not opaque
+internal compiler errors. This pass is intentionally partial and does not claim full
+polymorphic/global theorem proving.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:

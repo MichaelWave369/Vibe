@@ -261,6 +261,19 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
                 "resource type summary changed",
             ),
         )
+    if old_ir.module.inference_summary != new_ir.module.inference_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "inference_types",
+                "inference_summary",
+                "modified",
+                "unknown",
+                old_ir.module.inference_summary,
+                new_ir.module.inference_summary,
+                "inference type summary changed",
+            ),
+        )
 
     summary = {
         "total_changes": len(entries),
