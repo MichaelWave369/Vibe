@@ -56,6 +56,10 @@ from .semantic_types import (
     issues_to_obligation_rows,
     semantic_summary_payload,
 )
+from .obligation_registry import (
+    ExternalObligationContext,
+    evaluate_external_obligations,
+)
 
 ObligationStatus = str
 
@@ -100,6 +104,8 @@ class ObligationEvaluationContext:
     readability_score: float
     epsilon_post: float
     measurement_ratio: float
+    epsilon_floor: float
+    measurement_safe_ratio: float
     delegation_integrity: float
     sovereignty_required: bool
     sovereignty_preserved: bool | None
@@ -134,6 +140,8 @@ class VerificationResult:
     epsilon_pre: float
     epsilon_post: float
     measurement_ratio: float
+    epsilon_floor: float
+    measurement_safe_ratio: float
     q_persistence: float
     q_spatial_consistency: float
     q_cohesion: float
@@ -251,6 +259,7 @@ class VerificationResult:
     self_bridge_score: float | None = None
     self_regression_status: str | None = None
     self_baseline_reference: str | None = None
+    external_obligation_providers: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -909,6 +918,8 @@ def _build_result(
     metadata: VerificationBackendMetadata,
     backend_error: str | None,
     calibration_meta: dict[str, object] | None = None,
+    external_obligations: list[VerificationObligation] | None = None,
+    external_provider_executions: list[dict[str, object]] | None = None,
 ) -> VerificationResult:
     semantic_issues = check_semantic_type_issues(ir, generated_code)
     ir.module.semantic_issues = issues_as_dicts(semantic_issues)
@@ -1117,6 +1128,7 @@ def _build_result(
     ]
     all_obligations = (
         list(obligations)
+        + list(external_obligations or [])
         + semantic_obligations
         + effect_obligations
         + resource_obligations
@@ -1147,6 +1159,8 @@ def _build_result(
         epsilon_pre=metrics.epsilon_pre,
         epsilon_post=metrics.epsilon_post,
         measurement_ratio=metrics.measurement_ratio,
+        epsilon_floor=metrics.epsilon_floor,
+        measurement_safe_ratio=metrics.measurement_safe_ratio,
         q_persistence=metrics.q_persistence,
         q_spatial_consistency=metrics.q_spatial_consistency,
         q_cohesion=metrics.q_cohesion,
@@ -1239,6 +1253,7 @@ def _build_result(
         genomics_target_metadata=dict(ir.module.genomics_target_metadata),
         metadata_privacy_summary=dict(ir.module.metadata_privacy_summary),
         workflow_provenance_metadata=dict(ir.module.workflow_provenance_metadata),
+        external_obligation_providers=list(external_provider_executions or []),
     )
 
 
@@ -1361,6 +1376,45 @@ def verify(
     )
 
     normalized = normalize_obligations(generate_normalized_obligations(ir))
+    external_context = ExternalObligationContext(
+        ir=ir,
+        generated_code=generated_code,
+        observed_scalars=observed_scalars,
+        observed_bools=observed_bools,
+        observed_symbols=observed_symbols,
+    )
+
+    def _evaluate_external_rows() -> tuple[list[VerificationObligation], list[dict[str, object]]]:
+        external_rows: list[VerificationObligation] = []
+        evaluated = evaluate_external_obligations(external_context)
+        for row in evaluated.obligations:
+            external_rows.append(
+                VerificationObligation(
+                    obligation_id=row.obligation_id,
+                    category=row.category,
+                    description=row.description,
+                    source_location=row.source_location,
+                    status=row.status,
+                    evidence=row.evidence,
+                    critical=row.critical,
+                )
+            )
+        executions = [
+            {
+                "category": ex.category,
+                "provider_name": ex.provider_name,
+                "provider_version": ex.provider_version,
+                "order_index": ex.order_index,
+                "ran": ex.ran,
+                "emitted_obligations": ex.emitted_obligations,
+                "status_counts": dict(ex.status_counts),
+                "had_error": ex.had_error,
+                "error_type": ex.error_type,
+                "error_message": ex.error_message,
+            }
+            for ex in evaluated.executions
+        ]
+        return external_rows, executions
 
     try:
         evaluator = get_backend(backend)
@@ -1383,6 +1437,7 @@ def verify(
             )
             for o in normalized
         ]
+        external_rows, external_exec = _evaluate_external_rows()
         return _build_result(
             ir,
             generated_code,
@@ -1391,6 +1446,8 @@ def verify(
             metadata,
             backend_error=str(exc),
             calibration_meta=calibration_meta,
+            external_obligations=external_rows,
+            external_provider_executions=external_exec,
         )
 
     try:
@@ -1430,6 +1487,7 @@ def verify(
                 metadata.details["fallback_backend"] = fallback_backend
                 metadata.details["fallback_error"] = str(exc)
 
+        external_rows, external_exec = _evaluate_external_rows()
         return _build_result(
             ir,
             generated_code,
@@ -1438,6 +1496,8 @@ def verify(
             metadata,
             backend_error=None,
             calibration_meta=calibration_meta,
+            external_obligations=external_rows,
+            external_provider_executions=external_exec,
         )
     except NotImplementedError as exc:
         metadata = VerificationBackendMetadata(
@@ -1458,6 +1518,7 @@ def verify(
             )
             for o in normalized
         ]
+        external_rows, external_exec = _evaluate_external_rows()
         return _build_result(
             ir,
             generated_code,
@@ -1466,4 +1527,6 @@ def verify(
             metadata,
             backend_error=str(exc),
             calibration_meta=calibration_meta,
+            external_obligations=external_rows,
+            external_provider_executions=external_exec,
         )
