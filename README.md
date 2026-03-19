@@ -58,6 +58,14 @@ Verify an intent spec:
 vibec verify vibe/examples/payment_router.vibe
 ```
 
+Store a local snapshot and verify by snapshot id:
+
+```bash
+vibec snapshot-put vibe/examples/payment_router.vibe --report json
+# capture snapshot_id from output
+vibec verify --snapshot <sha256> --snapshot-store ./.vibe_snapshots --report json
+```
+
 Compile when preservation passes:
 
 ```bash
@@ -84,6 +92,7 @@ Primary commands:
 
 - `vibec compile <file.vibe>` — verify + emit when preservation passes.
 - `vibec verify <file.vibe>` — verification only.
+- `vibec snapshot-put <file.vibe>` — store local file in content-addressed snapshot store.
 - `vibec verify --snapshot <sha256> --snapshot-store <dir>` — verify blob content by content hash.
 - `vibec verify-proof <file.vibe>` — verification + proof artifact write.
 - `vibec inspect-proof <file.vibe.proof.json>` — inspect proof summary.
@@ -139,6 +148,11 @@ When this README says “proof,” it refers to **current machine-checkable proo
 ### Muse integration JSON contract (Issue #34 kickoff)
 
 For the Vibe-side integration contract consumed by Muse (`verify --report json`, `diff --report json`, and `.vibe.proof.json` schema/versioning), see `docs/muse_integration_contract.md`.
+
+Snapshot mode and proof provenance are explicitly local-first:
+
+- `snapshot-put` writes only to a local content-addressed store.
+- snapshot verification proof artifacts include honest provenance (`input_mode`, `snapshot_id`, `snapshot_store`) and do not claim filesystem source paths for snapshot inputs.
 
 ---
 

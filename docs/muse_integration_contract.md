@@ -47,6 +47,18 @@ Additive verify JSON fields in both path and snapshot mode:
 - `input_mode` (`path` or `snapshot`)
 - `snapshot_id` (`null` in path mode)
 - `snapshot_store` (`null` in path mode)
+- `provenance` (shared provenance object)
+  - `input_mode`
+  - `spec_path`
+  - `snapshot_id`
+  - `snapshot_store`
+
+Proof linkage fields are also available in both legacy and grouped form:
+
+- `proof_artifact_path`
+- `proof_sha256`
+- `proof.artifact_path`
+- `proof.sha256`
 
 In snapshot mode:
 
@@ -183,11 +195,37 @@ Proof artifacts are now explicitly versioned with:
 
 Artifact metadata remains deterministic and includes source hashes, backend metadata, bridge/equivalence summaries, obligations, and subsystem summaries.
 
-## Snapshot seam (future `--snapshot <hash>`)
+Phase 3B adds deterministic input provenance:
+
+- `provenance.input_mode` (`"path"` or `"snapshot"`)
+- `provenance.spec_path` (path mode path, `null` in snapshot mode)
+- `provenance.snapshot_id` (`null` in path mode)
+- `provenance.snapshot_store` (`null` in path mode)
+
+No synthetic path provenance is emitted for snapshot-mode verification.
+
+## `vibec snapshot-put <path>`
+
+Phase 3B adds a local snapshot writer command:
+
+- `vibec snapshot-put <path> [--snapshot-store <dir>] [--report json]`
+
+Machine-readable output (`--report json`) fields:
+
+- `schema_version` (`"v1"`)
+- `report_type` (`"snapshot_put"`)
+- `snapshot_id`
+- `snapshot_store`
+- `blob_path`
+- `already_present`
+
+This command is local content-addressed storage only; it is not a remote Muse object-store API.
+
+## Snapshot seam
 
 `vibe.verification_flow.prepare_verification_input(...)` supports both:
 
 - path-based source loading, and
 - in-memory source loading (`source_text` + `source_name`)
 
-This provides the internal seam required for future snapshot/object-store verification wiring, without shipping a fake object-store CLI feature in this pass.
+This powers real local snapshot verification (`verify --snapshot ...`) and local snapshot writes (`snapshot-put`), while remaining explicitly local (not a remote object-store integration).

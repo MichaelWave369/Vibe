@@ -41,6 +41,7 @@ REQUIRED_FIELDS = {
     "agent_boundary_bridges",
     "delegation",
     "runtime_monitor",
+    "provenance",
     "package_context",
     "domain",
     "hardware",
@@ -64,6 +65,10 @@ def build_proof_artifact(
     *,
     emitted_blocked: bool,
     notes: list[str] | None = None,
+    input_mode: str = "path",
+    spec_path: str | None = None,
+    snapshot_id: str | None = None,
+    snapshot_store: str | None = None,
 ) -> dict[str, object]:
     ir_ser = serialize_ir(ir)
     artifact = {
@@ -237,6 +242,12 @@ def build_proof_artifact(
             "transformation_state": "verified_compiled_intent",
             "artifact_links": [],
             "consumer_brief_links": [],
+        },
+        "provenance": {
+            "input_mode": input_mode,
+            "spec_path": spec_path if spec_path is not None else (str(source_path) if input_mode == "path" else None),
+            "snapshot_id": snapshot_id,
+            "snapshot_store": snapshot_store,
         },
         "notes": notes or [],
     }

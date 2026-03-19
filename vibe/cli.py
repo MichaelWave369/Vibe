@@ -78,7 +78,7 @@ from .refinement import (
 )
 from .report import render_report, render_report_json
 from .verification_flow import prepare_verification_input
-from .snapshot_store import SnapshotResolutionError, default_snapshot_store, resolve_snapshot
+from .snapshot_store import SnapshotResolutionError, default_snapshot_store, resolve_snapshot, snapshot_put
 from .merge_verify import (
     merge_verify_payload,
     merge_verify,
@@ -609,6 +609,10 @@ def _verify(
             result,
             emitted_blocked=not result.passed,
             notes=["verify flow proof artifact"],
+            input_mode=input_mode,
+            spec_path=spec_path_for_report,
+            snapshot_id=snapshot_id,
+            snapshot_store=snapshot_store_str,
         )
         write_proof_artifact(proof_path, proof)
 
@@ -639,6 +643,55 @@ def _calibrate(corpus_path: Path) -> int:
     print(f"model_version: {model.model_version}")
     print(f"fit_confidence: {model.fit_confidence:.4f}")
     print(f"artifact: {artifact}")
+    return 0
+
+
+def _snapshot_put(path: Path, report: ReportMode, snapshot_store: Path | None = None) -> int:
+    try:
+        source_text = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        if report == "json":
+            import json
+
+            print(
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "report_type": "snapshot_put",
+                        "error_type": "read_error",
+                        "error": str(exc),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(f"snapshot-put failed: {exc}")
+        return 1
+
+    out = snapshot_put(source_text, snapshot_store)
+    if report == "json":
+        import json
+
+        print(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "report_type": "snapshot_put",
+                    "snapshot_id": out.snapshot_id,
+                    "snapshot_store": str(out.store_path),
+                    "blob_path": str(out.blob_path),
+                    "already_present": out.already_present,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(f"snapshot_id: {out.snapshot_id}")
+        print(f"snapshot_store: {out.store_path}")
+        print(f"blob_path: {out.blob_path}")
+        print(f"already_present: {out.already_present}")
     return 0
 
 
@@ -1340,6 +1393,11 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("--candidates", type=int, default=3, help="Number of deterministic synthesis candidates")
     vf.add_argument("--with-tests", action="store_true", help="Include intent-guided test metadata in verification report")
 
+    sp = sub.add_parser("snapshot-put", help="Store local .vibe source by content hash in a local snapshot store")
+    sp.add_argument("path", type=Path)
+    sp.add_argument("--snapshot-store", type=Path, default=None, help="Snapshot store directory (default ./.vibe_snapshots or VIBE_SNAPSHOT_STORE)")
+    sp.add_argument("--report", choices=["human", "json"], default="human")
+
     cal = sub.add_parser("calibrate", help="Fit/update empirical epsilon calibration model")
     cal.add_argument("corpus_path", type=Path)
 
@@ -1552,6 +1610,8 @@ def main(argv: list[str] | None = None) -> int:
             snapshot=args.snapshot,
             snapshot_store=args.snapshot_store,
         )
+    if args.command == "snapshot-put":
+        return _snapshot_put(args.path, args.report, snapshot_store=args.snapshot_store)
     if args.command == "calibrate":
         return _calibrate(args.corpus_path)
     if args.command == "verify-proof":

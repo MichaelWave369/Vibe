@@ -64,6 +64,12 @@ def verify_contract_payload(
     payload["input_mode"] = input_mode
     payload["snapshot_id"] = snapshot_id
     payload["snapshot_store"] = snapshot_store
+    payload["provenance"] = {
+        "input_mode": input_mode,
+        "spec_path": spec_path,
+        "snapshot_id": snapshot_id,
+        "snapshot_store": snapshot_store,
+    }
     payload["bridge_score"] = result.bridge_score
     payload["epsilon_post"] = result.epsilon_post
     payload["measurement_ratio"] = result.measurement_ratio
@@ -74,6 +80,10 @@ def verify_contract_payload(
     payload["obligations"] = obligations
     payload["proof_artifact_path"] = proof_artifact_path
     payload["proof_sha256"] = proof_sha256
+    payload["proof"] = {
+        "artifact_path": proof_artifact_path,
+        "sha256": proof_sha256,
+    }
     payload["legacy_report"] = legacy
     return payload
 

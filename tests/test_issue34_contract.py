@@ -71,3 +71,21 @@ emit python
     prepared = prepare_verification_input(source_text=source, source_name="snapshot:abc123")
     assert prepared.spec_path == "snapshot:abc123"
     assert prepared.ir.goal == "memory seam"
+
+
+def test_snapshot_put_report_json_contract_fields(tmp_path: Path, capsys) -> None:
+    case = tmp_path / "s.vibe"
+    case.write_text(
+        Path("vibe/examples/payment_router.vibe").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    store = tmp_path / "snapshots"
+
+    assert main(["snapshot-put", str(case), "--snapshot-store", str(store), "--report", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "v1"
+    assert payload["report_type"] == "snapshot_put"
+    assert payload["snapshot_id"]
+    assert payload["snapshot_store"] == str(store.resolve())
+    assert payload["blob_path"].endswith(payload["snapshot_id"])
+    assert payload["already_present"] is False
