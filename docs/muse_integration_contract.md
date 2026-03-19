@@ -125,8 +125,11 @@ Top-level JSON fields:
 - `report_type` (`"merge_verify"`)
 - `base_spec`, `left_spec`, `right_spec`
 - `merge_status` (`merged`, `conflict`, `error`)
+- `intent_outcome` (`merged_verified`, `merged_verification_failed`, `structural_conflict`, `error`)
 - `merged_text` (only when merged)
 - `verification` (only when merged)
+- `verification_context` (bridge-aware summaries for base/left/right/merged when available)
+- `intent_conflicts` (conservative intent-level conflict classifications for merged outputs)
 - `conflicts` (structured list on conflict)
 - `error` (for parse/runtime failures)
 
@@ -163,6 +166,38 @@ Important contract semantics:
 - `merge_status = conflict` means structural/semantic merge compatibility could not be defended.
 - `merge_status = merged` + `verification.passed = false` means merge succeeded structurally, but preservation thresholds were not met.
 - A merge conflict is not the same as a merged-but-verification-failed result.
+- `intent_conflicts` are only emitted from merged outputs and represent conservative intent-level regression classifications from verification evidence; they are not full semantic contradiction proofs.
+
+### `merge-verify` verification_context (Phase 5A)
+
+`verification_context` shape:
+
+- `requested` (boolean)
+- `available` (boolean)
+- `reason` (`null` when available)
+- `base` / `left` / `right` / `merged` summaries
+- `bridge_score_delta_vs_base`
+
+Summary rows include:
+
+- `bridge_score`
+- `epsilon_post`
+- `measurement_ratio`
+- `epsilon_floor`
+- `measurement_safe_ratio`
+- `obligations_total`
+- `obligations_satisfied`
+
+### `intent_conflicts` conservative categories (Phase 5A)
+
+First-pass categories emitted only when grounded in merge + verification evidence:
+
+- `threshold_weakening`
+- `bridge_regression`
+- `obligation_violation`
+- `constraint_regression`
+- `preserve_regression`
+- `verification_regression` (fallback)
 
 `--write-merge-report <path>` behavior:
 

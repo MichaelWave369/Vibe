@@ -67,8 +67,15 @@ emit python
     payload = json.loads(capsys.readouterr().out)
     assert payload["report_type"] == "merge_verify"
     assert payload["merge_status"] == "merged"
+    assert payload["intent_outcome"] in {"merged_verified", "merged_verification_failed"}
     assert payload["merged_text"]
     assert payload["verification"] is not None
+    assert payload["verification_context"]["available"] is True
+    assert payload["verification_context"]["base"]["bridge_score"] is not None
+    assert payload["verification_context"]["left"]["bridge_score"] is not None
+    assert payload["verification_context"]["right"]["bridge_score"] is not None
+    assert payload["verification_context"]["merged"]["bridge_score"] is not None
+    assert isinstance(payload["verification_context"]["bridge_score_delta_vs_base"], float)
     for key in ["bridge_score", "epsilon_post", "measurement_ratio", "obligations_total", "obligations_satisfied"]:
         assert key in payload["verification"]
 
@@ -158,7 +165,11 @@ emit python
     assert main(["merge-verify", str(base), str(left), str(right), "--report", "json"]) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["merge_status"] == "conflict"
+    assert payload["intent_outcome"] == "structural_conflict"
     assert payload["verification"] is None
+    assert payload["verification_context"]["available"] is False
+    assert payload["verification_context"]["reason"] == "merge_conflict_no_merged_spec"
+    assert payload["intent_conflicts"] == []
     assert payload["conflicts"]
     c0 = payload["conflicts"][0]
     assert {"address", "conflict_type", "base_value", "left_value", "right_value"}.issubset(c0.keys())
@@ -215,9 +226,52 @@ emit python
     rc = main(["merge-verify", str(base), str(left), str(right), "--report", "json"])
     payload = json.loads(capsys.readouterr().out)
     assert payload["merge_status"] == "merged"
+    assert payload["intent_outcome"] == "merged_verification_failed"
     assert payload["verification"] is not None
     assert payload["verification"]["passed"] is False
+    assert payload["intent_conflicts"]
+    assert any(c["conflict_type"] in {"obligation_violation", "verification_regression"} for c in payload["intent_conflicts"])
     assert rc == 1
+
+
+def test_merge_verify_threshold_weakening_classification(tmp_path: Path, capsys) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+bridge:
+  epsilon_floor = 0.10
+  measurement_safe_ratio = 0.90
+emit python
+""",
+    )
+    left = _write(
+        tmp_path / "left.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+bridge:
+  epsilon_floor = 0.05
+  measurement_safe_ratio = 0.80
+emit python
+""",
+    )
+    right = _write(tmp_path / "right.vibe", base.read_text(encoding="utf-8"))
+
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json"]) in {0, 1}
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["merge_status"] == "merged"
+    kinds = {c["conflict_type"] for c in payload["intent_conflicts"]}
+    assert "threshold_weakening" in kinds
 
 
 def test_merge_verify_write_merged_only_on_success(tmp_path: Path, capsys) -> None:
@@ -447,6 +501,8 @@ emit python
     payload_conflict = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload_conflict["merge_status"] == "conflict"
     assert payload_conflict["conflicts"]
+    assert "verification_context" in payload_conflict
+    assert "intent_conflicts" in payload_conflict
 
     capsys.readouterr()
     left_ok = _write(
@@ -478,6 +534,7 @@ emit python
     payload_ok = json.loads(report_ok.read_text(encoding="utf-8"))
     assert payload_ok["merge_status"] == "merged"
     assert payload_ok["verification"] is not None
+    assert payload_ok["verification_context"]["available"] is True
     assert rc in {0, 1}
 
 

@@ -31,6 +31,8 @@ class MergeVerifyResult:
     conflicts: list[MergeConflict]
     merged_text: str | None
     verification: dict[str, object] | None
+    verification_context: dict[str, object] | None = None
+    intent_conflicts: list[dict[str, object]] | None = None
     error: str | None = None
 
 
@@ -303,13 +305,12 @@ def _to_vibe_text(
     return "\n".join(lines)
 
 
-def _verification_summary(merged_text: str) -> dict[str, object]:
-    ir = ast_to_ir(parse_source(merged_text))
+def _verification_summary_for_ir(ir: IR) -> tuple[dict[str, object], object]:
     emitted, _ = emit_code(ir)
     result = verify(ir, emitted, use_calibration=False)
     obligations_total = len(result.obligations)
     obligations_satisfied = sum(1 for o in result.obligations if o.status == "satisfied")
-    return {
+    summary = {
         "passed": result.passed,
         "verdict": result.verdict,
         "bridge_score": result.bridge_score,
@@ -320,15 +321,126 @@ def _verification_summary(merged_text: str) -> dict[str, object]:
         "obligations_total": obligations_total,
         "obligations_satisfied": obligations_satisfied,
     }
+    return summary, result
+
+
+def _verification_summary(source_text: str) -> tuple[dict[str, object], IR, object]:
+    ir = ast_to_ir(parse_source(source_text))
+    summary, result = _verification_summary_for_ir(ir)
+    return summary, ir, result
+
+
+def _maybe_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _classify_intent_conflicts(
+    *,
+    base_ir: IR,
+    merged_ir: IR,
+    base_summary: dict[str, object],
+    merged_summary: dict[str, object],
+    merged_result: object,
+) -> list[dict[str, object]]:
+    conflicts: list[dict[str, object]] = []
+    intent_name = merged_ir.intent_name
+    base_floor = _maybe_float(base_ir.bridge_config.get("epsilon_floor"))
+    merged_floor = _maybe_float(merged_ir.bridge_config.get("epsilon_floor"))
+    if base_floor is not None and merged_floor is not None and merged_floor < base_floor:
+        conflicts.append(
+            {
+                "address": _semantic_address(intent_name, "bridge", "epsilon_floor"),
+                "conflict_type": "threshold_weakening",
+                "message": f"epsilon_floor weakened from {base_floor} to {merged_floor}",
+                "severity": "warning",
+                "bridge_impact": merged_floor - base_floor,
+            }
+        )
+    base_safe = _maybe_float(base_ir.bridge_config.get("measurement_safe_ratio"))
+    merged_safe = _maybe_float(merged_ir.bridge_config.get("measurement_safe_ratio"))
+    if base_safe is not None and merged_safe is not None and merged_safe < base_safe:
+        conflicts.append(
+            {
+                "address": _semantic_address(intent_name, "bridge", "measurement_safe_ratio"),
+                "conflict_type": "threshold_weakening",
+                "message": f"measurement_safe_ratio weakened from {base_safe} to {merged_safe}",
+                "severity": "warning",
+                "bridge_impact": merged_safe - base_safe,
+            }
+        )
+
+    base_bridge = float(base_summary["bridge_score"])
+    merged_bridge = float(merged_summary["bridge_score"])
+    if merged_bridge < base_bridge:
+        conflicts.append(
+            {
+                "address": _semantic_address(intent_name, "bridge", "bridge_score"),
+                "conflict_type": "bridge_regression",
+                "message": f"bridge_score regressed from {base_bridge:.6f} to {merged_bridge:.6f}",
+                "severity": "warning",
+                "bridge_impact": merged_bridge - base_bridge,
+            }
+        )
+
+    violated = [o for o in merged_result.obligations if o.status == "violated"]
+    if violated:
+        first = violated[0]
+        conflict_type = "obligation_violation"
+        if str(first.category) == "constraint":
+            conflict_type = "constraint_regression"
+        elif str(first.category) == "preserve":
+            conflict_type = "preserve_regression"
+        conflicts.append(
+            {
+                "address": first.source_location or first.obligation_id,
+                "conflict_type": conflict_type,
+                "message": first.description,
+                "severity": "error" if first.critical else "warning",
+                "bridge_impact": None,
+            }
+        )
+    elif merged_summary.get("passed") is False:
+        conflicts.append(
+            {
+                "address": _semantic_address(intent_name, "verification"),
+                "conflict_type": "verification_regression",
+                "message": "merged intent failed verification without directly classifiable violated obligations",
+                "severity": "error",
+                "bridge_impact": None,
+            }
+        )
+    return conflicts
 
 
 def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerifyResult:
     try:
-        base_ir = ast_to_ir(parse_source(base_text))
-        left_ir = ast_to_ir(parse_source(left_text))
-        right_ir = ast_to_ir(parse_source(right_text))
+        base_summary, base_ir, _ = _verification_summary(base_text)
+        left_summary, left_ir, _ = _verification_summary(left_text)
+        right_summary, right_ir, _ = _verification_summary(right_text)
     except Exception as exc:
-        return MergeVerifyResult(merge_status="error", conflicts=[], merged_text=None, verification=None, error=str(exc))
+        return MergeVerifyResult(
+            merge_status="error",
+            conflicts=[],
+            merged_text=None,
+            verification=None,
+            verification_context={
+                "requested": True,
+                "available": False,
+                "reason": str(exc),
+                "base": None,
+                "left": None,
+                "right": None,
+                "merged": None,
+                "bridge_score_delta_vs_base": None,
+            },
+            intent_conflicts=[],
+            error=str(exc),
+        )
 
     root_intent_name = base_ir.intent_name
     intent_name, c = _merge_scalar(
@@ -500,7 +612,23 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
     )
 
     if conflicts:
-        return MergeVerifyResult(merge_status="conflict", conflicts=conflicts, merged_text=None, verification=None)
+        return MergeVerifyResult(
+            merge_status="conflict",
+            conflicts=conflicts,
+            merged_text=None,
+            verification=None,
+            verification_context={
+                "requested": True,
+                "available": False,
+                "reason": "merge_conflict_no_merged_spec",
+                "base": base_summary,
+                "left": left_summary,
+                "right": right_summary,
+                "merged": None,
+                "bridge_score_delta_vs_base": None,
+            },
+            intent_conflicts=[],
+        )
 
     merged_text = _to_vibe_text(
         intent_name=str(intent_name),
@@ -522,8 +650,32 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
         agentception=dict(agentception or {}),
     )
 
-    verification = _verification_summary(merged_text)
-    return MergeVerifyResult(merge_status="merged", conflicts=[], merged_text=merged_text, verification=verification)
+    merged_summary, merged_ir, merged_result = _verification_summary(merged_text)
+    bridge_delta = float(merged_summary["bridge_score"]) - float(base_summary["bridge_score"])
+    intent_conflicts = _classify_intent_conflicts(
+        base_ir=base_ir,
+        merged_ir=merged_ir,
+        base_summary=base_summary,
+        merged_summary=merged_summary,
+        merged_result=merged_result,
+    )
+    return MergeVerifyResult(
+        merge_status="merged",
+        conflicts=[],
+        merged_text=merged_text,
+        verification=merged_summary,
+        verification_context={
+            "requested": True,
+            "available": True,
+            "reason": None,
+            "base": base_summary,
+            "left": left_summary,
+            "right": right_summary,
+            "merged": merged_summary,
+            "bridge_score_delta_vs_base": bridge_delta,
+        },
+        intent_conflicts=intent_conflicts,
+    )
 
 
 def merge_verify_payload(
@@ -540,8 +692,15 @@ def merge_verify_payload(
         "left_spec": left_spec,
         "right_spec": right_spec,
         "merge_status": result.merge_status,
+        "intent_outcome": (
+            "error"
+            if result.merge_status == "error"
+            else ("structural_conflict" if result.merge_status == "conflict" else ("merged_verified" if bool((result.verification or {}).get("passed")) else "merged_verification_failed"))
+        ),
         "merged_text": result.merged_text,
         "verification": result.verification,
+        "verification_context": result.verification_context,
+        "intent_conflicts": list(result.intent_conflicts or []),
         "conflicts": [
             {
                 "address": c.address,
@@ -585,6 +744,10 @@ def render_merge_verify_human(result: MergeVerifyResult) -> str:
         lines.append(f"  passed: {result.verification['passed']}")
         lines.append(f"  bridge_score: {result.verification['bridge_score']}")
         lines.append(f"  obligations: {result.verification['obligations_satisfied']}/{result.verification['obligations_total']}")
+    if result.intent_conflicts:
+        lines.append("intent_conflicts:")
+        for c in result.intent_conflicts:
+            lines.append(f"  - {c['conflict_type']} @ {c['address']}: {c['message']}")
     return "\n".join(lines)
 
 
