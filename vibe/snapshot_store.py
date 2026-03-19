@@ -26,6 +26,14 @@ class ResolvedSnapshot:
     source_text: str
 
 
+@dataclass(frozen=True, slots=True)
+class SnapshotPutResult:
+    snapshot_id: str
+    store_path: Path
+    blob_path: Path
+    already_present: bool
+
+
 def default_snapshot_store() -> Path:
     env = os.environ.get("VIBE_SNAPSHOT_STORE", "").strip()
     return Path(env) if env else DEFAULT_SNAPSHOT_STORE
@@ -58,3 +66,19 @@ def resolve_snapshot(snapshot_id: str, store: Path | None = None) -> ResolvedSna
         )
 
     return ResolvedSnapshot(snapshot_id=sid, store_path=store_path, blob_path=blob_path, source_text=source_text)
+
+
+def snapshot_put(source_text: str, store: Path | None = None) -> SnapshotPutResult:
+    store_path = (store or default_snapshot_store()).resolve()
+    store_path.mkdir(parents=True, exist_ok=True)
+    sid = sha256_text(source_text)
+    blob_path = store_path / sid
+    already_present = blob_path.exists()
+    if not already_present:
+        blob_path.write_text(source_text, encoding="utf-8")
+    return SnapshotPutResult(
+        snapshot_id=sid,
+        store_path=store_path,
+        blob_path=blob_path,
+        already_present=already_present,
+    )
