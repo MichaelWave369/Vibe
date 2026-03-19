@@ -11,10 +11,12 @@ from .ir import IR, serialize_ir
 from .verifier import VerificationResult
 
 PROOF_ARTIFACT_VERSION = "v1"
+PROOF_SCHEMA_VERSION = "v1"
 
 
 REQUIRED_FIELDS = {
     "artifact_version",
+    "schema_version",
     "source_path",
     "source_hash",
     "ir_hash",
@@ -39,6 +41,7 @@ REQUIRED_FIELDS = {
     "agent_boundary_bridges",
     "delegation",
     "runtime_monitor",
+    "provenance",
     "package_context",
     "domain",
     "hardware",
@@ -62,10 +65,15 @@ def build_proof_artifact(
     *,
     emitted_blocked: bool,
     notes: list[str] | None = None,
+    input_mode: str = "path",
+    spec_path: str | None = None,
+    snapshot_id: str | None = None,
+    snapshot_store: str | None = None,
 ) -> dict[str, object]:
     ir_ser = serialize_ir(ir)
     artifact = {
         "artifact_version": PROOF_ARTIFACT_VERSION,
+        "schema_version": PROOF_SCHEMA_VERSION,
         "source_path": str(source_path),
         "source_hash": sha256_text(source_text),
         "ir_hash": sha256_text(ir_ser),
@@ -235,6 +243,13 @@ def build_proof_artifact(
             "artifact_links": [],
             "consumer_brief_links": [],
         },
+        "provenance": {
+            "input_mode": input_mode,
+            "spec_path": spec_path if spec_path is not None else (str(source_path) if input_mode == "path" else None),
+            "snapshot_id": snapshot_id,
+            "snapshot_store": snapshot_store,
+        },
+        "external_obligation_providers": list(result.external_obligation_providers),
         "notes": notes or [],
     }
     return artifact
@@ -252,6 +267,10 @@ def load_proof_artifact(path: Path) -> dict[str, object]:
 
 
 def validate_proof_artifact(payload: dict[str, object]) -> None:
+    if payload.get("schema_version") != PROOF_SCHEMA_VERSION:
+        raise ValueError(
+            f"invalid proof schema version `{payload.get('schema_version')}`; expected `{PROOF_SCHEMA_VERSION}`"
+        )
     if payload.get("artifact_version") != PROOF_ARTIFACT_VERSION:
         raise ValueError(
             f"invalid proof artifact version `{payload.get('artifact_version')}`; expected `{PROOF_ARTIFACT_VERSION}`"

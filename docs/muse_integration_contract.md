@@ -1,0 +1,426 @@
+# Muse × Vibe kickoff contract (Issue #34, phase 1a)
+
+This repository now exposes a **versioned machine-readable JSON contract** for Muse-side integration.
+
+## `vibec verify --report json`
+
+Top-level contract fields:
+
+- `schema_version` (`"v1"`)
+- `report_type` (`"verify"`)
+- `spec_path`
+- `bridge_score`
+- `epsilon_post`
+- `measurement_ratio`
+- `epsilon_floor`
+- `measurement_safe_ratio`
+- `obligations_total`
+- `obligations_satisfied`
+- `obligations` (machine-readable rows)
+- `proof_artifact_path` (if `--write-proof`)
+- `proof_sha256` (if artifact exists)
+
+Each `obligations[]` row includes:
+
+- `id`, `category`, `address`, `status`, `message`, `severity`
+- optional placeholders: `expected`, `observed`
+
+The payload also preserves legacy top-level verification fields for compatibility.
+
+### Snapshot verification mode (Phase 3A)
+
+`vibec verify` now supports local content-addressed verification:
+
+- `vibec verify --snapshot <sha256> --snapshot-store <dir> --report json`
+
+Snapshot adapter behavior:
+
+- resolves blobs from local store paths `<dir>/<sha256>` or `<dir>/<sha256>.vibe`
+- re-hashes loaded content and enforces exact sha256 match
+- fails machine-readably for:
+  - `snapshot_not_found`
+  - `snapshot_hash_mismatch`
+  - `parse_error` / other input-resolution errors
+
+Additive verify JSON fields in both path and snapshot mode:
+
+- `input_mode` (`path` or `snapshot`)
+- `snapshot_id` (`null` in path mode)
+- `snapshot_store` (`null` in path mode)
+- `provenance` (shared provenance object)
+  - `input_mode`
+  - `spec_path`
+  - `snapshot_id`
+  - `snapshot_store`
+
+Proof linkage fields are also available in both legacy and grouped form:
+
+- `proof_artifact_path`
+- `proof_sha256`
+- `proof.artifact_path`
+- `proof.sha256`
+
+In snapshot mode:
+
+- `spec_path` is `null` (input is blob-addressed, not filesystem-path addressed)
+- proof artifact writing uses deterministic snapshot-scoped output path in the snapshot store (`<store>/<sha256>.vibe.proof.json`)
+
+## `vibec diff --report json`
+
+Top-level contract fields:
+
+- `schema_version` (`"v1"`)
+- `report_type` (`"diff"`)
+- `old_spec`, `new_spec`
+- `drift_score`
+- `ops`
+- `verification_context`
+
+Each `ops[]` row includes:
+
+- `op`, `address`, `field`, `old_value`, `new_value`
+- `semantic_polarity` (`broadened`, `narrowed`, `unknown`)
+- `bridge_impact` (`null` when not derivable yet)
+- `bridge_impact_source` (deterministic derivation source tag, or `null`)
+- `severity`
+
+Legacy `summary` + `changes` are retained for compatibility.
+
+### Whole-spec `verification_context` (Phase 1C)
+
+`verification_context` is **top-level old/new verification metadata**. It is not op-local causality.
+
+Current shape:
+
+- `verification_requested` (boolean)
+- `available` (boolean)
+- `reason` (`null` when available, explanatory string when unavailable)
+- `old`/`new` summaries (`null` when unavailable)
+- `bridge_score_delta` (`new.bridge_score - old.bridge_score`, or `null` when unavailable)
+
+`old` and `new` summaries include:
+
+- `bridge_score`
+- `epsilon_post`
+- `measurement_ratio`
+- `epsilon_floor`
+- `measurement_safe_ratio`
+- `obligations_total`
+- `obligations_satisfied`
+
+Availability behavior:
+
+- `vibec diff --report json --with-verification-context` => context attempted; if successful, `available = true`
+- default (`vibec diff --report json` without flag) => `available = false` with explicit disabled reason
+- internal verification failures are surfaced as `available = false` with an explanatory reason
+
+## `vibec merge-verify <base> <left> <right>`
+
+Phase 2A adds a first real three-way merge + verify surface.
+Phase 2B hardens structural coverage and CI report artifact output.
+
+Top-level JSON fields:
+
+- `schema_version` (`"v1"`)
+- `report_type` (`"merge_verify"`)
+- `base_spec`, `left_spec`, `right_spec`
+- `merge_status` (`merged`, `conflict`, `error`)
+- `intent_outcome` (`merged_verified`, `merged_verification_failed`, `structural_conflict`, `error`)
+- `merged_text` (only when merged)
+- `verification` (only when merged)
+- `verification_context` (bridge-aware summaries for base/left/right/merged when available)
+- `intent_conflicts` (conservative intent-level conflict classifications for merged outputs)
+- `regression_evidence` (compact CI-focused summary of top problematic merged obligations)
+- `policy_evaluation` (optional policy-gate evaluation block for explicit CI policy flags)
+- `conflicts` (structured list on conflict)
+- `error` (for parse/runtime failures)
+
+Conflict rows include:
+
+- `address`
+- `conflict_type`
+- `base_value`
+- `left_value`
+- `right_value`
+- `message`
+- `severity`
+
+Normalized conflict address format:
+
+- `intent::<intent_name>::<section>::<key>`
+
+Examples:
+
+- `intent::PaymentRouter::bridge::epsilon_floor`
+- `intent::PaymentRouter::preserve::latency`
+- `intent::PaymentRouter::agent::Router`
+
+Currently supported structural merge regions in this phase:
+
+- core intent fields (`name`, `goal`, `inputs`, `outputs`, `emit`)
+- preserve / constraint / bridge
+- top-level declarations (`vibe_version`, `import`, `module`, `type`, `enum`, `interface`)
+- `agentora` agent definitions
+- `agentception` config
+
+Important contract semantics:
+
+- `merge_status = conflict` means structural/semantic merge compatibility could not be defended.
+- `merge_status = merged` + `verification.passed = false` means merge succeeded structurally, but preservation thresholds were not met.
+- A merge conflict is not the same as a merged-but-verification-failed result.
+- `intent_conflicts` are only emitted from merged outputs and represent conservative intent-level regression classifications from verification evidence; they are not full semantic contradiction proofs.
+
+### `merge-verify` verification_context (Phase 5A)
+
+`verification_context` shape:
+
+- `requested` (boolean)
+- `available` (boolean)
+- `reason` (`null` when available)
+- `base` / `left` / `right` / `merged` summaries
+- `bridge_score_delta_vs_base`
+
+Summary rows include:
+
+- `bridge_score`
+- `epsilon_post`
+- `measurement_ratio`
+- `epsilon_floor`
+- `measurement_safe_ratio`
+- `obligations_total`
+- `obligations_satisfied`
+
+### `intent_conflicts` conservative categories (Phase 5A)
+
+First-pass categories emitted only when grounded in merge + verification evidence:
+
+- `threshold_weakening`
+- `bridge_regression`
+- `obligation_violation`
+- `constraint_regression`
+- `preserve_regression`
+- `verification_regression` (fallback)
+
+### `regression_evidence` compact CI triage block (Phase 5B)
+
+`regression_evidence` is a bounded summary optimized for automation triage; it does not replace full verifier obligations.
+
+`vibec merge-verify` supports optional `--regression-top-n <int>` to tune display verbosity only.
+
+Shape:
+
+- `available`
+- `reason`
+- `total_problem_obligations`
+- `shown_problem_obligations`
+- `status_counts`
+- `severity_counts`
+- `selection_policy`
+- `top_problem_obligations`
+
+`top_problem_obligations` rows include:
+
+- `id`
+- `category`
+- `address`
+- `status`
+- `severity`
+- `message`
+
+Problem statuses currently included:
+
+- `violated`
+- `unknown`
+
+Deterministic selection/sort policy:
+
+- bounded to top 5 rows
+- sorted by:
+  1. severity priority (desc),
+  2. status priority (`violated` > `unknown`),
+  3. category (asc),
+  4. id (asc),
+  5. address (asc)
+
+`selection_policy` explicitly exposes:
+
+- `default_top_n`
+- `requested_top_n`
+- `effective_top_n`
+- `min_top_n`
+- `max_top_n`
+
+Top-N clamping behavior:
+
+- values below `min_top_n` clamp up to min
+- values above `max_top_n` clamp down to max
+- this affects only the number of shown rows, not merge/verification semantics
+
+Outcome behavior:
+
+- structural conflict / runtime error: `available=false` with explicit reason and no fake merged evidence
+- merged + verification passed: `available=true` with zero problem obligations
+- merged + verification failed/regressed: `available=true` with aggregate counts and top bounded evidence list
+
+`--write-merge-report <path>` behavior:
+
+- writes the machine-readable merge-verify JSON report artifact to disk
+- writes for merged, conflict, and error outcomes
+- does not imply merge success; check `merge_status` and `verification`
+
+### `policy_evaluation` optional merge policy gates (Phase 5E)
+
+`vibec merge-verify` now supports explicit opt-in policy checks:
+
+- `--require-merged-bridge <float>`
+- `--max-bridge-regression <float>`
+- `--fail-on-intent-conflicts`
+
+Default behavior is unchanged when no policy flags are provided.
+
+Policy checks do not change merge computation, verification logic, bridge math, intent-conflict classification, or regression-evidence selection.
+They only evaluate already-produced merge/verification signals.
+
+`policy_evaluation` shape:
+
+- `requested` (boolean)
+- `available` (boolean)
+- `passed` (boolean)
+- `checks` (stable ordered list of per-policy checks)
+
+Each check row includes:
+
+- `policy_name`
+- `requested_value`
+- `effective_value`
+- `available`
+- `passed`
+- `reason`
+
+Current `policy_name` values:
+
+- `require_merged_bridge`
+- `max_bridge_regression`
+- `fail_on_intent_conflicts`
+
+`max_bridge_regression` pass condition is explicit:
+
+- let `delta = verification_context.bridge_score_delta_vs_base`
+- let `limit = requested_value`
+- pass iff `delta >= -limit`
+
+Examples:
+
+- `--max-bridge-regression 0.00` => no regression allowed (`delta` must be `>= 0`)
+- `--max-bridge-regression 0.05` => regression allowed down to `-0.05`
+- positive deltas always pass
+
+Availability semantics:
+
+- for merged outputs, checks evaluate against merged verification/context surfaces
+- for structural conflicts or runtime errors, merged-dependent checks are `available=false` with explicit reason; no fake pass
+
+Exit semantics:
+
+- structural conflict: non-zero (unchanged)
+- merged verification failed: non-zero (unchanged)
+- merged verification passed + requested policy failed: non-zero (new, explicit opt-in behavior)
+- no policy flags: unchanged exit behavior
+
+### `bridge_impact` semantics (Phase 1B)
+
+`bridge_impact` is a deterministic signed delta where:
+
+- positive => stronger bridge guarantees inferred
+- negative => weakened bridge guarantees inferred
+- `null` => Vibe cannot honestly attribute impact for that op yet
+
+Currently populated for:
+
+- bridge threshold deltas (`epsilon_floor`, `measurement_safe_ratio`)
+- preserve add/remove and preserve modified with known broadened/narrowed polarity
+- constraint add/remove (with stronger negative impact for sovereignty-like removals)
+
+Still `null` for classes where Vibe cannot defensibly infer op-local bridge impact (for example some goal/shape changes without a grounded attribution path).
+
+## `.vibe.proof.json`
+
+Proof artifacts are now explicitly versioned with:
+
+- `schema_version` (`"v1"`)
+- `artifact_version` (`"v1"`)
+
+Artifact metadata remains deterministic and includes source hashes, backend metadata, bridge/equivalence summaries, obligations, and subsystem summaries.
+
+Phase 3B adds deterministic input provenance:
+
+- `provenance.input_mode` (`"path"` or `"snapshot"`)
+- `provenance.spec_path` (path mode path, `null` in snapshot mode)
+- `provenance.snapshot_id` (`null` in path mode)
+- `provenance.snapshot_store` (`null` in path mode)
+
+No synthetic path provenance is emitted for snapshot-mode verification.
+
+## `vibec snapshot-put <path>`
+
+Phase 3B adds a local snapshot writer command:
+
+- `vibec snapshot-put <path> [--snapshot-store <dir>] [--report json]`
+
+Machine-readable output (`--report json`) fields:
+
+- `schema_version` (`"v1"`)
+- `report_type` (`"snapshot_put"`)
+- `snapshot_id`
+- `snapshot_store`
+- `blob_path`
+- `already_present`
+
+This command is local content-addressed storage only; it is not a remote Muse object-store API.
+
+## Snapshot seam
+
+`vibe.verification_flow.prepare_verification_input(...)` supports both:
+
+- path-based source loading, and
+- in-memory source loading (`source_text` + `source_name`)
+
+This powers real local snapshot verification (`verify --snapshot ...`) and local snapshot writes (`snapshot-put`), while remaining explicitly local (not a remote object-store integration).
+
+## External obligation registration seam (Phase 4A)
+
+Vibe exposes a controlled Python-level registry for external obligation providers:
+
+- `register_external_obligation_provider(category, provider, override=False)`
+- `unregister_external_obligation_provider(category)`
+- `list_external_obligation_categories()`
+
+Provider shape:
+
+- input: `ExternalObligationContext` (IR + generated code + observed scalar/bool/symbol facts)
+- output: list of `ExternalObligation` rows (`obligation_id`, `category`, `description`, `status`, `source_location`, `evidence`, `critical`)
+
+Contract behavior:
+
+- external obligations flow through existing obligation surfaces (`verify` JSON `obligations[]`, proof artifact `obligations[]`, rollups),
+- provider execution diagnostics are exposed in `external_obligation_providers` with:
+  - `category`
+  - `provider_name`
+  - `provider_version`
+  - `order_index`
+  - `ran`
+  - `emitted_obligations`
+  - `status_counts`
+  - `had_error`
+  - `error_type`
+  - `error_message`
+- schema versions remain unchanged (`v1`) because this is additive and uses existing obligation row shape,
+- registration is explicit and deterministic (category-keyed, duplicate rejection unless `override=True`),
+- no auto-discovery, no remote plugin loading, no plugin marketplace semantics in this phase.
+
+Current scoring scope:
+
+- external obligations contribute to obligation rows and status counts,
+- provider failures are represented as provider-level diagnostics (`had_error=true`) and a synthetic non-critical unknown obligation row (`external.<category>.provider_error`),
+- they only affect pass/fail where the existing verifier model already applies (`critical` violated/unknown obligations block pass),
+- no additional bridge-score math is introduced for external obligations in this phase.

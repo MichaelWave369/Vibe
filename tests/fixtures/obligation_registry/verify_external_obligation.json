@@ -1,0 +1,6 @@
+{
+  "category": "demo.audit",
+  "id": "external.demo.audit_log_present",
+  "severity": "warning",
+  "status": "violated"
+}

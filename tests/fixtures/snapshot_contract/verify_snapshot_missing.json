@@ -1,0 +1,9 @@
+{
+  "error": "snapshot `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` was not found in store `<SNAPSHOT_STORE>`",
+  "error_type": "snapshot_not_found",
+  "input_mode": "snapshot",
+  "report_type": "verify",
+  "schema_version": "v1",
+  "snapshot_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "snapshot_store": "<SNAPSHOT_STORE>"
+}
