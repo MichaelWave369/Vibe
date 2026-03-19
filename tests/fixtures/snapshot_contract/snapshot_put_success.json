@@ -1,0 +1,8 @@
+{
+  "already_present": false,
+  "blob_path": "<SNAPSHOT_STORE>/43fb6e69161b114818229306e4306185f6399da337cfa9c0da8a8c7da0a830f6",
+  "report_type": "snapshot_put",
+  "schema_version": "v1",
+  "snapshot_id": "43fb6e69161b114818229306e4306185f6399da337cfa9c0da8a8c7da0a830f6",
+  "snapshot_store": "<SNAPSHOT_STORE>"
+}
