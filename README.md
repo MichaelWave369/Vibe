@@ -262,6 +262,26 @@ Commands:
 
 These artifacts are deterministic and inspectable, but they are not overclaimed as full formal certificates.
 
+## Multi-candidate synthesis (Phase 3.1)
+
+Compile/verify can now generate and evaluate multiple deterministic candidate implementations from the same IR.
+
+- default candidate count: `3`
+- configurable via `--candidates N`
+- strategies include standard, readability-biased, minimal-helper-light, and config-heavy variants
+- every candidate is bridge-verified (obligations + backend + equivalence + calibration)
+
+Selection behavior:
+- rank candidates by an explicit deterministic formula
+- select the best passing candidate for emission
+- if none pass, emit nothing and fail compile
+
+Reports and proof artifacts record:
+- candidate count
+- winning candidate
+- ranking basis
+- rejected candidate summaries
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -294,6 +314,7 @@ vibec explain vibe/examples/payment_router.vibe
 vibec calibrate vibe/calibration_corpus/seed_corpus.json
 vibec verify vibe/examples/payment_router.vibe
 vibec verify vibe/examples/payment_router.vibe --write-proof
+vibec verify vibe/examples/payment_router.vibe --candidates 3
 vibec verify vibe/examples/payment_router.vibe --report json
 vibec verify vibe/examples/sovereign_bridge.vibe --show-obligations
 vibec verify vibe/examples/payment_router.vibe --backend heuristic
@@ -308,6 +329,7 @@ vibec compile vibe/examples/payment_router.vibe --backend smt
 vibec compile vibe/examples/payment_router.vibe --show-equivalence
 vibec compile vibe/examples/payment_router.vibe --no-calibration
 vibec compile vibe/examples/payment_router.vibe --write-proof
+vibec compile vibe/examples/payment_router.vibe --candidates 5
 vibec verify-proof vibe/examples/payment_router.vibe
 vibec inspect-proof vibe/examples/payment_router.vibe.proof.json
 vibec compile vibe/examples/edge_contract_ts.vibe

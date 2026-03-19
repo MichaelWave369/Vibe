@@ -171,6 +171,10 @@ emit python</code></pre>
           Verification can also emit deterministic preservation proof artifacts
           (<code>.vibe.proof.json</code>) for transportable inspection via <code>inspect-proof</code>.
         </p>
+        <p>
+          Compile/verify can synthesize multiple deterministic candidates and emit only the highest-ranked
+          passing candidate under bridge-gated verification.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

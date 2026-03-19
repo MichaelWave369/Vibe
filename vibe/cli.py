@@ -29,6 +29,12 @@ from .proof import (
     write_proof_artifact,
 )
 from .report import render_report, render_report_json
+from .synthesis import (
+    generate_candidates,
+    rank_candidate,
+    rank_candidates,
+    ranking_formula_description,
+)
 from .verifier import available_backends, verify
 
 
@@ -64,6 +70,7 @@ def _compile(
     fallback_backend: str | None = None,
     use_calibration: bool = True,
     write_proof: bool = False,
+    candidate_count: int = 3,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
@@ -99,13 +106,41 @@ def _compile(
         else:
             print("cache: miss")
 
-    result = verify(
-        ir,
-        emitted_code,
-        backend=verification_backend,
-        fallback_backend=fallback_backend,
-        use_calibration=use_calibration,
-    )
+    candidates = generate_candidates(ir, candidate_count)
+    evaluations = [
+        rank_candidate(
+            c.candidate_id,
+            c.strategy,
+            verify(
+                ir,
+                c.code,
+                backend=verification_backend,
+                fallback_backend=fallback_backend,
+                use_calibration=use_calibration,
+            ),
+        )
+        for c in candidates
+    ]
+    ranked = rank_candidates(evaluations)
+    winner = ranked[0]
+    result = winner.result
+    result.candidate_count = len(candidates)
+    result.winning_candidate_id = winner.candidate_id
+    result.synthesized_winner = len(candidates) > 1
+    result.ranking_basis = ranking_formula_description()
+    result.candidate_summaries = [
+        {
+            "candidate_id": e.candidate_id,
+            "strategy": e.strategy,
+            "passed": e.result.passed,
+            "rank_score": round(e.rank_score, 6),
+            "bridge_score": round(float(e.result.bridge_score), 6),
+            "measurement_ratio": round(float(e.result.measurement_ratio), 6),
+            "equivalence_score": round(float(e.result.intent_equivalence_score), 6),
+            "drift_score": round(float(e.result.drift_score), 6),
+        }
+        for e in ranked
+    ]
     _print_report(
         result,
         report,
@@ -146,7 +181,8 @@ def _compile(
             )
         return 1
 
-    out_path.write_text(emitted_code, encoding="utf-8")
+    winning_candidate = next(c for c in candidates if c.candidate_id == result.winning_candidate_id)
+    out_path.write_text(winning_candidate.code, encoding="utf-8")
     print(f"emitted: {out_path}")
 
     if not no_cache:
@@ -191,18 +227,46 @@ def _verify(
     fallback_backend: str | None = None,
     use_calibration: bool = True,
     write_proof: bool = False,
+    candidate_count: int = 3,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
-    emitted_code, _ = emit_code(ir)
-    result = verify(
-        ir,
-        emitted_code,
-        backend=verification_backend,
-        fallback_backend=fallback_backend,
-        use_calibration=use_calibration,
-    )
+    candidates = generate_candidates(ir, candidate_count)
+    evaluations = [
+        rank_candidate(
+            c.candidate_id,
+            c.strategy,
+            verify(
+                ir,
+                c.code,
+                backend=verification_backend,
+                fallback_backend=fallback_backend,
+                use_calibration=use_calibration,
+            ),
+        )
+        for c in candidates
+    ]
+    ranked = rank_candidates(evaluations)
+    winner = ranked[0]
+    result = winner.result
+    result.candidate_count = len(candidates)
+    result.winning_candidate_id = winner.candidate_id
+    result.synthesized_winner = len(candidates) > 1
+    result.ranking_basis = ranking_formula_description()
+    result.candidate_summaries = [
+        {
+            "candidate_id": e.candidate_id,
+            "strategy": e.strategy,
+            "passed": e.result.passed,
+            "rank_score": round(e.rank_score, 6),
+            "bridge_score": round(float(e.result.bridge_score), 6),
+            "measurement_ratio": round(float(e.result.measurement_ratio), 6),
+            "equivalence_score": round(float(e.result.intent_equivalence_score), 6),
+            "drift_score": round(float(e.result.drift_score), 6),
+        }
+        for e in ranked
+    ]
     _print_report(
         result,
         report,
@@ -244,6 +308,7 @@ def _verify_proof(
     verification_backend: str,
     fallback_backend: str | None,
     use_calibration: bool,
+    candidate_count: int,
 ) -> int:
     rc = _verify(
         path,
@@ -254,6 +319,7 @@ def _verify_proof(
         fallback_backend=fallback_backend,
         use_calibration=use_calibration,
         write_proof=True,
+        candidate_count=candidate_count,
     )
     return rc
 
@@ -283,6 +349,7 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
     cp.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
     cp.add_argument("--write-proof", action="store_true", help="Write deterministic preservation proof artifact")
+    cp.add_argument("--candidates", type=int, default=3, help="Number of deterministic synthesis candidates")
 
     ex = sub.add_parser("explain", help="Explain AST and IR")
     ex.add_argument("path", type=Path)
@@ -296,6 +363,7 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
     vf.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
     vf.add_argument("--write-proof", action="store_true", help="Write deterministic preservation proof artifact")
+    vf.add_argument("--candidates", type=int, default=3, help="Number of deterministic synthesis candidates")
 
     cal = sub.add_parser("calibrate", help="Fit/update empirical epsilon calibration model")
     cal.add_argument("corpus_path", type=Path)
@@ -306,6 +374,7 @@ def build_parser() -> argparse.ArgumentParser:
     vp.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
     vp.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
     vp.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
+    vp.add_argument("--candidates", type=int, default=3, help="Number of deterministic synthesis candidates")
 
     ip = sub.add_parser("inspect-proof", help="Inspect a preservation proof artifact")
     ip.add_argument("path", type=Path)
@@ -329,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
             fallback_backend=args.fallback_backend,
             use_calibration=not args.no_calibration,
             write_proof=args.write_proof,
+            candidate_count=args.candidates,
         )
     if args.command == "explain":
         return _explain(args.path)
@@ -342,6 +412,7 @@ def main(argv: list[str] | None = None) -> int:
             fallback_backend=args.fallback_backend,
             use_calibration=not args.no_calibration,
             write_proof=args.write_proof,
+            candidate_count=args.candidates,
         )
     if args.command == "calibrate":
         return _calibrate(args.corpus_path)
@@ -352,6 +423,7 @@ def main(argv: list[str] | None = None) -> int:
             args.backend,
             args.fallback_backend,
             use_calibration=not args.no_calibration,
+            candidate_count=args.candidates,
         )
     if args.command == "inspect-proof":
         return _inspect_proof(args.path)

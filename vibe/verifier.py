@@ -137,6 +137,11 @@ class VerificationResult:
     calibration_artifact_path: str | None = None
     calibration_confidence: float | None = None
     calibration_notes: str = ""
+    candidate_count: int = 1
+    winning_candidate_id: str = "candidate.1"
+    synthesized_winner: bool = False
+    ranking_basis: str = ""
+    candidate_summaries: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

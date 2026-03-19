@@ -86,6 +86,11 @@ def render_report(
 
     lines.extend(
         [
+            "candidate synthesis:",
+            f"  candidate_count: {result.candidate_count}",
+            f"  winning_candidate_id: {result.winning_candidate_id}",
+            f"  synthesized_winner: {result.synthesized_winner}",
+            f"  ranking_basis: {result.ranking_basis}",
             "equivalence/drift:",
             f"  intent_items_total: {result.intent_items_total}",
             f"  intent_items_matched: {result.intent_items_matched}",
@@ -99,6 +104,8 @@ def render_report(
     )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
+    if result.candidate_summaries:
+        lines.append(f"  candidate_summaries: {result.candidate_summaries}")
     if show_equivalence:
         lines.append("  correspondence:")
         for c in result.correspondence_entries:

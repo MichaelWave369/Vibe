@@ -97,6 +97,7 @@ def test_invalid_proof_version_handled(tmp_path, capsys) -> None:
                 "bridge_metrics": {},
                 "epsilon_metrics": {},
                 "result": {"passed": False, "emission_blocked": True},
+                "candidates": {},
                 "notes": [],
             }
         ),
@@ -142,5 +143,6 @@ def test_proof_schema_fields_present(tmp_path) -> None:
         "bridge_metrics",
         "epsilon_metrics",
         "result",
+        "candidates",
     ]:
         assert key in payload

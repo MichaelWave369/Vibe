@@ -28,6 +28,7 @@ REQUIRED_FIELDS = {
     "bridge_metrics",
     "epsilon_metrics",
     "result",
+    "candidates",
     "notes",
 }
 
@@ -103,6 +104,13 @@ def build_proof_artifact(
             "passed": result.passed,
             "emission_blocked": emitted_blocked,
         },
+        "candidates": {
+            "candidate_count": result.candidate_count,
+            "winning_candidate_id": result.winning_candidate_id,
+            "synthesized_winner": result.synthesized_winner,
+            "ranking_basis": result.ranking_basis,
+            "candidate_summaries": result.candidate_summaries,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -135,6 +143,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     calibration = payload["calibration"]
     bridge = payload["bridge_metrics"]
     eq = payload["equivalence"]
+    candidate_meta = payload["candidates"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -147,6 +156,8 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"measurement_ratio: {bridge['measurement_ratio']:.4f}",
             f"equivalence_score: {eq['intent_equivalence_score']:.4f}",
             f"drift_score: {eq['drift_score']:.4f}",
+            f"candidate_count: {candidate_meta['candidate_count']}",
+            f"winning_candidate: {candidate_meta['winning_candidate_id']}",
             f"obligation_counts: {payload['obligation_summary']}",
         ]
     )
