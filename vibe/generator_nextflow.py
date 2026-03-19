@@ -7,6 +7,10 @@ from .ir import IR
 
 def generate_nextflow(ir: IR) -> str:
     inputs = sorted(ir.inputs.items())
+    outputs = sorted(ir.outputs.items())
+    input_names = [n for n, _ in inputs]
+    output_paths = [f"{n}.tsv" for n, _ in outputs] or ["diffexpr.tsv"]
+    workflow_name = f"{ir.intent_name}_genomics_pipeline".lower()
 
     lines = [
         f"// intent: {ir.intent_name}",
@@ -15,6 +19,7 @@ def generate_nextflow(ir: IR) -> str:
         f"// genomics_summary: {ir.module.genomics_summary}",
         f"// metadata_privacy_summary: {ir.module.metadata_privacy_summary}",
         f"// workflow_provenance_metadata: {ir.module.workflow_provenance_metadata}",
+        f"// workflow_name: {workflow_name}",
     ]
     lines += [f"// preserve: {k} {op} {v}".rstrip() for k, op, v in ir.preserve_rules]
     lines += [f"// constraint: {c}" for c in ir.constraints]
@@ -26,9 +31,10 @@ def generate_nextflow(ir: IR) -> str:
         "",
         "params.reference_version = 'GRCh38.p14'",
         "params.deterministic_sample_ordering = true",
+        f"params.workflow_name = '{workflow_name}'",
         "",
         "workflow {",
-        "  Channel.of(" + ", ".join(repr(n) for n, _ in inputs) + ").set { input_meta }",
+        "  Channel.of(" + ", ".join(repr(n) for n in input_names) + ").set { input_meta }",
         "  deidentify(input_meta)",
         "  differential_expression(deidentify.out)",
         "}",
@@ -52,12 +58,12 @@ def generate_nextflow(ir: IR) -> str:
         "  input:",
         "    path deid",
         "  output:",
-        "    path 'diffexpr.tsv'",
+        *[f"    path '{p}'" for p in output_paths],
         "  script:",
         "  \"\"\"",
         "  # TODO: pin fixed reference version and run analysis",
         "  # TODO: retain provenance metadata for workflow reproducibility",
-        "  touch diffexpr.tsv",
+        *[f"  touch {p}" for p in output_paths],
         "  \"\"\"",
         "}",
         "",

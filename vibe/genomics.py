@@ -16,6 +16,7 @@ _ALLOWED_PRESERVES = {
 
 
 _METADATA_HINTS = ("patient", "subject", "donor", "name", "dob", "mrn", "id", "metadata")
+_IDENTIFIABLE_MARKERS = ("patient", "name", "dob", "mrn", "ssn", "address", "phone", "email")
 
 
 def _obligation(
@@ -89,6 +90,8 @@ def derive_genomics_metadata(
                 )
             )
 
+    has_stable_normalization = "stable normalization method" in preserves
+
     if "reproducibility of differential expression results" not in preserves:
         issues.append(
             {
@@ -103,6 +106,9 @@ def derive_genomics_metadata(
         "sensitive_bindings": sensitive,
         "has_no_patient_identifiable_metadata_constraint": has_no_patient_meta,
         "has_deidentify_sample_metadata_constraint": has_deidentify,
+        "potentially_identifiable_outputs": sorted(
+            [name for name in ir.outputs if any(tok in name.lower() for tok in _IDENTIFIABLE_MARKERS)]
+        ),
         "privacy_mode": "guarded" if has_no_patient_meta and has_deidentify else "declared",
     }
 
@@ -110,6 +116,7 @@ def derive_genomics_metadata(
         "provenance_retained": "provenance retained" in preserves,
         "deterministic_sample_ordering": has_deterministic_order,
         "fixed_reference_version": has_fixed_ref,
+        "stable_normalization_method": has_stable_normalization,
         "batch_effect_metadata_leakage_blocked": has_batch_leak_block,
         "workflow_stub_level": "phase-7.4",
     }
@@ -144,6 +151,13 @@ def derive_genomics_metadata(
                 "constraint declared" if has_fixed_ref else "constraint not declared",
                 critical=False,
             ),
+            _obligation(
+                "genomics.constraint.no_uncontrolled_batch_effect_metadata_leakage",
+                "constraint includes `no uncontrolled batch-effect metadata leakage` when declared",
+                "satisfied" if has_batch_leak_block else "unknown",
+                "constraint declared" if has_batch_leak_block else "constraint not declared",
+                critical=False,
+            ),
         ]
     )
 
@@ -160,10 +174,12 @@ def derive_genomics_metadata(
         "preserves": sorted(set(preserves)),
         "reproducibility_preserved": any("reproducibility" in p for p in preserves),
         "provenance_retained": "provenance retained" in preserves,
+        "stable_normalization_method_preserved": has_stable_normalization,
         "has_no_patient_identifiable_metadata_constraint": has_no_patient_meta,
         "has_deidentify_sample_metadata_constraint": has_deidentify,
         "has_deterministic_sample_ordering_constraint": has_deterministic_order,
         "has_fixed_reference_version_constraint": has_fixed_ref,
+        "has_batch_effect_metadata_leakage_constraint": has_batch_leak_block,
     }
 
     target_metadata = {
@@ -193,10 +209,14 @@ def evaluate_genomics_generated_code(ir: IR, generated_code: str) -> tuple[list[
     req_deidentify = any(c.lower().strip() == "deidentify sample metadata" for c in ir.constraints)
     req_deterministic_order = any(c.lower().strip() == "deterministic sample ordering" for c in ir.constraints)
     req_fixed_ref = any(c.lower().strip() == "fixed reference version" for c in ir.constraints)
+    req_batch_leak_block = any(
+        c.lower().strip() == "no uncontrolled batch-effect metadata leakage" for c in ir.constraints
+    )
 
     has_deid_marker = any(tok in lower for tok in ["deidentify", "anonym", "pseudonym"])
     has_order_marker = any(tok in lower for tok in ["sorted(", "sort", "deterministic sample ordering"])
     has_ref_marker = bool(re.search(r"reference(_version|_build)?", lower)) or "fixed reference version" in lower
+    has_batch_control_marker = any(tok in lower for tok in ["batch_effect", "batch effect", "combat", "blocked_batch"])
 
     if req_no_patient_meta:
         leaked_marker = "patient" in lower and "deidentify" not in lower
@@ -248,6 +268,19 @@ def evaluate_genomics_generated_code(ir: IR, generated_code: str) -> tuple[list[
                 "generated workflow should include fixed reference marker",
                 "satisfied" if has_ref_marker else "unknown",
                 "reference marker found" if has_ref_marker else "reference marker not found",
+                critical=False,
+            )
+        )
+
+    if req_batch_leak_block:
+        obligations.append(
+            _obligation(
+                "genomics.codegen.no_uncontrolled_batch_effect_metadata_leakage",
+                "generated workflow should include batch-effect leakage control marker",
+                "satisfied" if has_batch_control_marker else "unknown",
+                "batch-effect control marker found"
+                if has_batch_control_marker
+                else "batch-effect control marker not found",
                 critical=False,
             )
         )

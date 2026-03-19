@@ -32,6 +32,7 @@ constraint:
 {constraint}  deidentify sample metadata
   deterministic sample ordering
   fixed reference version
+  no uncontrolled batch-effect metadata leakage
 
 emit {target}
 """
@@ -47,6 +48,7 @@ def test_genomics_domain_parsing_and_metadata() -> None:
     assert summary["reproducibility_preserved"] is True
     assert target_meta["emit_target"] == "snakemake"
     assert privacy["sensitive_bindings"]
+    assert privacy["potentially_identifiable_outputs"] == []
     assert provenance["workflow_stub_level"] == "phase-7.4"
     assert issues == []
     assert obligations
@@ -77,6 +79,24 @@ def test_genomics_codegen_privacy_violation_surface() -> None:
     issues, obligations = evaluate_genomics_generated_code(ir, code)
     assert any(i["issue_id"] == "genomics.codegen.patient_metadata.leak_risk" for i in issues)
     assert any(o["obligation_id"] == "genomics.codegen.no_patient_identifiable_metadata" and o["status"] == "violated" for o in obligations)
+
+
+def test_genomics_optional_constraints_and_preserves() -> None:
+    source = _genomics_source("snakemake").replace(
+        "  provenance retained\n",
+        "  provenance retained\n  stable normalization method\n",
+    )
+    ir = ast_to_ir(parse_source(source))
+    assert ir.module.genomics_summary["stable_normalization_method_preserved"] is True
+    assert ir.module.genomics_summary["has_batch_effect_metadata_leakage_constraint"] is True
+
+    code = "process x { script: 'echo blocked_batch > marker.txt' }"
+    _, obligations = evaluate_genomics_generated_code(ir, code)
+    assert any(
+        o["obligation_id"] == "genomics.codegen.no_uncontrolled_batch_effect_metadata_leakage"
+        and o["status"] == "satisfied"
+        for o in obligations
+    )
 
 
 def test_genomics_verify_and_proof_visibility() -> None:
