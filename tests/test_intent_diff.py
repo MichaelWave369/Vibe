@@ -367,6 +367,7 @@ def test_cli_diff_json_verification_context_unavailable_when_not_requested(tmp_p
     assert main(["diff", str(old_case), str(new_case), "--report", "json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     vc = payload["verification_context"]
+    assert vc["verification_requested"] is False
     assert vc["available"] is False
     assert vc["old"] is None
     assert vc["new"] is None

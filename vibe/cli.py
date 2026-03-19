@@ -79,10 +79,12 @@ from .refinement import (
 from .report import render_report, render_report_json
 from .verification_flow import prepare_verification_input
 from .merge_verify import (
+    merge_verify_payload,
     merge_verify,
     maybe_write_merged,
     render_merge_verify_human,
     render_merge_verify_json,
+    write_merge_report,
 )
 from .synthesis import (
     generate_candidates,
@@ -1081,27 +1083,39 @@ def _merge_verify(
     right_path: Path,
     report: ReportMode,
     write_merged: Path | None,
+    write_merge_report_path: Path | None,
 ) -> int:
     result = merge_verify(
         base_path.read_text(encoding="utf-8"),
         left_path.read_text(encoding="utf-8"),
         right_path.read_text(encoding="utf-8"),
     )
+    payload = merge_verify_payload(
+        result,
+        base_spec=str(base_path),
+        left_spec=str(left_path),
+        right_spec=str(right_path),
+    )
     merged_path = maybe_write_merged(write_merged, result)
+    merge_report_path = write_merge_report(write_merge_report_path, payload)
     if report == "json":
-        payload = render_merge_verify_json(
+        payload_text = render_merge_verify_json(
             result,
             base_spec=str(base_path),
             left_spec=str(left_path),
             right_spec=str(right_path),
         )
-        print(payload)
+        print(payload_text)
         if merged_path is not None:
             print(f"merged_output: {merged_path}")
+        if merge_report_path is not None:
+            print(f"merge_report: {merge_report_path}")
     else:
         print(render_merge_verify_human(result))
         if merged_path is not None:
             print(f"merged_output: {merged_path}")
+        if merge_report_path is not None:
+            print(f"merge_report: {merge_report_path}")
     if result.merge_status == "error":
         return 1
     if result.merge_status == "conflict":
@@ -1387,6 +1401,7 @@ def build_parser() -> argparse.ArgumentParser:
     mv.add_argument("right_path", type=Path)
     mv.add_argument("--report", choices=["human", "json"], default="human")
     mv.add_argument("--write-merged", type=Path, default=None, help="Write merged .vibe file on successful merge")
+    mv.add_argument("--write-merge-report", type=Path, default=None, help="Write machine-readable merge-verify JSON report")
 
     return parser
 
@@ -1542,6 +1557,7 @@ def main(argv: list[str] | None = None) -> int:
             args.right_path,
             args.report,
             write_merged=args.write_merged,
+            write_merge_report_path=args.write_merge_report,
         )
 
     parser.error("unknown command")

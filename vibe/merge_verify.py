@@ -1,4 +1,4 @@
-"""Three-way merge + verification for Vibe specs (Phase 2A)."""
+"""Three-way merge + verification for Vibe specs (Phase 2A/2B)."""
 
 from __future__ import annotations
 
@@ -34,13 +34,29 @@ class MergeVerifyResult:
     error: str | None = None
 
 
-def _merge_scalar(address: str, base: object, left: object, right: object, conflict_type: str) -> tuple[object | None, MergeConflict | None]:
+def _semantic_address(intent_name: str, section: str, key: str | None = None) -> str:
+    if key is None:
+        return f"intent::{intent_name}::{section}"
+    return f"intent::{intent_name}::{section}::{key}"
+
+
+def _merge_scalar(
+    *,
+    intent_name: str,
+    section: str,
+    key: str | None,
+    base: object,
+    left: object,
+    right: object,
+    conflict_type: str,
+) -> tuple[object | None, MergeConflict | None]:
     if left == right:
         return left, None
     if left == base:
         return right, None
     if right == base:
         return left, None
+    address = _semantic_address(intent_name, section, key)
     return None, MergeConflict(
         address=address,
         conflict_type=conflict_type,
@@ -52,7 +68,9 @@ def _merge_scalar(address: str, base: object, left: object, right: object, confl
 
 
 def _merge_map(
-    prefix: str,
+    *,
+    intent_name: str,
+    section: str,
     base: dict[str, str],
     left: dict[str, str],
     right: dict[str, str],
@@ -64,7 +82,15 @@ def _merge_map(
         b = base.get(key)
         l = left.get(key)
         r = right.get(key)
-        chosen, conflict = _merge_scalar(f"{prefix}.{key}", b, l, r, conflict_type)
+        chosen, conflict = _merge_scalar(
+            intent_name=intent_name,
+            section=section,
+            key=key,
+            base=b,
+            left=l,
+            right=r,
+            conflict_type=conflict_type,
+        )
         if conflict is not None:
             conflicts.append(conflict)
             continue
@@ -73,7 +99,15 @@ def _merge_map(
     return merged, conflicts
 
 
-def _merge_constraints(base: list[str], left: list[str], right: list[str]) -> tuple[list[str], list[MergeConflict]]:
+def _merge_membership(
+    *,
+    intent_name: str,
+    section: str,
+    base: list[str],
+    left: list[str],
+    right: list[str],
+    conflict_type: str,
+) -> tuple[list[str], list[MergeConflict]]:
     merged: list[str] = []
     conflicts: list[MergeConflict] = []
     bset = set(base)
@@ -83,7 +117,15 @@ def _merge_constraints(base: list[str], left: list[str], right: list[str]) -> tu
         b = item in bset
         l = item in lset
         r = item in rset
-        chosen, conflict = _merge_scalar(f"constraint.{item}", b, l, r, "constraint_conflict")
+        chosen, conflict = _merge_scalar(
+            intent_name=intent_name,
+            section=section,
+            key=item,
+            base=b,
+            left=l,
+            right=r,
+            conflict_type=conflict_type,
+        )
         if conflict is not None:
             conflicts.append(conflict)
             continue
@@ -97,6 +139,8 @@ def _rules_to_map(rules: list[tuple[str, str, str]]) -> dict[str, tuple[str, str
 
 
 def _merge_preserve(
+    *,
+    intent_name: str,
     base: list[tuple[str, str, str]],
     left: list[tuple[str, str, str]],
     right: list[tuple[str, str, str]],
@@ -110,7 +154,15 @@ def _merge_preserve(
         b = bmap.get(key)
         l = lmap.get(key)
         r = rmap.get(key)
-        chosen, conflict = _merge_scalar(f"preserve.{key}", b, l, r, "preserve_conflict")
+        chosen, conflict = _merge_scalar(
+            intent_name=intent_name,
+            section="preserve",
+            key=key,
+            base=b,
+            left=l,
+            right=r,
+            conflict_type="preserve_conflict",
+        )
         if conflict is not None:
             conflicts.append(conflict)
             continue
@@ -118,6 +170,67 @@ def _merge_preserve(
             op, value = chosen
             merged.append((key, op, value))
     return merged, conflicts
+
+
+def _agents_by_name(ir: IR) -> dict[str, dict[str, object]]:
+    return {str(a.get("name")): dict(a) for a in ir.agent_definitions}
+
+
+def _merge_agents(*, intent_name: str, base_ir: IR, left_ir: IR, right_ir: IR) -> tuple[list[dict[str, object]], list[MergeConflict]]:
+    base = _agents_by_name(base_ir)
+    left = _agents_by_name(left_ir)
+    right = _agents_by_name(right_ir)
+    merged: list[dict[str, object]] = []
+    conflicts: list[MergeConflict] = []
+    for name in sorted(set(base) | set(left) | set(right)):
+        chosen, conflict = _merge_scalar(
+            intent_name=intent_name,
+            section="agent",
+            key=name,
+            base=base.get(name),
+            left=left.get(name),
+            right=right.get(name),
+            conflict_type="agent_conflict",
+        )
+        if conflict is not None:
+            conflicts.append(conflict)
+            continue
+        if chosen is not None:
+            merged.append(dict(chosen))
+    return merged, conflicts
+
+
+def _render_agentora(agents: list[dict[str, object]]) -> list[str]:
+    if not agents:
+        return []
+    lines = ["", "agentora {"]
+    for agent in sorted(agents, key=lambda row: str(row.get("name", ""))):
+        lines.append(f"  agent {agent.get('name')} {{")
+        lines.append(f"    role: {json.dumps(str(agent.get('role', '')))}")
+        lines.append(f"    tools: {json.dumps(list(agent.get('tools', [])))}")
+        lines.append(f"    memory: {json.dumps(str(agent.get('memory', 'session')))}")
+        lines.append(f"    intention: {json.dumps(str(agent.get('intention', '')))}")
+        lines.append(f"    constraints: {json.dumps(list(agent.get('constraints', [])))}")
+        lines.append(f"    preserve: {json.dumps(list(agent.get('preserve', [])))}")
+        lines.append("  }")
+    lines.append("}")
+    return lines
+
+
+def _render_agentception(agentception: dict[str, object]) -> list[str]:
+    if not agentception:
+        return []
+    lines = ["", "agentception {"]
+    lines.append(f"  enabled: {json.dumps(bool(agentception.get('enabled', False)))}")
+    lines.append(f"  max.depth: {int(agentception.get('max_depth', 0))}")
+    lines.append(f"  spawn.policy: {json.dumps(str(agentception.get('spawn_policy', '')))}")
+    lines.append(f"  inherit.preserve: {json.dumps(bool(agentception.get('inherit_preserve', False)))}")
+    lines.append(f"  inherit.constraints: {json.dumps(bool(agentception.get('inherit_constraints', False)))}")
+    lines.append(f"  inherit.bridge: {json.dumps(bool(agentception.get('inherit_bridge', False)))}")
+    lines.append(f"  merge.strategy: {json.dumps(str(agentception.get('merge_strategy', '')))}")
+    lines.append(f"  stop.when: {json.dumps(str(agentception.get('stop_when', '')))}")
+    lines.append("}")
+    return lines
 
 
 def _to_vibe_text(
@@ -131,8 +244,30 @@ def _to_vibe_text(
     bridge_config: dict[str, str],
     emit_target: str,
     domain_profile: str,
+    vibe_version: str | None,
+    imports: list[str],
+    modules: list[str],
+    types: list[str],
+    enums: list[str],
+    interfaces: list[str],
+    agents: list[dict[str, object]],
+    agentception: dict[str, object],
 ) -> str:
     lines: list[str] = []
+    if vibe_version:
+        lines.append(f"vibe_version {vibe_version}")
+    for item in sorted(imports):
+        lines.append(f"import {item}")
+    for item in sorted(modules):
+        lines.append(f"module {item}")
+    for item in sorted(types):
+        lines.append(f"type {item}")
+    for item in sorted(enums):
+        lines.append(f"enum {item}")
+    for item in sorted(interfaces):
+        lines.append(f"interface {item}")
+    if lines:
+        lines.append("")
     if domain_profile and domain_profile != "general":
         lines.extend([f"domain {domain_profile}", ""])
     lines.append(f"intent {intent_name}:")
@@ -153,6 +288,10 @@ def _to_vibe_text(
         lines.append("constraint:")
         for item in sorted(constraints):
             lines.append(f"  {item}")
+
+    lines.extend(_render_agentora(agents))
+    lines.extend(_render_agentception(agentception))
+
     if bridge_config:
         lines.append("")
         lines.append("bridge:")
@@ -191,33 +330,174 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
     except Exception as exc:
         return MergeVerifyResult(merge_status="error", conflicts=[], merged_text=None, verification=None, error=str(exc))
 
-    conflicts: list[MergeConflict] = []
-
+    root_intent_name = base_ir.intent_name
     intent_name, c = _merge_scalar(
-        "intent.name", base_ir.intent_name, left_ir.intent_name, right_ir.intent_name, "structural_conflict"
+        intent_name=root_intent_name,
+        section="intent",
+        key="name",
+        base=base_ir.intent_name,
+        left=left_ir.intent_name,
+        right=right_ir.intent_name,
+        conflict_type="structural_conflict",
+    )
+    if intent_name is None:
+        intent_name = root_intent_name
+
+    conflicts: list[MergeConflict] = []
+    if c:
+        conflicts.append(c)
+
+    goal, c = _merge_scalar(
+        intent_name=str(intent_name),
+        section="intent",
+        key="goal",
+        base=base_ir.goal,
+        left=left_ir.goal,
+        right=right_ir.goal,
+        conflict_type="value_conflict",
     )
     if c:
         conflicts.append(c)
-    goal, c = _merge_scalar("intent.goal", base_ir.goal, left_ir.goal, right_ir.goal, "value_conflict")
-    if c:
-        conflicts.append(c)
-    emit_target, c = _merge_scalar("emit.target", base_ir.emit_target, left_ir.emit_target, right_ir.emit_target, "value_conflict")
+    emit_target, c = _merge_scalar(
+        intent_name=str(intent_name),
+        section="emit",
+        key="target",
+        base=base_ir.emit_target,
+        left=left_ir.emit_target,
+        right=right_ir.emit_target,
+        conflict_type="value_conflict",
+    )
     if c:
         conflicts.append(c)
     domain_profile, c = _merge_scalar(
-        "domain.profile", base_ir.domain_profile, left_ir.domain_profile, right_ir.domain_profile, "structural_conflict"
+        intent_name=str(intent_name),
+        section="domain",
+        key="profile",
+        base=base_ir.domain_profile,
+        left=left_ir.domain_profile,
+        right=right_ir.domain_profile,
+        conflict_type="structural_conflict",
+    )
+    if c:
+        conflicts.append(c)
+    vibe_version, c = _merge_scalar(
+        intent_name=str(intent_name),
+        section="vibe_version",
+        key="value",
+        base=base_ir.vibe_version,
+        left=left_ir.vibe_version,
+        right=right_ir.vibe_version,
+        conflict_type="structural_conflict",
     )
     if c:
         conflicts.append(c)
 
-    inputs, input_conflicts = _merge_map("input", base_ir.inputs, left_ir.inputs, right_ir.inputs, "structural_conflict")
-    outputs, output_conflicts = _merge_map("output", base_ir.outputs, left_ir.outputs, right_ir.outputs, "structural_conflict")
-    bridge, bridge_conflicts = _merge_map(
-        "bridge", base_ir.bridge_config, left_ir.bridge_config, right_ir.bridge_config, "bridge_param_conflict"
+    inputs, input_conflicts = _merge_map(
+        intent_name=str(intent_name),
+        section="input",
+        base=base_ir.inputs,
+        left=left_ir.inputs,
+        right=right_ir.inputs,
+        conflict_type="structural_conflict",
     )
-    constraints, constraint_conflicts = _merge_constraints(base_ir.constraints, left_ir.constraints, right_ir.constraints)
-    preserve_rules, preserve_conflicts = _merge_preserve(base_ir.preserve_rules, left_ir.preserve_rules, right_ir.preserve_rules)
-    conflicts.extend(input_conflicts + output_conflicts + bridge_conflicts + constraint_conflicts + preserve_conflicts)
+    outputs, output_conflicts = _merge_map(
+        intent_name=str(intent_name),
+        section="output",
+        base=base_ir.outputs,
+        left=left_ir.outputs,
+        right=right_ir.outputs,
+        conflict_type="structural_conflict",
+    )
+    bridge, bridge_conflicts = _merge_map(
+        intent_name=str(intent_name),
+        section="bridge",
+        base=base_ir.bridge_config,
+        left=left_ir.bridge_config,
+        right=right_ir.bridge_config,
+        conflict_type="bridge_param_conflict",
+    )
+    constraints, constraint_conflicts = _merge_membership(
+        intent_name=str(intent_name),
+        section="constraint",
+        base=base_ir.constraints,
+        left=left_ir.constraints,
+        right=right_ir.constraints,
+        conflict_type="constraint_conflict",
+    )
+    preserve_rules, preserve_conflicts = _merge_preserve(
+        intent_name=str(intent_name),
+        base=base_ir.preserve_rules,
+        left=left_ir.preserve_rules,
+        right=right_ir.preserve_rules,
+    )
+
+    imports, import_conflicts = _merge_membership(
+        intent_name=str(intent_name),
+        section="import",
+        base=base_ir.imports,
+        left=left_ir.imports,
+        right=right_ir.imports,
+        conflict_type="structural_conflict",
+    )
+    modules, module_conflicts = _merge_membership(
+        intent_name=str(intent_name),
+        section="module",
+        base=base_ir.modules,
+        left=left_ir.modules,
+        right=right_ir.modules,
+        conflict_type="structural_conflict",
+    )
+    types, type_conflicts = _merge_membership(
+        intent_name=str(intent_name),
+        section="type",
+        base=base_ir.types,
+        left=left_ir.types,
+        right=right_ir.types,
+        conflict_type="type_conflict",
+    )
+    enums, enum_conflicts = _merge_membership(
+        intent_name=str(intent_name),
+        section="enum",
+        base=base_ir.enums,
+        left=left_ir.enums,
+        right=right_ir.enums,
+        conflict_type="type_conflict",
+    )
+    interfaces, interface_conflicts = _merge_membership(
+        intent_name=str(intent_name),
+        section="interface",
+        base=base_ir.interfaces,
+        left=left_ir.interfaces,
+        right=right_ir.interfaces,
+        conflict_type="type_conflict",
+    )
+
+    agents, agent_conflicts = _merge_agents(intent_name=str(intent_name), base_ir=base_ir, left_ir=left_ir, right_ir=right_ir)
+    agentception, c = _merge_scalar(
+        intent_name=str(intent_name),
+        section="agentception",
+        key="config",
+        base=base_ir.agentception_config,
+        left=left_ir.agentception_config,
+        right=right_ir.agentception_config,
+        conflict_type="agent_conflict",
+    )
+    if c:
+        agent_conflicts.append(c)
+
+    conflicts.extend(
+        input_conflicts
+        + output_conflicts
+        + bridge_conflicts
+        + constraint_conflicts
+        + preserve_conflicts
+        + import_conflicts
+        + module_conflicts
+        + type_conflicts
+        + enum_conflicts
+        + interface_conflicts
+        + agent_conflicts
+    )
 
     if conflicts:
         return MergeVerifyResult(merge_status="conflict", conflicts=conflicts, merged_text=None, verification=None)
@@ -232,21 +512,29 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
         bridge_config=bridge,
         emit_target=str(emit_target),
         domain_profile=str(domain_profile),
+        vibe_version=str(vibe_version) if vibe_version else None,
+        imports=imports,
+        modules=modules,
+        types=types,
+        enums=enums,
+        interfaces=interfaces,
+        agents=agents,
+        agentception=dict(agentception or {}),
     )
 
     verification = _verification_summary(merged_text)
     return MergeVerifyResult(merge_status="merged", conflicts=[], merged_text=merged_text, verification=verification)
 
 
-def render_merge_verify_json(
+def merge_verify_payload(
     result: MergeVerifyResult,
     *,
     base_spec: str,
     left_spec: str,
     right_spec: str,
-) -> str:
-    payload = {
-        "schema_version": "v1",
+) -> dict[str, object]:
+    return {
+        "schema_version": MERGE_VERIFY_SCHEMA_VERSION,
         "report_type": "merge_verify",
         "base_spec": base_spec,
         "left_spec": left_spec,
@@ -268,7 +556,20 @@ def render_merge_verify_json(
         ],
         "error": result.error,
     }
-    return json.dumps(payload, indent=2, sort_keys=True)
+
+
+def render_merge_verify_json(
+    result: MergeVerifyResult,
+    *,
+    base_spec: str,
+    left_spec: str,
+    right_spec: str,
+) -> str:
+    return json.dumps(
+        merge_verify_payload(result, base_spec=base_spec, left_spec=left_spec, right_spec=right_spec),
+        indent=2,
+        sort_keys=True,
+    )
 
 
 def render_merge_verify_human(result: MergeVerifyResult) -> str:
@@ -292,4 +593,12 @@ def maybe_write_merged(path: Path | None, result: MergeVerifyResult) -> str | No
         return None
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(result.merged_text, encoding="utf-8")
+    return str(path)
+
+
+def write_merge_report(path: Path | None, payload: dict[str, object]) -> str | None:
+    if path is None:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     return str(path)

@@ -79,6 +79,7 @@ Availability behavior:
 ## `vibec merge-verify <base> <left> <right>`
 
 Phase 2A adds a first real three-way merge + verify surface.
+Phase 2B hardens structural coverage and CI report artifact output.
 
 Top-level JSON fields:
 
@@ -101,11 +102,35 @@ Conflict rows include:
 - `message`
 - `severity`
 
+Normalized conflict address format:
+
+- `intent::<intent_name>::<section>::<key>`
+
+Examples:
+
+- `intent::PaymentRouter::bridge::epsilon_floor`
+- `intent::PaymentRouter::preserve::latency`
+- `intent::PaymentRouter::agent::Router`
+
+Currently supported structural merge regions in this phase:
+
+- core intent fields (`name`, `goal`, `inputs`, `outputs`, `emit`)
+- preserve / constraint / bridge
+- top-level declarations (`vibe_version`, `import`, `module`, `type`, `enum`, `interface`)
+- `agentora` agent definitions
+- `agentception` config
+
 Important contract semantics:
 
 - `merge_status = conflict` means structural/semantic merge compatibility could not be defended.
 - `merge_status = merged` + `verification.passed = false` means merge succeeded structurally, but preservation thresholds were not met.
 - A merge conflict is not the same as a merged-but-verification-failed result.
+
+`--write-merge-report <path>` behavior:
+
+- writes the machine-readable merge-verify JSON report artifact to disk
+- writes for merged, conflict, and error outcomes
+- does not imply merge success; check `merge_status` and `verification`
 
 ### `bridge_impact` semantics (Phase 1B)
 
