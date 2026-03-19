@@ -36,6 +36,7 @@ REQUIRED_FIELDS = {
     "resource_types",
     "inference_types",
     "agent_graph",
+    "agent_boundary_bridges",
     "notes",
 }
 
@@ -165,6 +166,11 @@ def build_proof_artifact(
             "issues": result.agent_graph_issues,
             "derived_obligations": result.agent_graph_obligations,
         },
+        "agent_boundary_bridges": {
+            "summary": result.agent_boundary_summary,
+            "issues": result.agent_boundary_issues,
+            "derived_obligations": result.agent_boundary_obligations,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -205,6 +211,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     resource_meta = payload["resource_types"]
     inference_meta = payload["inference_types"]
     agent_graph_meta = payload["agent_graph"]
+    boundary_meta = payload["agent_boundary_bridges"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -230,5 +237,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"resource_issue_count: {len(resource_meta['issues'])}",
             f"inference_issue_count: {len(inference_meta['issues'])}",
             f"agent_graph_issue_count: {len(agent_graph_meta['issues'])}",
+            f"agent_boundary_issue_count: {len(boundary_meta['issues'])}",
         ]
     )

@@ -18,6 +18,12 @@ from .agents import (
     check_agent_graph_issues,
     issues_as_dicts as agent_graph_issues_as_dicts,
 )
+from .agent_bridge import (
+    boundary_issues_to_obligation_rows,
+    boundary_summary_payload,
+    issues_as_dicts as boundary_issues_as_dicts,
+    annotate_agent_bridges,
+)
 from .equivalence import CorrespondenceEntry, analyze_intent_equivalence
 from .effects import (
     check_effect_issues,
@@ -201,6 +207,9 @@ class VerificationResult:
     agent_graph_summary: dict[str, object] = field(default_factory=dict)
     agent_graph_issues: list[dict[str, object]] = field(default_factory=list)
     agent_graph_obligations: list[dict[str, object]] = field(default_factory=list)
+    agent_boundary_summary: dict[str, object] = field(default_factory=dict)
+    agent_boundary_issues: list[dict[str, object]] = field(default_factory=list)
+    agent_boundary_obligations: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -934,6 +943,29 @@ def _build_result(
         )
         for row in graph_rows
     ]
+    boundary_result = annotate_agent_bridges(ir)
+    boundary_issues = list(boundary_result.issues)
+    ir.module.agent_boundary_summary = {
+        "edge_summaries": boundary_result.summary.edge_summaries,
+        "pipeline_bridge_score": boundary_result.summary.pipeline_bridge_score,
+        "critical_boundary_failures": boundary_result.summary.critical_boundary_failures,
+        "aggregation_rule": boundary_result.summary.aggregation_rule,
+        "propagation_notes": boundary_result.summary.propagation_notes,
+    }
+    ir.module.agent_boundary_issues = boundary_issues_as_dicts(boundary_issues)
+    boundary_rows = boundary_issues_to_obligation_rows(boundary_issues)
+    boundary_obligations = [
+        VerificationObligation(
+            obligation_id=str(row["obligation_id"]),
+            category=str(row["category"]),
+            description=str(row["description"]),
+            source_location=str(row["source_location"]) if row.get("source_location") is not None else None,
+            status=str(row["status"]),
+            evidence=str(row["evidence"]) if row.get("evidence") is not None else None,
+            critical=bool(row["critical"]),
+        )
+        for row in boundary_rows
+    ]
     all_obligations = (
         list(obligations)
         + semantic_obligations
@@ -941,6 +973,7 @@ def _build_result(
         + resource_obligations
         + inference_obligations
         + graph_obligations
+        + boundary_obligations
     )
 
     counts = _compute_obligation_counts(all_obligations)
@@ -1023,6 +1056,9 @@ def _build_result(
         agent_graph_summary=agent_graph_summary_payload(ir),
         agent_graph_issues=agent_graph_issues_as_dicts(graph_issues),
         agent_graph_obligations=graph_rows,
+        agent_boundary_summary=boundary_summary_payload(ir),
+        agent_boundary_issues=boundary_issues_as_dicts(boundary_issues),
+        agent_boundary_obligations=boundary_rows,
     )
 
 

@@ -214,6 +214,11 @@ emit python</code></pre>
           typed receives/emits boundaries, per-agent contracts, edge/fallback validation, and graph-derived obligations
           surfaced in IR/report/proof while runtime orchestration semantics remain intentionally partial.
         </p>
+        <p>
+          Phase 5.2 adds bridge propagation across agent boundaries: every orchestration edge now receives
+          deterministic compatibility checks + an edge bridge score, with a propagated pipeline score
+          (<code>product(edge_scores)</code>) and boundary-critical failures that can block compile.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

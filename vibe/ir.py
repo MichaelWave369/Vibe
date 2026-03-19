@@ -136,6 +136,8 @@ class IRModule:
     agent_graph: dict[str, object] = field(default_factory=dict)
     agent_graph_summary: dict[str, object] = field(default_factory=dict)
     agent_graph_issues: list[dict[str, object]] = field(default_factory=list)
+    agent_boundary_summary: dict[str, object] = field(default_factory=dict)
+    agent_boundary_issues: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -541,6 +543,16 @@ def ast_to_ir(program: Program) -> IR:
         "disconnected_agents": agent_graph.summary.disconnected_agents,
         "propagation_notes": agent_graph.summary.propagation_notes,
     }
+    from .agent_bridge import annotate_agent_bridges
+
+    boundary = annotate_agent_bridges(ir)
+    ir.module.agent_boundary_summary = {
+        "edge_summaries": boundary.summary.edge_summaries,
+        "pipeline_bridge_score": boundary.summary.pipeline_bridge_score,
+        "critical_boundary_failures": boundary.summary.critical_boundary_failures,
+        "aggregation_rule": boundary.summary.aggregation_rule,
+        "propagation_notes": boundary.summary.propagation_notes,
+    }
     validate_ir(ir)
     return ir
 
@@ -629,5 +641,7 @@ def serialize_ir(ir: IR) -> str:
         "agent_graph": dict(ir.module.agent_graph),
         "agent_graph_summary": dict(ir.module.agent_graph_summary),
         "agent_graph_issues": list(ir.module.agent_graph_issues),
+        "agent_boundary_summary": dict(ir.module.agent_boundary_summary),
+        "agent_boundary_issues": list(ir.module.agent_boundary_issues),
     }
     return json.dumps(payload, indent=2, sort_keys=True)

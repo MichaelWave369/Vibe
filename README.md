@@ -429,6 +429,23 @@ This phase adds deterministic static graph modeling and checks:
 Agent orchestration is represented as inspectable compile-time metadata (IR/report/proof/diff/emitter),
 not a full runtime autonomy implementation. This is the first formal Agentora/AgentCeption realization layer.
 
+## Bridge propagation across agent boundaries (Phase 5.2)
+
+Vibe now propagates preservation checks across agent edges (`A -> B`) with explicit boundary analysis.
+
+- each edge computes deterministic boundary compatibility checks across:
+  - emits/receives type contracts
+  - semantic contract propagation
+  - effect/resource compatibility
+  - bridge-critical boundary conditions
+- each edge receives a deterministic `edge_bridge_score`
+- pipeline preservation uses a monotone aggregation rule:
+  - `pipeline_bridge_score = product(edge_bridge_scores)`
+- boundary issues become explicit `agent_boundary_*` obligations
+- critical boundary failures block compile/emit through existing preservation gating
+
+This phase is static bridge propagation for compile-time integrity, not runtime monitoring.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:

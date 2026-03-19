@@ -300,6 +300,19 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
                 "agent graph summary changed",
             ),
         )
+    if old_ir.module.agent_boundary_summary != new_ir.module.agent_boundary_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "agent_boundary",
+                "boundary_summary",
+                "modified",
+                "unknown",
+                old_ir.module.agent_boundary_summary,
+                new_ir.module.agent_boundary_summary,
+                "agent boundary bridge summary changed",
+            ),
+        )
 
     summary = {
         "total_changes": len(entries),

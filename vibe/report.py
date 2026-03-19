@@ -166,6 +166,14 @@ def render_report(
             f"  agent_graph_obligations: {result.agent_graph_obligations}",
         ]
     )
+    lines.extend(
+        [
+            "agent boundary bridges:",
+            f"  agent_boundary_summary: {result.agent_boundary_summary}",
+            f"  agent_boundary_issues: {result.agent_boundary_issues}",
+            f"  agent_boundary_obligations: {result.agent_boundary_obligations}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:
