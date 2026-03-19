@@ -229,6 +229,56 @@ emit python</code></pre>
           thresholds, and offline runtime events are scored for drift/alerts/fallback pressure relative to compiled
           contracts (observational only; compile-time proof remains authoritative).
         </p>
+        <p>
+          Phase 6.2 adds a local-first intent registry: <code>publish</code>, <code>search</code>,
+          <code>registry-inspect</code>, and <code>compat</code> now index reusable package intent contracts with
+          proof/build metadata in deterministic local JSON entries. This is local publication only; a hosted registry
+          remains a future roadmap phase.
+        </p>
+        <p>
+          Phase 6.3 adds a real LSP server (<code>vibec lsp</code>) with diagnostics, hover, completion,
+          definition lookup, document symbols, semantic tokens, and lightweight intent lenses. Editor feedback is
+          fast/local by default, while heavier preservation verification remains compile/save oriented.
+        </p>
+        <p>
+          Phase 6.4 adds native GitHub Actions bridge checking via deterministic CI reports and PR/job summaries.
+          Repositories can gate merges on Vibe preservation outcomes using configurable <code>fail-on</code> conditions
+          (including verdicts and bridge-score thresholds) without requiring a hosted Vibe service.
+        </p>
+        <p>
+          Phase 7A adds a unified cross-domain intent architecture for hardware, scientific simulation, legal/compliance,
+          and genomics tracks with shared domain profiles, target-plugin scaffolds, and domain metadata flowing through
+          IR/report/proof surfaces.
+        </p>
+        <p>
+          Phase 7.1 delivers the first real hardware slice: deterministic <code>emit vhdl</code> and
+          <code>emit systemverilog</code> RTL stubs, hardware preserve/constraint checks (timing, latency cycles,
+          no combinational loops, synchronous/deterministic), and hardware metadata in report/proof outputs.
+        </p>
+        <p>
+          Phase 7.2 delivers the first real scientific simulation slice: deterministic <code>emit julia</code>
+          simulation stubs, preserve/constraint checks for conservation invariants and reproducibility
+          (<code>conservation of energy</code>, <code>conservation of mass</code>, <code>bounded_error</code>,
+          <code>stable_time_step</code>, <code>reproducible</code>, <code>seeded_rng</code>, <code>deterministic_fp</code>),
+          and scientific simulation metadata in report/proof outputs.
+        </p>
+        <p>
+          Phase 7.3 delivers the first real legal/compliance slice: deterministic <code>emit compliance_report</code>
+          JSON artifacts, preserve/constraint checks for GDPR/data-minimization/auditability and no-PII-in-logs
+          controls, plus legal-compliance metadata (including PII taint and audit metadata) in report/proof outputs.
+        </p>
+        <p>
+          Phase 7.4 delivers the first real genomics slice: deterministic <code>emit snakemake</code> and
+          <code>emit nextflow</code> workflow stubs, reproducibility/provenance/privacy checks for genomics pipelines
+          (including differential-expression reproducibility and no patient-identifiable metadata constraints), and
+          genomics metadata in report/proof outputs.
+        </p>
+        <p>
+          Phase 8.1 begins bounded self-hosting: Vibe can verify/compiler-check compiler self-specs in
+          <code>.vibe</code> form (for a bounded parser/IR/verifier/proof slice), track a compiler self bridge score,
+          and surface baseline/regression status via <code>vibec self-check</code>. This is intentionally not a full
+          compiler rewrite/bootstrap claim yet.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300
@@ -255,6 +305,7 @@ pass: True</code></pre>
           <li>v0.2: richer grammar and diagnostics</li>
           <li>v0.2: stronger verifier calibrations and rule mapping</li>
           <li>v0.3: additional emit targets after compiler spine hardening</li>
+          <li>v0.3+: expand bounded self-hosting slice toward fuller compiler bootstrapping</li>
           <li>future: hosted workflows built on top of preservation law</li>
         </ul>
       </section>

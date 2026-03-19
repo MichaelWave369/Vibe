@@ -260,7 +260,245 @@ Commands:
 - `vibec verify-proof file.vibe` (always writes proof)
 - `vibec inspect-proof file.vibe.proof.json`
 
+## Local-first intent registry (Phase 6.2)
+
+Vibe now includes a **local-first intent registry** for indexing reusable intent contracts plus preservation metadata.
+
+Pipeline surface:
+
+`package/project -> manifest/proof/package metadata -> local registry entry -> search/inspect/compatibility -> build/use`
+
+This phase is intentionally local and deterministic:
+- registry root defaults to `./.vibe_registry` (or `VIBE_REGISTRY_ROOT`)
+- entries are inspectable JSON files
+- no hosted/public network registry, auth, or sync in this phase
+
+Registry entries include:
+- package identity (`name`, `version`, `description`)
+- dependency and build summaries
+- bridge defaults and emit defaults
+- module inventory
+- tags/domain metadata from `vibe.toml` `[metadata]`
+- proof artifact presence/summary and proof-version metadata
+- deterministic entry hash
+
+CLI commands:
+- `vibec publish <project-dir>`: publish into local registry only (honest local publication)
+- `vibec search "<query>" [--tag ...] [--domain ...]`
+- `vibec registry-inspect <package[@version]>`
+- `vibec compat <package-ref-a> <package-ref-b>`
+
+All registry commands support deterministic JSON output via `--report json`.
+
+Compatibility output is a **deterministic hint matrix**, not a formal theorem of interchangeability.
+Proof status is surfaced explicitly (`complete` / `partial` / `absent`) and never overclaimed.
+
 These artifacts are deterministic and inspectable, but they are not overclaimed as full formal certificates.
+
+## Language Server Protocol (Phase 6.3)
+
+Vibe now includes an editor-native **Language Server Protocol** implementation.
+
+Launch:
+- `vibec lsp` (stdio server)
+- `vibec lsp --check` (startup health check)
+
+Current LSP surfaces:
+- document sync (`didOpen`, `didChange`, `didSave`)
+- diagnostics (parse + semantic/effect/resource/inference/agent/delegation + import checks)
+- hover (intent-aware type/summary metadata)
+- completion (keywords/blocks/bridge keys/import suggestions)
+- go-to-definition (local symbols + basic module import targets)
+- document symbols
+- semantic tokens (major Vibe syntax classes)
+- lightweight intent code lenses (bridge + semantic summaries)
+
+Truthfulness boundaries:
+- fast editor diagnostics are local and incremental
+- deeper checks are save-oriented, not full heavy verification on each keystroke
+- LSP hints do not replace compile-time preservation proof surfaces
+
+## GitHub Actions native bridge check (Phase 6.4)
+
+Vibe now includes an in-repo GitHub Action implementation for deterministic CI bridge gating.
+
+Implemented action surfaces:
+- root `action.yml` + local dogfood action at `.github/actions/bridge-check/action.yml`
+- Python entrypoint: `.github/actions/bridge-check/run_bridge_check.py`
+- local reproducible CLI helper: `vibec ci-check`
+
+Core behavior:
+- discovers `.vibe` files via configurable glob
+- runs real Vibe verification per file
+- writes deterministic JSON report + markdown summary
+- appends markdown into `GITHUB_STEP_SUMMARY` when available
+- supports merge-blocking fail-on gating (`verdict` rules and `bridge_score_below_threshold:<n>`)
+
+Important truthfulness boundaries:
+- this phase is native CI integration, not a hosted Vibe platform
+- action is in-repo and publication as `vibe-lang/bridge-check@v1` is a future split/release step
+- fail-on gating is implemented now; baseline-regression comparison remains optional future work
+
+## Cross-domain intent architecture (Phase 7A)
+
+Vibe now includes a shared **cross-domain architecture layer** for Phase 7 tracks:
+- hardware
+- scientific_simulation
+- legal_compliance
+- genomics
+
+New architecture surfaces:
+- domain profile subsystem: `vibe/domain_profiles.py`
+- target plugin scaffolding: `vibe/target_plugins.py`
+- IR domain metadata: active profile + domain summaries/issues/obligations + target metadata
+- verifier/report/proof propagation of domain metadata
+- CLI domain introspection: `vibec domains`, `vibec explain --show-domain`
+
+Planned target scaffolds are now wired (truthfully marked as scaffold-level in this pass):
+- `emit vhdl`
+- `emit systemverilog`
+
+This pass establishes the shared foundation for parallel domain work; it does **not** claim full emitter/proof completeness for all domain targets yet.
+
+## Hardware intent (Phase 7.1)
+
+Vibe now includes the first concrete cross-domain implementation slice for hardware intent.
+
+Implemented in this phase:
+- dedicated hardware subsystem: `vibe/hardware.py`
+- first practical hardware preserve/constraint surfaces:
+  - `preserve: timing < 10ns`
+  - `preserve: latency_cycles <= N`
+  - `constraint: no combinational loops`
+  - `constraint: synchronous`
+  - `constraint: deterministic`
+- hardware metadata in verifier/report/proof:
+  - `hardware_summary`
+  - `hardware_issues`
+  - `hardware_obligations`
+  - `hardware_target_metadata`
+- first real deterministic emitters:
+  - `emit vhdl`
+  - `emit systemverilog`
+
+Truthfulness:
+- generated RTL is structured and target-appropriate, but still scaffold-level for manual completion
+- loop/timing checks are real implemented static checks in this pass, not full post-layout timing proof
+
+## Scientific simulation intent (Phase 7.2)
+
+Vibe now includes the second concrete cross-domain implementation slice for scientific simulation intent.
+
+Implemented in this phase:
+- dedicated scientific simulation subsystem: `vibe/scientific_simulation.py`
+- first practical scientific simulation preserve/constraint surfaces:
+  - `preserve: conservation of energy`
+  - `preserve: conservation of mass`
+  - `preserve: bounded_error < X`
+  - `preserve: stable_time_step`
+  - `constraint: reproducible`
+  - `constraint: seeded_rng`
+  - `constraint: deterministic_fp`
+- scientific simulation metadata in verifier/report/proof:
+  - `scientific_simulation_summary`
+  - `scientific_simulation_issues`
+  - `scientific_simulation_obligations`
+  - `scientific_target_metadata`
+- first real deterministic scientific emitter:
+  - `emit julia`
+
+Truthfulness:
+- generated Julia is structured and inspectable, but remains scaffold-level for manual numerical model completion
+- invariant/reproducibility checks are real implemented metadata/structural checks in this pass, not full scientific correctness proof
+
+## Legal / compliance intent (Phase 7.3)
+
+Vibe now includes the third concrete cross-domain implementation slice for legal/compliance intent.
+
+Implemented in this phase:
+- dedicated legal/compliance subsystem: `vibe/legal_compliance.py`
+- practical compliance preserve/constraint surfaces:
+  - `preserve: GDPR compliance`
+  - `preserve: auditability`
+  - `preserve: data minimization`
+  - `constraint: no PII in logs`
+  - `constraint: consent required`
+  - `constraint: retention_limited`
+  - `constraint: lawful_basis_required`
+- legal/compliance metadata in verifier/report/proof:
+  - `legal_compliance_summary`
+  - `legal_compliance_issues`
+  - `legal_compliance_obligations`
+  - `compliance_target_metadata`
+  - `pii_taint_summary`
+  - `audit_trail_metadata`
+- first real deterministic compliance artifact emitter:
+  - `emit compliance_report` (JSON)
+
+Truthfulness:
+- generated compliance reports are deterministic machine-checkable structures for policy review workflows
+- this is **not** legal certification and does not claim final legal sufficiency
+
+## Genomics intent (Phase 7.4)
+
+Vibe now includes the fourth concrete cross-domain implementation slice for genomics/bioinformatics intent.
+
+Implemented in this phase:
+- dedicated genomics subsystem: `vibe/genomics.py`
+- practical genomics preserve/constraint surfaces:
+  - `preserve: reproducibility of differential expression results`
+  - `preserve: reproducible workflow`
+  - `preserve: provenance retained`
+  - `constraint: no patient-identifiable metadata in outputs`
+  - `constraint: deidentify sample metadata`
+  - `constraint: deterministic sample ordering`
+  - `constraint: fixed reference version`
+- genomics metadata in verifier/report/proof:
+  - `genomics_summary`
+  - `genomics_issues`
+  - `genomics_obligations`
+  - `genomics_target_metadata`
+  - `metadata_privacy_summary`
+  - `workflow_provenance_metadata`
+- first real deterministic workflow emitters:
+  - `emit snakemake`
+  - `emit nextflow`
+
+Truthfulness:
+- generated workflow outputs are deterministic, inspectable workflow-native scaffolds for reproducibility/privacy/provenance preservation
+- this is **not** biological/clinical correctness proof or clinical certification
+
+## Meta-intent self-hosting (Phase 8.1)
+
+Vibe now begins bounded self-hosting: the compiler can verify and compile a compiler self-spec written in `.vibe`.
+
+Implemented in this phase:
+- dedicated self-hosting subsystem: `vibe/self_hosting.py`
+- bounded compiler self-spec inputs:
+  - `self_hosting/vibec_core.vibe` (parser/IR/verifier/proof-report contract slice)
+  - `self_hosting/vibec.vibe` (bootstrap path marker)
+- `vibec self-check` CLI:
+  - runs deterministic self-check verification for compiler spec(s)
+  - reports `self_bridge_score` and `measurement_ratio`
+  - supports baseline write/update + regression gating
+- report/proof metadata surfaces:
+  - `self_hosting_enabled`
+  - `compiler_spec_path`
+  - `self_bridge_score`
+  - `self_regression_status`
+  - `self_baseline_reference`
+
+Example:
+
+```bash
+vibec self-check --spec self_hosting/vibec_core.vibe \
+  --baseline-path .vibe_self_hosting/compiler_self_bridge_baseline.json \
+  --fail-on-regression --max-bridge-drop 0.01
+```
+
+Truthfulness:
+- this is a bounded self-spec verification slice, not full compiler rewrite/bootstrapping
+- regression signals are real and inspectable, but release policy wiring remains incremental
 
 ## Multi-candidate synthesis (Phase 3.1)
 

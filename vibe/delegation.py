@@ -49,7 +49,7 @@ def annotate_delegation(ir: IR) -> DelegationResult:
     decls = list(ir.module.delegation_tree.get("edges", []))
     bridge_cfg = ir.bridge_config
     parent_threshold = float(bridge_cfg.get("measurement_safe_ratio", "0.85"))
-    preserve_rules = [f"{k} {op} {v}" for k, op, v in ir.preserve_rules]
+    preserve_rules = [f"{k} {op} {v}".rstrip() for k, op, v in ir.preserve_rules]
     constraints = list(ir.constraints)
 
     tree_rows: list[dict[str, object]] = []

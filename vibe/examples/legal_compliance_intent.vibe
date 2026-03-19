@@ -1,0 +1,22 @@
+domain legal_compliance
+
+intent GDPRAccessAudit:
+  goal: "Preserve GDPR control traceability for access processing"
+  inputs:
+    user_email: string
+    request_id: string
+  outputs:
+    decision: string
+
+preserve:
+  GDPR compliance
+  auditability
+  data minimization
+
+constraint:
+  no PII in logs
+  consent required
+  retention_limited
+  lawful_basis_required
+
+emit compliance_report

@@ -1,0 +1,26 @@
+name: self-check-release-gate
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  self-hosting-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e .
+      - name: Bounded compiler self-check (Phase 8.1)
+        run: |
+          vibec self-check \
+            --spec self_hosting/vibec_core.vibe \
+            --baseline-path .vibe_self_hosting/compiler_self_bridge_baseline.json \
+            --fail-on-regression \
+            --max-bridge-drop 0.01 \
+            --report human
