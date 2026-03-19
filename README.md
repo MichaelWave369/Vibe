@@ -87,6 +87,7 @@ Primary commands:
 - `vibec verify-proof <file.vibe>` — verification + proof artifact write.
 - `vibec inspect-proof <file.vibe.proof.json>` — inspect proof summary.
 - `vibec diff <old.vibe> <new.vibe>` — semantic intent diff.
+- `vibec merge-verify <base.vibe> <left.vibe> <right.vibe>` — conservative three-way merge + verification.
 - `vibec semver <old.vibe> <new.vibe>` — derive recommended semver bump.
 - `vibec negotiate <a.vibe> <b.vibe> ...` — deterministic contract negotiation.
 - `vibec init` / `manifest-check` / `build` — package lifecycle.
@@ -133,6 +134,10 @@ What this is **not**:
 - Not complete theorem proving across all language features.
 
 When this README says “proof,” it refers to **current machine-checkable proof metadata produced by Vibe’s implemented verifier/proof pipeline**.
+
+### Muse integration JSON contract (Issue #34 kickoff)
+
+For the Vibe-side integration contract consumed by Muse (`verify --report json`, `diff --report json`, and `.vibe.proof.json` schema/versioning), see `docs/muse_integration_contract.md`.
 
 ---
 
