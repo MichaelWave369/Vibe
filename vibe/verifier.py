@@ -234,6 +234,12 @@ class VerificationResult:
     scientific_simulation_issues: list[dict[str, object]] = field(default_factory=list)
     scientific_simulation_obligations: list[dict[str, object]] = field(default_factory=list)
     scientific_target_metadata: dict[str, object] = field(default_factory=dict)
+    legal_compliance_summary: dict[str, object] = field(default_factory=dict)
+    legal_compliance_issues: list[dict[str, object]] = field(default_factory=list)
+    legal_compliance_obligations: list[dict[str, object]] = field(default_factory=list)
+    compliance_target_metadata: dict[str, object] = field(default_factory=dict)
+    pii_taint_summary: dict[str, object] = field(default_factory=dict)
+    audit_trail_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -1017,6 +1023,8 @@ def _build_result(
     hardware_codegen_obligations: list[dict[str, object]] = []
     simulation_codegen_issues: list[dict[str, object]] = []
     simulation_codegen_obligations: list[dict[str, object]] = []
+    legal_codegen_issues: list[dict[str, object]] = []
+    legal_codegen_obligations: list[dict[str, object]] = []
     if ir.domain_profile == "hardware":
         from .hardware import evaluate_hardware_generated_code
 
@@ -1025,6 +1033,10 @@ def _build_result(
         from .scientific_simulation import evaluate_scientific_generated_code
 
         simulation_codegen_issues, simulation_codegen_obligations = evaluate_scientific_generated_code(ir, generated_code)
+    elif ir.domain_profile == "legal_compliance":
+        from .legal_compliance import evaluate_legal_generated_artifact
+
+        legal_codegen_issues, legal_codegen_obligations = evaluate_legal_generated_artifact(ir, generated_code)
 
     hardware_issues_all = sorted(
         list(ir.module.hardware_issues) + list(hardware_codegen_issues),
@@ -1042,12 +1054,23 @@ def _build_result(
         list(ir.module.scientific_simulation_obligations) + list(simulation_codegen_obligations),
         key=lambda r: str(r.get("obligation_id", "")),
     )
+    legal_issues_all = sorted(
+        list(ir.module.legal_compliance_issues) + list(legal_codegen_issues),
+        key=lambda r: str(r.get("issue_id", "")),
+    )
+    legal_obligations_all = sorted(
+        list(ir.module.legal_compliance_obligations) + list(legal_codegen_obligations),
+        key=lambda r: str(r.get("obligation_id", "")),
+    )
     domain_issues_all = sorted(
-        list(ir.module.domain_issues) + list(hardware_codegen_issues) + list(simulation_codegen_issues),
+        list(ir.module.domain_issues) + list(hardware_codegen_issues) + list(simulation_codegen_issues) + list(legal_codegen_issues),
         key=lambda r: str(r.get("issue_id", "")),
     )
     domain_obligation_rows = sorted(
-        list(ir.module.domain_obligations) + list(hardware_codegen_obligations) + list(simulation_codegen_obligations),
+        list(ir.module.domain_obligations)
+        + list(hardware_codegen_obligations)
+        + list(simulation_codegen_obligations)
+        + list(legal_codegen_obligations),
         key=lambda r: str(r.get("obligation_id", "")),
     )
     domain_obligations = [
@@ -1174,6 +1197,12 @@ def _build_result(
         scientific_simulation_issues=simulation_issues_all,
         scientific_simulation_obligations=simulation_obligations_all,
         scientific_target_metadata=dict(ir.module.scientific_target_metadata),
+        legal_compliance_summary=dict(ir.module.legal_compliance_summary),
+        legal_compliance_issues=legal_issues_all,
+        legal_compliance_obligations=legal_obligations_all,
+        compliance_target_metadata=dict(ir.module.compliance_target_metadata),
+        pii_taint_summary=dict(ir.module.pii_taint_summary),
+        audit_trail_metadata=dict(ir.module.audit_trail_metadata),
     )
 
 

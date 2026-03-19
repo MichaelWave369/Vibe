@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .generator_compliance_report import generate_compliance_report
 from .generator_julia import generate_julia
 from .generator_python import generate_python
 from .generator_systemverilog import generate_systemverilog
@@ -47,6 +48,14 @@ class JuliaEmitter(EmitterBackend):
         return generate_julia(ir)
 
 
+class ComplianceReportEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="compliance_report", extension=".compliance.json")
+
+    def emit(self, ir: IR) -> str:
+        return generate_compliance_report(ir)
+
+
 class VHDLEmitter(EmitterBackend):
     def __init__(self) -> None:
         super().__init__(target="vhdl", extension=".vhd")
@@ -85,6 +94,7 @@ _BACKENDS = {
     "python": PythonEmitter(),
     "typescript": TypeScriptEmitter(),
     "julia": JuliaEmitter(),
+    "compliance_report": ComplianceReportEmitter(),
     "vhdl": VHDLEmitter(),
     "systemverilog": SystemVerilogEmitter(),
 }

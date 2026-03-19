@@ -279,6 +279,48 @@ def _diff_scientific_simulation(entries: list[IntentDiffEntry], old: IR, new: IR
         )
 
 
+def _diff_legal_compliance(entries: list[IntentDiffEntry], old: IR, new: IR) -> None:
+    if old.module.legal_compliance_summary != new.module.legal_compliance_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "legal_compliance",
+                "legal_compliance_summary",
+                "modified",
+                "unknown",
+                old.module.legal_compliance_summary,
+                new.module.legal_compliance_summary,
+                "legal compliance summary changed",
+            ),
+        )
+    if old.module.compliance_target_metadata != new.module.compliance_target_metadata:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "legal_compliance",
+                "compliance_target_metadata",
+                "modified",
+                "unknown",
+                old.module.compliance_target_metadata,
+                new.module.compliance_target_metadata,
+                "legal compliance target metadata changed",
+            ),
+        )
+    if old.module.legal_compliance_issues != new.module.legal_compliance_issues:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "legal_compliance",
+                "legal_compliance_issues",
+                "modified",
+                "unknown",
+                old.module.legal_compliance_issues,
+                new.module.legal_compliance_issues,
+                "legal compliance issues changed",
+            ),
+        )
+
+
 def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
     entries: list[IntentDiffEntry] = []
 
@@ -308,6 +350,7 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
     _diff_agentception(entries, old_ir, new_ir)
     _diff_hardware(entries, old_ir, new_ir)
     _diff_scientific_simulation(entries, old_ir, new_ir)
+    _diff_legal_compliance(entries, old_ir, new_ir)
     if old_ir.module.semantic_summary != new_ir.module.semantic_summary:
         _append(
             entries,

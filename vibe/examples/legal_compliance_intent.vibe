@@ -1,18 +1,22 @@
 domain legal_compliance
 
-intent DataRetentionPolicy:
-  goal: "Preserve auditable retention and jurisdiction controls"
+intent GDPRAccessAudit:
+  goal: "Preserve GDPR control traceability for access processing"
   inputs:
-    event_id: string
+    user_email: string
+    request_id: string
   outputs:
     decision: string
 
 preserve:
-  retention_days > 365
-  audit_trail = strict
+  GDPR compliance
+  auditability
+  data minimization
 
 constraint:
-  gdpr_data_minimization
-  policy_disclosure_required
+  no PII in logs
+  consent required
+  retention_limited
+  lawful_basis_required
 
 emit compliance_report

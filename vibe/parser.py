@@ -32,6 +32,10 @@ BARE_PRESERVE_RULES = {
     "conservation of mass",
     "stable_time_step",
     "monotonic entropy",
+    "gdpr compliance",
+    "auditability",
+    "data minimization",
+    "right_to_erasure",
 }
 
 

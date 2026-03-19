@@ -78,13 +78,17 @@ DOMAIN_PROFILES: dict[str, DomainProfile] = {
     ),
     "legal_compliance": DomainProfile(
         name="legal_compliance",
-        preserve_families=["retention", "audit", "consent", "jurisdiction", "traceability"],
-        constraint_families=["gdpr", "hipaa", "sox", "policy", "disclosure"],
+        preserve_families=["gdpr compliance", "auditability", "data minimization", "right_to_erasure"],
+        constraint_families=["no pii in logs", "consent required", "retention_limited", "lawful_basis_required", "purpose_limited"],
         supported_emit_targets=["compliance_report", "python"],
         proof_extensions={"policy_bindings": "declared", "evidence_chain": "required"},
         report_extensions={"domain_track": "7.3 legal/compliance intent"},
         compatibility_hooks=["policy_version", "jurisdiction_overlap"],
-        obligation_factory=_prefix_obligations("legal_compliance", ["retention", "audit", "consent", "jurisdiction", "traceability"], family="preserve"),
+        obligation_factory=_prefix_obligations(
+            "legal_compliance",
+            ["gdpr compliance", "auditability", "data minimization", "right_to_erasure"],
+            family="preserve",
+        ),
     ),
     "genomics": DomainProfile(
         name="genomics",
@@ -156,6 +160,12 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.scientific_simulation_issues = []
         ir.module.scientific_simulation_obligations = []
         ir.module.scientific_target_metadata = {}
+        ir.module.legal_compliance_summary = {}
+        ir.module.legal_compliance_issues = []
+        ir.module.legal_compliance_obligations = []
+        ir.module.compliance_target_metadata = {}
+        ir.module.pii_taint_summary = {}
+        ir.module.audit_trail_metadata = {}
         return
 
     if profile.obligation_factory is not None:
@@ -182,7 +192,7 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
     ir.module.domain_target_metadata = {
         "planned_target": ir.emit_target,
         "target_supported_by_profile": ir.emit_target in set(profile.supported_emit_targets),
-        "scaffold_only": ir.emit_target in {"compliance_report", "snakemake", "nextflow"},
+        "scaffold_only": ir.emit_target in {"snakemake", "nextflow"},
     }
     if profile.name == "hardware":
         from .hardware import derive_hardware_metadata
@@ -199,6 +209,12 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.scientific_simulation_issues = []
         ir.module.scientific_simulation_obligations = []
         ir.module.scientific_target_metadata = {}
+        ir.module.legal_compliance_summary = {}
+        ir.module.legal_compliance_issues = []
+        ir.module.legal_compliance_obligations = []
+        ir.module.compliance_target_metadata = {}
+        ir.module.pii_taint_summary = {}
+        ir.module.audit_trail_metadata = {}
     elif profile.name == "scientific_simulation":
         from .scientific_simulation import derive_scientific_simulation_metadata
 
@@ -217,6 +233,40 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.hardware_issues = []
         ir.module.hardware_obligations = []
         ir.module.hardware_target_metadata = {}
+        ir.module.legal_compliance_summary = {}
+        ir.module.legal_compliance_issues = []
+        ir.module.legal_compliance_obligations = []
+        ir.module.compliance_target_metadata = {}
+        ir.module.pii_taint_summary = {}
+        ir.module.audit_trail_metadata = {}
+    elif profile.name == "legal_compliance":
+        from .legal_compliance import derive_legal_compliance_metadata
+
+        (
+            l_summary,
+            l_issues,
+            l_obligations,
+            l_target_meta,
+            pii_taint_summary,
+            audit_trail_metadata,
+        ) = derive_legal_compliance_metadata(ir)
+        ir.module.legal_compliance_summary = l_summary
+        ir.module.legal_compliance_issues = l_issues
+        ir.module.legal_compliance_obligations = l_obligations
+        ir.module.compliance_target_metadata = l_target_meta
+        ir.module.pii_taint_summary = pii_taint_summary
+        ir.module.audit_trail_metadata = audit_trail_metadata
+        ir.module.domain_summary["legal_compliance_summary"] = l_summary
+        ir.module.domain_issues = sorted(ir.module.domain_issues + l_issues, key=lambda x: str(x.get("issue_id", "")))
+        ir.module.domain_obligations = sorted(ir.module.domain_obligations + l_obligations, key=lambda x: str(x.get("obligation_id", "")))
+        ir.module.hardware_summary = {}
+        ir.module.hardware_issues = []
+        ir.module.hardware_obligations = []
+        ir.module.hardware_target_metadata = {}
+        ir.module.scientific_simulation_summary = {}
+        ir.module.scientific_simulation_issues = []
+        ir.module.scientific_simulation_obligations = []
+        ir.module.scientific_target_metadata = {}
     else:
         ir.module.hardware_summary = {}
         ir.module.hardware_issues = []
@@ -226,3 +276,9 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.scientific_simulation_issues = []
         ir.module.scientific_simulation_obligations = []
         ir.module.scientific_target_metadata = {}
+        ir.module.legal_compliance_summary = {}
+        ir.module.legal_compliance_issues = []
+        ir.module.legal_compliance_obligations = []
+        ir.module.compliance_target_metadata = {}
+        ir.module.pii_taint_summary = {}
+        ir.module.audit_trail_metadata = {}

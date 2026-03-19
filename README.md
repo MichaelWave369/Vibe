@@ -357,7 +357,6 @@ New architecture surfaces:
 Planned target scaffolds are now wired (truthfully marked as scaffold-level in this pass):
 - `emit vhdl`
 - `emit systemverilog`
-- `emit compliance_report`
 - `emit snakemake`
 - `emit nextflow`
 
@@ -413,6 +412,34 @@ Implemented in this phase:
 Truthfulness:
 - generated Julia is structured and inspectable, but remains scaffold-level for manual numerical model completion
 - invariant/reproducibility checks are real implemented metadata/structural checks in this pass, not full scientific correctness proof
+
+## Legal / compliance intent (Phase 7.3)
+
+Vibe now includes the third concrete cross-domain implementation slice for legal/compliance intent.
+
+Implemented in this phase:
+- dedicated legal/compliance subsystem: `vibe/legal_compliance.py`
+- practical compliance preserve/constraint surfaces:
+  - `preserve: GDPR compliance`
+  - `preserve: auditability`
+  - `preserve: data minimization`
+  - `constraint: no PII in logs`
+  - `constraint: consent required`
+  - `constraint: retention_limited`
+  - `constraint: lawful_basis_required`
+- legal/compliance metadata in verifier/report/proof:
+  - `legal_compliance_summary`
+  - `legal_compliance_issues`
+  - `legal_compliance_obligations`
+  - `compliance_target_metadata`
+  - `pii_taint_summary`
+  - `audit_trail_metadata`
+- first real deterministic compliance artifact emitter:
+  - `emit compliance_report` (JSON)
+
+Truthfulness:
+- generated compliance reports are deterministic machine-checkable structures for policy review workflows
+- this is **not** legal certification and does not claim final legal sufficiency
 
 ## Multi-candidate synthesis (Phase 3.1)
 

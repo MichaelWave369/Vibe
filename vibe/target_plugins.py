@@ -21,7 +21,13 @@ _TARGETS: dict[str, TargetPlugin] = {
     "vhdl": TargetPlugin("vhdl", ".vhd", True, "hardware", "phase-7.1 deterministic rtl emitter"),
     "systemverilog": TargetPlugin("systemverilog", ".sv", True, "hardware", "phase-7.1 deterministic rtl emitter"),
     "julia": TargetPlugin("julia", ".jl", True, "scientific_simulation", "phase-7.2 deterministic simulation emitter"),
-    "compliance_report": TargetPlugin("compliance_report", ".md", False, "legal_compliance", "phase-7 scaffold emitter"),
+    "compliance_report": TargetPlugin(
+        "compliance_report",
+        ".compliance.json",
+        True,
+        "legal_compliance",
+        "phase-7.3 deterministic compliance report emitter",
+    ),
     "snakemake": TargetPlugin("snakemake", ".smk", False, "genomics", "phase-7 scaffold emitter"),
     "nextflow": TargetPlugin("nextflow", ".nf", False, "genomics", "phase-7 scaffold emitter"),
 }

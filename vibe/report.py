@@ -220,6 +220,17 @@ def render_report(
             f"  scientific_target_metadata: {result.scientific_target_metadata}",
         ]
     )
+    lines.extend(
+        [
+            "legal compliance:",
+            f"  legal_compliance_summary: {result.legal_compliance_summary}",
+            f"  legal_compliance_issues: {result.legal_compliance_issues}",
+            f"  legal_compliance_obligations: {result.legal_compliance_obligations}",
+            f"  compliance_target_metadata: {result.compliance_target_metadata}",
+            f"  pii_taint_summary: {result.pii_taint_summary}",
+            f"  audit_trail_metadata: {result.audit_trail_metadata}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

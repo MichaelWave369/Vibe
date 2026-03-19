@@ -155,6 +155,12 @@ class IRModule:
     scientific_simulation_issues: list[dict[str, object]] = field(default_factory=list)
     scientific_simulation_obligations: list[dict[str, object]] = field(default_factory=list)
     scientific_target_metadata: dict[str, object] = field(default_factory=dict)
+    legal_compliance_summary: dict[str, object] = field(default_factory=dict)
+    legal_compliance_issues: list[dict[str, object]] = field(default_factory=list)
+    legal_compliance_obligations: list[dict[str, object]] = field(default_factory=list)
+    compliance_target_metadata: dict[str, object] = field(default_factory=dict)
+    pii_taint_summary: dict[str, object] = field(default_factory=dict)
+    audit_trail_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
