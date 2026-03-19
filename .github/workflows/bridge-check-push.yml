@@ -1,0 +1,36 @@
+name: vibe-bridge-check-push
+
+on:
+  push:
+    branches: ["main", "master"]
+
+jobs:
+  bridge-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Vibe
+        run: python -m pip install -e .
+
+      - name: Bridge check
+        uses: ./
+        with:
+          files: '**/*.vibe'
+          fail-on: 'bridge_score_below_threshold:0.85'
+          report-json-path: '.vibe_ci/push_bridge_report.json'
+
+      - name: Upload bridge report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-bridge-push-report
+          path: |
+            .vibe_ci/push_bridge_report.json
+            .vibe_ci/push_bridge_report.summary.md
+          if-no-files-found: warn

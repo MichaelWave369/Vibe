@@ -1,0 +1,22 @@
+intent HttpRequestResponseContract:
+  goal: "Provide reusable HTTP request/response contract with safe handling constraints"
+  inputs:
+    request_method: string
+    request_path: string
+    request_headers: string
+    request_body: string
+  outputs:
+    response_status: number
+    response_headers: string
+    response_body: string
+
+preserve:
+  response_determinism >= 1
+  request_validation_coverage >= 1
+
+constraint:
+  sanitize untrusted request payloads
+  reject malformed request structure
+  deterministic response framing
+
+emit python

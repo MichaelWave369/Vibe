@@ -1,0 +1,17 @@
+[package]
+name = "vibe_vector"
+version = "0.1.0"
+description = "Vibe standard library vector retrieval and embedding contracts"
+
+[bridge]
+measurement_safe_ratio = 0.85
+epsilon_floor = 0.02
+
+[emit]
+default_target = "python"
+
+[dependencies]
+
+[metadata]
+domain = "scientific_simulation"
+tags = ["stdlib", "vector", "retrieval", "phase-8.4"]
