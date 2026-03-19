@@ -1,0 +1,32 @@
+{
+  "version": "v1",
+  "entries": [
+    {
+      "source": "vibe/examples/payment_router.vibe",
+      "target": "python",
+      "labels": {
+        "epsilon_pre": 0.90,
+        "epsilon_post": 0.92
+      },
+      "notes": "reference payment intent"
+    },
+    {
+      "source": "vibe/examples/edge_contract_ts.vibe",
+      "target": "typescript",
+      "labels": {
+        "epsilon_pre": 0.90,
+        "epsilon_post": 0.91
+      },
+      "notes": "typescript edge contract"
+    },
+    {
+      "source": "vibe/examples/sovereign_bridge.vibe",
+      "target": "python",
+      "labels": {
+        "epsilon_pre": 0.90,
+        "epsilon_post": 0.95
+      },
+      "notes": "experimental module case"
+    }
+  ]
+}

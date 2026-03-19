@@ -1,0 +1,20 @@
+intent SharedIntentProjection:
+  goal: "Project normalized intent metadata into typed payloads for cross-runtime integration."
+  inputs:
+    intent_id: string
+    signal: number
+  outputs:
+    payload: string
+
+preserve:
+  readability = high
+
+constraint:
+  deterministic field mapping
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+emit typescript
