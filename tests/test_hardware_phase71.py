@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from vibe.cli import main
+from vibe.diff import compute_intent_diff
 from vibe.emitter import emit_code
 from vibe.hardware import derive_hardware_metadata, evaluate_hardware_generated_code
 from vibe.ir import ast_to_ir
@@ -50,6 +51,22 @@ def test_hardware_loop_diagnostic_detection() -> None:
     issues, obligations = evaluate_hardware_generated_code(ir, "process(clk)\nbegin\n y <= y;\nend")
     assert any(i["issue_id"] == "hardware.combinational_loop.risk" for i in issues)
     assert any(o["status"] == "violated" for o in obligations)
+
+
+def test_hardware_invalid_timing_operator_surfaces_violation() -> None:
+    source = _hardware_source("vhdl").replace("timing < 10ns", "timing > 10ns")
+    ir = ast_to_ir(parse_source(source))
+    issues = ir.module.hardware_issues
+    obligations = ir.module.hardware_obligations
+    assert any(i["issue_id"] == "hardware.timing.operator" for i in issues)
+    assert any(o["obligation_id"].startswith("hardware.timing.") and o["status"] == "violated" for o in obligations)
+
+
+def test_hardware_diff_surfaces_hardware_metadata_changes() -> None:
+    old_ir = ast_to_ir(parse_source(_hardware_source("vhdl")))
+    new_ir = ast_to_ir(parse_source(_hardware_source("vhdl").replace("timing < 10ns", "timing <= 8ns")))
+    diff = compute_intent_diff(old_ir, new_ir)
+    assert any(c.category == "hardware" and c.item == "hardware_summary" for c in diff.changes)
 
 
 def test_deterministic_vhdl_and_systemverilog_emission() -> None:
