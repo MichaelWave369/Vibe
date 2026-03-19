@@ -211,7 +211,7 @@ Vibe includes a stdio Language Server for editor integration (diagnostics, symbo
 
 `vibec ci-check` provides deterministic bridge-check outputs for local CI and GitHub Actions usage.
 
-`merge-verify --report json` now includes bridge-aware `verification_context` (base/left/right/merged summaries + merged-vs-base bridge delta) and conservative `intent_conflicts` to distinguish structural merge conflicts from merged-but-preservation-regressed results.
+`merge-verify --report json` now includes bridge-aware `verification_context` (base/left/right/merged summaries + merged-vs-base bridge delta), conservative `intent_conflicts`, and a bounded `regression_evidence` block (top problematic obligations) for CI triage.
 
 ---
 

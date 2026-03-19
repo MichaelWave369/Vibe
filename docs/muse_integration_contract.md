@@ -130,6 +130,7 @@ Top-level JSON fields:
 - `verification` (only when merged)
 - `verification_context` (bridge-aware summaries for base/left/right/merged when available)
 - `intent_conflicts` (conservative intent-level conflict classifications for merged outputs)
+- `regression_evidence` (compact CI-focused summary of top problematic merged obligations)
 - `conflicts` (structured list on conflict)
 - `error` (for parse/runtime failures)
 
@@ -198,6 +199,51 @@ First-pass categories emitted only when grounded in merge + verification evidenc
 - `constraint_regression`
 - `preserve_regression`
 - `verification_regression` (fallback)
+
+### `regression_evidence` compact CI triage block (Phase 5B)
+
+`regression_evidence` is a bounded summary optimized for automation triage; it does not replace full verifier obligations.
+
+Shape:
+
+- `available`
+- `reason`
+- `total_problem_obligations`
+- `shown_problem_obligations`
+- `status_counts`
+- `severity_counts`
+- `selection_policy`
+- `top_problem_obligations`
+
+`top_problem_obligations` rows include:
+
+- `id`
+- `category`
+- `address`
+- `status`
+- `severity`
+- `message`
+
+Problem statuses currently included:
+
+- `violated`
+- `unknown`
+
+Deterministic selection/sort policy:
+
+- bounded to top 5 rows
+- sorted by:
+  1. severity priority (desc),
+  2. status priority (`violated` > `unknown`),
+  3. category (asc),
+  4. id (asc),
+  5. address (asc)
+
+Outcome behavior:
+
+- structural conflict / runtime error: `available=false` with explicit reason and no fake merged evidence
+- merged + verification passed: `available=true` with zero problem obligations
+- merged + verification failed/regressed: `available=true` with aggregate counts and top bounded evidence list
 
 `--write-merge-report <path>` behavior:
 

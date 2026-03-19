@@ -1,0 +1,17 @@
+{
+  "available": true,
+  "selection_policy": {
+    "ordering": [
+      "severity_priority(desc)",
+      "status_priority(violated>unknown)",
+      "category(asc)",
+      "id(asc)",
+      "address(asc)"
+    ],
+    "problem_statuses": [
+      "violated",
+      "unknown"
+    ],
+    "top_n": 5
+  }
+}

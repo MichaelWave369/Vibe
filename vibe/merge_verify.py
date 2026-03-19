@@ -12,6 +12,7 @@ from .parser import parse_source
 from .verifier import verify
 
 MERGE_VERIFY_SCHEMA_VERSION = "v1"
+REGRESSION_EVIDENCE_TOP_N = 5
 
 
 @dataclass(slots=True)
@@ -33,6 +34,7 @@ class MergeVerifyResult:
     verification: dict[str, object] | None
     verification_context: dict[str, object] | None = None
     intent_conflicts: list[dict[str, object]] | None = None
+    regression_evidence: dict[str, object] | None = None
     error: str | None = None
 
 
@@ -417,6 +419,98 @@ def _classify_intent_conflicts(
     return conflicts
 
 
+def _obligation_severity(*, critical: bool, status: str) -> str:
+    if critical:
+        return "error"
+    if status == "violated":
+        return "warning"
+    if status == "unknown":
+        return "advisory"
+    return "info"
+
+
+def _build_regression_evidence(
+    *,
+    merge_status: str,
+    merged_result: object | None,
+    unavailable_reason: str | None = None,
+) -> dict[str, object]:
+    if merge_status != "merged" or merged_result is None:
+        return {
+            "available": False,
+            "reason": unavailable_reason or "merged_verification_not_available",
+            "total_problem_obligations": 0,
+            "shown_problem_obligations": 0,
+            "status_counts": {},
+            "severity_counts": {},
+            "selection_policy": {
+                "top_n": REGRESSION_EVIDENCE_TOP_N,
+                "problem_statuses": ["violated", "unknown"],
+                "ordering": [
+                    "severity_priority(desc)",
+                    "status_priority(violated>unknown)",
+                    "category(asc)",
+                    "id(asc)",
+                    "address(asc)",
+                ],
+            },
+            "top_problem_obligations": [],
+        }
+
+    status_priority = {"violated": 2, "unknown": 1}
+    severity_priority = {"error": 3, "warning": 2, "advisory": 1, "info": 0}
+    problems: list[dict[str, object]] = []
+    status_counts: dict[str, int] = {}
+    severity_counts: dict[str, int] = {}
+    for o in merged_result.obligations:
+        if o.status not in {"violated", "unknown"}:
+            continue
+        severity = _obligation_severity(critical=bool(o.critical), status=str(o.status))
+        status_counts[o.status] = status_counts.get(o.status, 0) + 1
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+        problems.append(
+            {
+                "id": o.obligation_id,
+                "category": o.category,
+                "address": o.source_location,
+                "status": o.status,
+                "severity": severity,
+                "message": o.description,
+            }
+        )
+    problems_sorted = sorted(
+        problems,
+        key=lambda row: (
+            -severity_priority.get(str(row["severity"]), 0),
+            -status_priority.get(str(row["status"]), 0),
+            str(row["category"]),
+            str(row["id"]),
+            str(row.get("address") or ""),
+        ),
+    )
+    top = problems_sorted[:REGRESSION_EVIDENCE_TOP_N]
+    return {
+        "available": True,
+        "reason": None,
+        "total_problem_obligations": len(problems_sorted),
+        "shown_problem_obligations": len(top),
+        "status_counts": status_counts,
+        "severity_counts": severity_counts,
+        "selection_policy": {
+            "top_n": REGRESSION_EVIDENCE_TOP_N,
+            "problem_statuses": ["violated", "unknown"],
+            "ordering": [
+                "severity_priority(desc)",
+                "status_priority(violated>unknown)",
+                "category(asc)",
+                "id(asc)",
+                "address(asc)",
+            ],
+        },
+        "top_problem_obligations": top,
+    }
+
+
 def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerifyResult:
     try:
         base_summary, base_ir, _ = _verification_summary(base_text)
@@ -439,6 +533,11 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
                 "bridge_score_delta_vs_base": None,
             },
             intent_conflicts=[],
+            regression_evidence=_build_regression_evidence(
+                merge_status="error",
+                merged_result=None,
+                unavailable_reason="merge_verify_input_error",
+            ),
             error=str(exc),
         )
 
@@ -628,6 +727,11 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
                 "bridge_score_delta_vs_base": None,
             },
             intent_conflicts=[],
+            regression_evidence=_build_regression_evidence(
+                merge_status="conflict",
+                merged_result=None,
+                unavailable_reason="merge_conflict_no_merged_spec",
+            ),
         )
 
     merged_text = _to_vibe_text(
@@ -675,6 +779,7 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
             "bridge_score_delta_vs_base": bridge_delta,
         },
         intent_conflicts=intent_conflicts,
+        regression_evidence=_build_regression_evidence(merge_status="merged", merged_result=merged_result),
     )
 
 
@@ -701,6 +806,7 @@ def merge_verify_payload(
         "verification": result.verification,
         "verification_context": result.verification_context,
         "intent_conflicts": list(result.intent_conflicts or []),
+        "regression_evidence": result.regression_evidence,
         "conflicts": [
             {
                 "address": c.address,
@@ -748,6 +854,11 @@ def render_merge_verify_human(result: MergeVerifyResult) -> str:
         lines.append("intent_conflicts:")
         for c in result.intent_conflicts:
             lines.append(f"  - {c['conflict_type']} @ {c['address']}: {c['message']}")
+    if result.regression_evidence is not None:
+        lines.append("regression_evidence:")
+        lines.append(f"  available: {result.regression_evidence.get('available')}")
+        lines.append(f"  total_problem_obligations: {result.regression_evidence.get('total_problem_obligations')}")
+        lines.append(f"  shown_problem_obligations: {result.regression_evidence.get('shown_problem_obligations')}")
     return "\n".join(lines)
 
 
