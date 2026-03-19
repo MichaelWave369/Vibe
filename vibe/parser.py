@@ -26,7 +26,7 @@ from .ast import (
 from .grammar import GRAMMAR
 
 COMPARISON_OPS = ("<=", ">=", "<", ">", "=")
-PRELUDE_PREFIXES = ("vibe_version ", "import ", "module ", "type ", "enum ", "interface ")
+PRELUDE_PREFIXES = ("vibe_version ", "domain ", "import ", "module ", "type ", "enum ", "interface ")
 
 
 class ParseError(ValueError):
@@ -236,6 +236,7 @@ def parse_source(source: str) -> Program:
 
     i = 0
     vibe_version: str | None = None
+    domain_profile: str | None = None
     imports: list[str] = []
     modules: list[str] = []
     types: list[str] = []
@@ -248,6 +249,8 @@ def parse_source(source: str) -> Program:
             raise ParseError("Top-level declarations cannot be indented", tk.line, tk.indent + 1)
         if tk.text.startswith("vibe_version "):
             vibe_version = tk.text.split(maxsplit=1)[1].strip()
+        elif tk.text.startswith("domain "):
+            domain_profile = tk.text.split(maxsplit=1)[1].strip()
         elif tk.text.startswith("import "):
             imports.append(tk.text.split(maxsplit=1)[1].strip())
         elif tk.text.startswith("module "):
@@ -451,6 +454,7 @@ def parse_source(source: str) -> Program:
         agents=agents,
         orchestrations=orchestrations,
         delegations=delegations,
+        domain_profile=domain_profile,
     )
 
     if tesla_raw is not None:

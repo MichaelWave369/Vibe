@@ -221,6 +221,15 @@ class VerificationResult:
     delegation_obligations: list[dict[str, object]] = field(default_factory=list)
     runtime_monitor_summary: dict[str, object] = field(default_factory=dict)
     package_context: dict[str, object] = field(default_factory=dict)
+    domain_profile: str = "general"
+    domain_summary: dict[str, object] = field(default_factory=dict)
+    domain_issues: list[dict[str, object]] = field(default_factory=list)
+    domain_obligations: list[dict[str, object]] = field(default_factory=list)
+    domain_target_metadata: dict[str, object] = field(default_factory=dict)
+    hardware_summary: dict[str, object] = field(default_factory=dict)
+    hardware_issues: list[dict[str, object]] = field(default_factory=list)
+    hardware_obligations: list[dict[str, object]] = field(default_factory=list)
+    hardware_target_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -999,6 +1008,41 @@ def _build_result(
         )
         for row in delegation_rows
     ]
+    hardware_codegen_issues: list[dict[str, object]] = []
+    hardware_codegen_obligations: list[dict[str, object]] = []
+    if ir.domain_profile == "hardware":
+        from .hardware import evaluate_hardware_generated_code
+
+        hardware_codegen_issues, hardware_codegen_obligations = evaluate_hardware_generated_code(ir, generated_code)
+
+    hardware_issues_all = sorted(
+        list(ir.module.hardware_issues) + list(hardware_codegen_issues),
+        key=lambda r: str(r.get("issue_id", "")),
+    )
+    hardware_obligations_all = sorted(
+        list(ir.module.hardware_obligations) + list(hardware_codegen_obligations),
+        key=lambda r: str(r.get("obligation_id", "")),
+    )
+    domain_issues_all = sorted(
+        list(ir.module.domain_issues) + list(hardware_codegen_issues),
+        key=lambda r: str(r.get("issue_id", "")),
+    )
+    domain_obligation_rows = sorted(
+        list(ir.module.domain_obligations) + list(hardware_codegen_obligations),
+        key=lambda r: str(r.get("obligation_id", "")),
+    )
+    domain_obligations = [
+        VerificationObligation(
+            obligation_id=str(row.get("obligation_id", "domain.obligation")),
+            category=str(row.get("category", "domain")),
+            description=str(row.get("description", "domain obligation")),
+            source_location=str(row.get("source_location")) if row.get("source_location") is not None else None,
+            status=str(row.get("status", "unknown")),
+            evidence=str(row.get("evidence")) if row.get("evidence") is not None else None,
+            critical=bool(row.get("critical", False)),
+        )
+        for row in domain_obligation_rows
+    ]
     all_obligations = (
         list(obligations)
         + semantic_obligations
@@ -1008,6 +1052,7 @@ def _build_result(
         + graph_obligations
         + boundary_obligations
         + delegation_obligations
+        + domain_obligations
     )
 
     counts = _compute_obligation_counts(all_obligations)
@@ -1097,6 +1142,15 @@ def _build_result(
         delegation_issues=delegation_issues_as_dicts(delegation_issues),
         delegation_obligations=delegation_rows,
         runtime_monitor_summary=dict(ir.module.runtime_monitor),
+        domain_profile=ir.domain_profile,
+        domain_summary=dict(ir.module.domain_summary),
+        domain_issues=domain_issues_all,
+        domain_obligations=domain_obligation_rows,
+        domain_target_metadata=dict(ir.module.domain_target_metadata),
+        hardware_summary=dict(ir.module.hardware_summary),
+        hardware_issues=hardware_issues_all,
+        hardware_obligations=hardware_obligations_all,
+        hardware_target_metadata=dict(ir.module.hardware_target_metadata),
     )
 
 

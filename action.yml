@@ -1,0 +1,62 @@
+name: "Vibe Bridge Check"
+description: "Run deterministic Vibe bridge verification over .vibe files in CI"
+author: "Vibe"
+branding:
+  icon: "check-circle"
+  color: "purple"
+inputs:
+  files:
+    description: "Glob for .vibe files"
+    required: false
+    default: "**/*.vibe"
+  fail-on:
+    description: "Comma-separated fail conditions (e.g. ENTROPY_NOISE,bridge_score_below_threshold:0.9)"
+    required: false
+    default: ""
+  report-json-path:
+    description: "Path for machine-readable JSON report"
+    required: false
+    default: ".vibe_ci/bridge_report.json"
+  backend:
+    description: "Verification backend"
+    required: false
+    default: "heuristic"
+  fallback-backend:
+    description: "Optional fallback backend"
+    required: false
+    default: ""
+  with-proofs:
+    description: "Write proof artifacts"
+    required: false
+    default: "false"
+  with-tests:
+    description: "Generate intent-guided tests"
+    required: false
+    default: "false"
+outputs:
+  files_checked:
+    description: "Total .vibe files checked"
+    value: ${{ steps.bridge.outputs.files_checked }}
+  files_failed:
+    description: "Total files that failed verification or fail-on gating"
+    value: ${{ steps.bridge.outputs.files_failed }}
+  worst_bridge_score:
+    description: "Worst bridge score across checked files"
+    value: ${{ steps.bridge.outputs.worst_bridge_score }}
+  report_json_path:
+    description: "Path to deterministic JSON report"
+    value: ${{ steps.bridge.outputs.report_json_path }}
+  summary_markdown_path:
+    description: "Path to markdown summary"
+    value: ${{ steps.bridge.outputs.summary_markdown_path }}
+  proof_paths:
+    description: "JSON array of proof artifact paths"
+    value: ${{ steps.bridge.outputs.proof_paths }}
+runs:
+  using: "composite"
+  steps:
+    - id: bridge
+      name: Run Vibe bridge check
+      shell: bash
+      run: |
+        python .github/actions/bridge-check/run_bridge_check.py

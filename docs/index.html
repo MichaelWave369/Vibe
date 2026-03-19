@@ -229,6 +229,32 @@ emit python</code></pre>
           thresholds, and offline runtime events are scored for drift/alerts/fallback pressure relative to compiled
           contracts (observational only; compile-time proof remains authoritative).
         </p>
+        <p>
+          Phase 6.2 adds a local-first intent registry: <code>publish</code>, <code>search</code>,
+          <code>registry-inspect</code>, and <code>compat</code> now index reusable package intent contracts with
+          proof/build metadata in deterministic local JSON entries. This is local publication only; a hosted registry
+          remains a future roadmap phase.
+        </p>
+        <p>
+          Phase 6.3 adds a real LSP server (<code>vibec lsp</code>) with diagnostics, hover, completion,
+          definition lookup, document symbols, semantic tokens, and lightweight intent lenses. Editor feedback is
+          fast/local by default, while heavier preservation verification remains compile/save oriented.
+        </p>
+        <p>
+          Phase 6.4 adds native GitHub Actions bridge checking via deterministic CI reports and PR/job summaries.
+          Repositories can gate merges on Vibe preservation outcomes using configurable <code>fail-on</code> conditions
+          (including verdicts and bridge-score thresholds) without requiring a hosted Vibe service.
+        </p>
+        <p>
+          Phase 7A adds a unified cross-domain intent architecture for hardware, scientific simulation, legal/compliance,
+          and genomics tracks with shared domain profiles, target-plugin scaffolds, and domain metadata flowing through
+          IR/report/proof surfaces.
+        </p>
+        <p>
+          Phase 7.1 delivers the first real hardware slice: deterministic <code>emit vhdl</code> and
+          <code>emit systemverilog</code> RTL stubs, hardware preserve/constraint checks (timing, latency cycles,
+          no combinational loops, synchronous/deterministic), and hardware metadata in report/proof outputs.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

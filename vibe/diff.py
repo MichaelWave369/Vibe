@@ -195,6 +195,48 @@ def _diff_agentception(entries: list[IntentDiffEntry], old: IR, new: IR) -> None
         )
 
 
+def _diff_hardware(entries: list[IntentDiffEntry], old: IR, new: IR) -> None:
+    if old.module.hardware_summary != new.module.hardware_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "hardware",
+                "hardware_summary",
+                "modified",
+                "unknown",
+                old.module.hardware_summary,
+                new.module.hardware_summary,
+                "hardware summary changed",
+            ),
+        )
+    if old.module.hardware_target_metadata != new.module.hardware_target_metadata:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "hardware",
+                "hardware_target_metadata",
+                "modified",
+                "unknown",
+                old.module.hardware_target_metadata,
+                new.module.hardware_target_metadata,
+                "hardware target metadata changed",
+            ),
+        )
+    if old.module.hardware_issues != new.module.hardware_issues:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "hardware",
+                "hardware_issues",
+                "modified",
+                "unknown",
+                old.module.hardware_issues,
+                new.module.hardware_issues,
+                "hardware issues changed",
+            ),
+        )
+
+
 def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
     entries: list[IntentDiffEntry] = []
 
@@ -222,6 +264,7 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
     _diff_tesla(entries, old_ir, new_ir)
     _diff_agentora(entries, old_ir, new_ir)
     _diff_agentception(entries, old_ir, new_ir)
+    _diff_hardware(entries, old_ir, new_ir)
     if old_ir.module.semantic_summary != new_ir.module.semantic_summary:
         _append(
             entries,
