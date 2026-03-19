@@ -12,7 +12,9 @@ from .parser import parse_source
 from .verifier import verify
 
 MERGE_VERIFY_SCHEMA_VERSION = "v1"
-REGRESSION_EVIDENCE_TOP_N = 5
+REGRESSION_EVIDENCE_DEFAULT_TOP_N = 5
+REGRESSION_EVIDENCE_MIN_TOP_N = 1
+REGRESSION_EVIDENCE_MAX_TOP_N = 20
 
 
 @dataclass(slots=True)
@@ -433,8 +435,26 @@ def _build_regression_evidence(
     *,
     merge_status: str,
     merged_result: object | None,
+    requested_top_n: int | None = None,
     unavailable_reason: str | None = None,
 ) -> dict[str, object]:
+    requested = requested_top_n if requested_top_n is not None else REGRESSION_EVIDENCE_DEFAULT_TOP_N
+    effective_top_n = max(REGRESSION_EVIDENCE_MIN_TOP_N, min(REGRESSION_EVIDENCE_MAX_TOP_N, int(requested)))
+    selection_policy = {
+        "default_top_n": REGRESSION_EVIDENCE_DEFAULT_TOP_N,
+        "requested_top_n": int(requested),
+        "effective_top_n": effective_top_n,
+        "min_top_n": REGRESSION_EVIDENCE_MIN_TOP_N,
+        "max_top_n": REGRESSION_EVIDENCE_MAX_TOP_N,
+        "problem_statuses": ["violated", "unknown"],
+        "ordering": [
+            "severity_priority(desc)",
+            "status_priority(violated>unknown)",
+            "category(asc)",
+            "id(asc)",
+            "address(asc)",
+        ],
+    }
     if merge_status != "merged" or merged_result is None:
         return {
             "available": False,
@@ -443,17 +463,7 @@ def _build_regression_evidence(
             "shown_problem_obligations": 0,
             "status_counts": {},
             "severity_counts": {},
-            "selection_policy": {
-                "top_n": REGRESSION_EVIDENCE_TOP_N,
-                "problem_statuses": ["violated", "unknown"],
-                "ordering": [
-                    "severity_priority(desc)",
-                    "status_priority(violated>unknown)",
-                    "category(asc)",
-                    "id(asc)",
-                    "address(asc)",
-                ],
-            },
+            "selection_policy": selection_policy,
             "top_problem_obligations": [],
         }
 
@@ -488,7 +498,7 @@ def _build_regression_evidence(
             str(row.get("address") or ""),
         ),
     )
-    top = problems_sorted[:REGRESSION_EVIDENCE_TOP_N]
+    top = problems_sorted[:effective_top_n]
     return {
         "available": True,
         "reason": None,
@@ -496,22 +506,12 @@ def _build_regression_evidence(
         "shown_problem_obligations": len(top),
         "status_counts": status_counts,
         "severity_counts": severity_counts,
-        "selection_policy": {
-            "top_n": REGRESSION_EVIDENCE_TOP_N,
-            "problem_statuses": ["violated", "unknown"],
-            "ordering": [
-                "severity_priority(desc)",
-                "status_priority(violated>unknown)",
-                "category(asc)",
-                "id(asc)",
-                "address(asc)",
-            ],
-        },
+        "selection_policy": selection_policy,
         "top_problem_obligations": top,
     }
 
 
-def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerifyResult:
+def merge_verify(base_text: str, left_text: str, right_text: str, regression_top_n: int | None = None) -> MergeVerifyResult:
     try:
         base_summary, base_ir, _ = _verification_summary(base_text)
         left_summary, left_ir, _ = _verification_summary(left_text)
@@ -536,6 +536,7 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
             regression_evidence=_build_regression_evidence(
                 merge_status="error",
                 merged_result=None,
+                requested_top_n=regression_top_n,
                 unavailable_reason="merge_verify_input_error",
             ),
             error=str(exc),
@@ -730,6 +731,7 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
             regression_evidence=_build_regression_evidence(
                 merge_status="conflict",
                 merged_result=None,
+                requested_top_n=regression_top_n,
                 unavailable_reason="merge_conflict_no_merged_spec",
             ),
         )
@@ -779,7 +781,11 @@ def merge_verify(base_text: str, left_text: str, right_text: str) -> MergeVerify
             "bridge_score_delta_vs_base": bridge_delta,
         },
         intent_conflicts=intent_conflicts,
-        regression_evidence=_build_regression_evidence(merge_status="merged", merged_result=merged_result),
+        regression_evidence=_build_regression_evidence(
+            merge_status="merged",
+            merged_result=merged_result,
+            requested_top_n=regression_top_n,
+        ),
     )
 
 

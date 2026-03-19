@@ -79,6 +79,7 @@ emit python
     assert payload["regression_evidence"]["available"] is True
     assert payload["regression_evidence"]["total_problem_obligations"] == 0
     assert payload["regression_evidence"]["top_problem_obligations"] == []
+    assert payload["regression_evidence"]["selection_policy"]["effective_top_n"] == 5
     for key in ["bridge_score", "epsilon_post", "measurement_ratio", "obligations_total", "obligations_satisfied"]:
         assert key in payload["verification"]
 
@@ -175,6 +176,7 @@ emit python
     assert payload["intent_conflicts"] == []
     assert payload["regression_evidence"]["available"] is False
     assert payload["regression_evidence"]["reason"] == "merge_conflict_no_merged_spec"
+    assert payload["regression_evidence"]["selection_policy"]["effective_top_n"] == 5
     assert payload["conflicts"]
     c0 = payload["conflicts"][0]
     assert {"address", "conflict_type", "base_value", "left_value", "right_value"}.issubset(c0.keys())
@@ -351,6 +353,66 @@ emit python
             x[4],
         ),
     )
+
+
+def test_merge_verify_regression_top_n_custom_and_clamped(tmp_path: Path, capsys) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+emit python
+""",
+    )
+    left = _write(
+        tmp_path / "left.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+preserve:
+  p0 = false
+  p1 = false
+  p2 = false
+  p3 = false
+  p4 = false
+  p5 = false
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 1.20
+emit python
+""",
+    )
+    right = _write(tmp_path / "right.vibe", base.read_text(encoding="utf-8"))
+
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--regression-top-n", "3"]) == 1
+    payload_small = json.loads(capsys.readouterr().out)
+    evidence_small = payload_small["regression_evidence"]
+    expected_policy = json.loads(Path("tests/fixtures/merge_verify/regression_policy_topn3.json").read_text(encoding="utf-8"))
+    assert evidence_small["selection_policy"] == expected_policy
+    assert evidence_small["shown_problem_obligations"] <= 3
+
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--regression-top-n", "999"]) == 1
+    payload_high = json.loads(capsys.readouterr().out)
+    policy_high = payload_high["regression_evidence"]["selection_policy"]
+    assert policy_high["requested_top_n"] == 999
+    assert policy_high["effective_top_n"] == policy_high["max_top_n"] == 20
+
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--regression-top-n", "0"]) == 1
+    payload_low = json.loads(capsys.readouterr().out)
+    policy_low = payload_low["regression_evidence"]["selection_policy"]
+    assert policy_low["requested_top_n"] == 0
+    assert policy_low["effective_top_n"] == policy_low["min_top_n"] == 1
 
 
 def test_merge_verify_write_merged_only_on_success(tmp_path: Path, capsys) -> None:
@@ -609,6 +671,8 @@ emit python
             "json",
             "--write-merge-report",
             str(report_ok),
+            "--regression-top-n",
+            "3",
         ]
     )
     payload_ok = json.loads(report_ok.read_text(encoding="utf-8"))
@@ -616,6 +680,7 @@ emit python
     assert payload_ok["verification"] is not None
     assert payload_ok["verification_context"]["available"] is True
     assert payload_ok["regression_evidence"]["available"] is True
+    assert payload_ok["regression_evidence"]["selection_policy"]["effective_top_n"] == 3
     assert rc in {0, 1}
 
 

@@ -204,6 +204,8 @@ First-pass categories emitted only when grounded in merge + verification evidenc
 
 `regression_evidence` is a bounded summary optimized for automation triage; it does not replace full verifier obligations.
 
+`vibec merge-verify` supports optional `--regression-top-n <int>` to tune display verbosity only.
+
 Shape:
 
 - `available`
@@ -238,6 +240,20 @@ Deterministic selection/sort policy:
   3. category (asc),
   4. id (asc),
   5. address (asc)
+
+`selection_policy` explicitly exposes:
+
+- `default_top_n`
+- `requested_top_n`
+- `effective_top_n`
+- `min_top_n`
+- `max_top_n`
+
+Top-N clamping behavior:
+
+- values below `min_top_n` clamp up to min
+- values above `max_top_n` clamp down to max
+- this affects only the number of shown rows, not merge/verification semantics
 
 Outcome behavior:
 

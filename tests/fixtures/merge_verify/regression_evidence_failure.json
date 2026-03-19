@@ -1,6 +1,11 @@
 {
   "available": true,
   "selection_policy": {
+    "default_top_n": 5,
+    "requested_top_n": 5,
+    "effective_top_n": 5,
+    "min_top_n": 1,
+    "max_top_n": 20,
     "ordering": [
       "severity_priority(desc)",
       "status_priority(violated>unknown)",
@@ -11,7 +16,6 @@
     "problem_statuses": [
       "violated",
       "unknown"
-    ],
-    "top_n": 5
+    ]
   }
 }

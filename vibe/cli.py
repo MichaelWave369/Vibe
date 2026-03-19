@@ -1229,11 +1229,13 @@ def _merge_verify(
     report: ReportMode,
     write_merged: Path | None,
     write_merge_report_path: Path | None,
+    regression_top_n: int | None = None,
 ) -> int:
     result = merge_verify(
         base_path.read_text(encoding="utf-8"),
         left_path.read_text(encoding="utf-8"),
         right_path.read_text(encoding="utf-8"),
+        regression_top_n=regression_top_n,
     )
     payload = merge_verify_payload(
         result,
@@ -1554,6 +1556,12 @@ def build_parser() -> argparse.ArgumentParser:
     mv.add_argument("--report", choices=["human", "json"], default="human")
     mv.add_argument("--write-merged", type=Path, default=None, help="Write merged .vibe file on successful merge")
     mv.add_argument("--write-merge-report", type=Path, default=None, help="Write machine-readable merge-verify JSON report")
+    mv.add_argument(
+        "--regression-top-n",
+        type=int,
+        default=None,
+        help="Max number of regression_evidence top_problem_obligations rows to show (clamped to safe bounds)",
+    )
 
     return parser
 
@@ -1714,6 +1722,7 @@ def main(argv: list[str] | None = None) -> int:
             args.report,
             write_merged=args.write_merged,
             write_merge_report_path=args.write_merge_report,
+            regression_top_n=args.regression_top_n,
         )
 
     parser.error("unknown command")
