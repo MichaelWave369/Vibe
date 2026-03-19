@@ -1,0 +1,19 @@
+domain legal_compliance
+
+intent LoggingGuardrail:
+  goal: "Prevent disclosure of personal identifiers in operational logs"
+  inputs:
+    customer_name: string
+    event: string
+  outputs:
+    status: string
+
+preserve:
+  GDPR compliance
+  data minimization
+
+constraint:
+  no PII in logs
+  consent required
+
+emit compliance_report

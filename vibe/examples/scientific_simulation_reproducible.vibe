@@ -1,0 +1,20 @@
+domain scientific_simulation
+
+intent ReproducibleParticleDrift:
+  goal: "Preserve mass accounting with seeded stochastic perturbations"
+  inputs:
+    dt: number
+    mass_in: number
+  outputs:
+    mass_out: number
+
+preserve:
+  conservation of mass
+  bounded_error <= 0.01
+
+constraint:
+  reproducible
+  seeded_rng
+  deterministic_fp
+
+emit julia
