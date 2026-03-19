@@ -1270,7 +1270,11 @@ def _merge_verify(
     if result.merge_status == "conflict":
         return 1
     assert result.verification is not None
-    return 0 if bool(result.verification.get("passed")) else 1
+    if not bool(result.verification.get("passed")):
+        return 1
+    if bool((result.policy_evaluation or {}).get("requested")) and not bool((result.policy_evaluation or {}).get("passed")):
+        return 1
+    return 0
 
 
 def _interchange_from_text(input_path: Path, report: ReportMode, write_output: Path | None) -> int:

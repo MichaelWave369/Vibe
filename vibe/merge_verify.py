@@ -37,6 +37,7 @@ class MergeVerifyResult:
     verification_context: dict[str, object] | None = None
     intent_conflicts: list[dict[str, object]] | None = None
     regression_evidence: dict[str, object] | None = None
+    policy_evaluation: dict[str, object] | None = None
     error: str | None = None
 
 
@@ -552,6 +553,13 @@ def merge_verify(
                 include_evidence=regression_include_evidence,
                 unavailable_reason="merge_verify_input_error",
             ),
+            policy_evaluation=_build_policy_evaluation(
+                merge_status="error",
+                verification=None,
+                intent_conflicts=[],
+                require_merged_bridge=require_merged_bridge,
+                fail_on_intent_conflicts=fail_on_intent_conflicts,
+            ),
             error=str(exc),
         )
 
@@ -748,6 +756,13 @@ def merge_verify(
                 include_evidence=regression_include_evidence,
                 unavailable_reason="merge_conflict_no_merged_spec",
             ),
+            policy_evaluation=_build_policy_evaluation(
+                merge_status="conflict",
+                verification=None,
+                intent_conflicts=[],
+                require_merged_bridge=require_merged_bridge,
+                fail_on_intent_conflicts=fail_on_intent_conflicts,
+            ),
         )
 
     merged_text = _to_vibe_text(
@@ -828,6 +843,7 @@ def merge_verify_payload(
         "verification_context": result.verification_context,
         "intent_conflicts": list(result.intent_conflicts or []),
         "regression_evidence": result.regression_evidence,
+        "policy_evaluation": result.policy_evaluation,
         "conflicts": [
             {
                 "address": c.address,
@@ -880,6 +896,11 @@ def render_merge_verify_human(result: MergeVerifyResult) -> str:
         lines.append(f"  available: {result.regression_evidence.get('available')}")
         lines.append(f"  total_problem_obligations: {result.regression_evidence.get('total_problem_obligations')}")
         lines.append(f"  shown_problem_obligations: {result.regression_evidence.get('shown_problem_obligations')}")
+    if result.policy_evaluation is not None:
+        lines.append("policy_evaluation:")
+        lines.append(f"  requested: {result.policy_evaluation.get('requested')}")
+        lines.append(f"  available: {result.policy_evaluation.get('available')}")
+        lines.append(f"  passed: {result.policy_evaluation.get('passed')}")
     return "\n".join(lines)
 
 

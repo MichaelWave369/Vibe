@@ -80,6 +80,10 @@ emit python
     assert payload["regression_evidence"]["total_problem_obligations"] == 0
     assert payload["regression_evidence"]["top_problem_obligations"] == []
     assert payload["regression_evidence"]["selection_policy"]["effective_top_n"] == 5
+    assert payload["policy_evaluation"]["requested"] is False
+    assert payload["policy_evaluation"]["available"] is True
+    assert payload["policy_evaluation"]["passed"] is True
+    assert payload["policy_evaluation"]["checks"] == []
     for key in ["bridge_score", "epsilon_post", "measurement_ratio", "obligations_total", "obligations_satisfied"]:
         assert key in payload["verification"]
 
@@ -645,6 +649,7 @@ emit python
     assert "verification_context" in payload_conflict
     assert "intent_conflicts" in payload_conflict
     assert "regression_evidence" in payload_conflict
+    assert "policy_evaluation" in payload_conflict
 
     capsys.readouterr()
     left_ok = _write(
@@ -681,7 +686,261 @@ emit python
     assert payload_ok["verification_context"]["available"] is True
     assert payload_ok["regression_evidence"]["available"] is True
     assert payload_ok["regression_evidence"]["selection_policy"]["effective_top_n"] == 3
+    assert payload_ok["policy_evaluation"]["requested"] is False
     assert rc in {0, 1}
+
+
+def test_merge_verify_policy_require_merged_bridge_pass_and_fail(tmp_path: Path, capsys) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+emit python
+""",
+    )
+    left = _write(
+        tmp_path / "left.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+constraint:
+  deterministic ordering
+bridge:
+  epsilon_floor = 0.03
+  measurement_safe_ratio = 0.85
+emit python
+""",
+    )
+    right = _write(tmp_path / "right.vibe", base.read_text(encoding="utf-8"))
+
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json"]) == 0
+    baseline = json.loads(capsys.readouterr().out)
+    bridge = float(baseline["verification"]["bridge_score"])
+
+    assert (
+        main(
+            [
+                "merge-verify",
+                str(base),
+                str(left),
+                str(right),
+                "--report",
+                "json",
+                "--require-merged-bridge",
+                str(bridge - 0.0001),
+            ]
+        )
+        == 0
+    )
+    pass_payload = json.loads(capsys.readouterr().out)
+    pass_check = pass_payload["policy_evaluation"]["checks"][0]
+    assert pass_payload["policy_evaluation"]["requested"] is True
+    assert pass_payload["policy_evaluation"]["passed"] is True
+    assert pass_check["policy_name"] == "require_merged_bridge"
+    assert pass_check["available"] is True
+    assert pass_check["passed"] is True
+
+    assert (
+        main(
+            [
+                "merge-verify",
+                str(base),
+                str(left),
+                str(right),
+                "--report",
+                "json",
+                "--require-merged-bridge",
+                str(bridge + 0.5),
+            ]
+        )
+        == 1
+    )
+    fail_payload = json.loads(capsys.readouterr().out)
+    fail_check = fail_payload["policy_evaluation"]["checks"][0]
+    assert fail_payload["merge_status"] == "merged"
+    assert fail_payload["verification"]["passed"] is True
+    assert fail_payload["policy_evaluation"]["requested"] is True
+    assert fail_payload["policy_evaluation"]["passed"] is False
+    assert fail_check["policy_name"] == "require_merged_bridge"
+    assert fail_check["available"] is True
+    assert fail_check["passed"] is False
+    assert fail_check["reason"] == "threshold_not_met"
+
+
+def test_merge_verify_policy_fail_on_intent_conflicts(tmp_path: Path, capsys) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+emit python
+""",
+    )
+    left = _write(
+        tmp_path / "left.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 1.2
+emit python
+""",
+    )
+    right = _write(tmp_path / "right.vibe", base.read_text(encoding="utf-8"))
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--fail-on-intent-conflicts"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["merge_status"] == "merged"
+    assert payload["intent_conflicts"]
+    check = next(c for c in payload["policy_evaluation"]["checks"] if c["policy_name"] == "fail_on_intent_conflicts")
+    assert payload["policy_evaluation"]["requested"] is True
+    assert check["available"] is True
+    assert check["passed"] is False
+    assert check["reason"] == "intent_conflicts_present"
+
+
+def test_merge_verify_policy_unavailable_on_structural_conflict(tmp_path: Path, capsys) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+emit python
+""",
+    )
+    left = _write(
+        tmp_path / "left.vibe",
+        """
+intent M:
+  goal: "left-goal"
+  inputs:
+    x: number
+  outputs:
+    y: number
+emit python
+""",
+    )
+    right = _write(
+        tmp_path / "right.vibe",
+        """
+intent M:
+  goal: "right-goal"
+  inputs:
+    x: number
+  outputs:
+    y: number
+emit python
+""",
+    )
+    assert (
+        main(
+            [
+                "merge-verify",
+                str(base),
+                str(left),
+                str(right),
+                "--report",
+                "json",
+                "--require-merged-bridge",
+                "0.5",
+                "--fail-on-intent-conflicts",
+            ]
+        )
+        == 1
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["merge_status"] == "conflict"
+    assert payload["policy_evaluation"]["requested"] is True
+    assert payload["policy_evaluation"]["available"] is False
+    assert payload["policy_evaluation"]["passed"] is False
+    checks = {c["policy_name"]: c for c in payload["policy_evaluation"]["checks"]}
+    assert checks["require_merged_bridge"]["available"] is False
+    assert checks["require_merged_bridge"]["reason"] == "merged_verification_not_available"
+    assert checks["fail_on_intent_conflicts"]["available"] is False
+    assert checks["fail_on_intent_conflicts"]["reason"] == "merged_result_not_available"
+
+
+def test_merge_verify_policy_multiple_flags_evaluate_together(tmp_path: Path, capsys) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+emit python
+""",
+    )
+    left = _write(
+        tmp_path / "left.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 1.2
+emit python
+""",
+    )
+    right = _write(tmp_path / "right.vibe", base.read_text(encoding="utf-8"))
+    assert (
+        main(
+            [
+                "merge-verify",
+                str(base),
+                str(left),
+                str(right),
+                "--report",
+                "json",
+                "--require-merged-bridge",
+                "0.9999",
+                "--fail-on-intent-conflicts",
+            ]
+        )
+        == 1
+    )
+    payload = json.loads(capsys.readouterr().out)
+    checks = payload["policy_evaluation"]["checks"]
+    assert payload["policy_evaluation"]["requested"] is True
+    assert len(checks) == 2
+    names = [c["policy_name"] for c in checks]
+    assert names == ["require_merged_bridge", "fail_on_intent_conflicts"]
 
 
 def test_diff_verification_context_failure_path_is_machine_readable(tmp_path: Path, capsys, monkeypatch) -> None:

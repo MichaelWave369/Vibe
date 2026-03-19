@@ -90,3 +90,30 @@ def test_snapshot_put_report_json_contract_fields(tmp_path: Path, capsys) -> Non
     assert payload["snapshot_store"] == str(store.resolve())
     assert payload["blob_path"].endswith(payload["snapshot_id"])
     assert payload["already_present"] is False
+
+
+def test_merge_verify_report_json_contract_policy_block(tmp_path: Path, capsys) -> None:
+    base = tmp_path / "base.vibe"
+    left = tmp_path / "left.vibe"
+    right = tmp_path / "right.vibe"
+    base.write_text(
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+emit python
+""",
+        encoding="utf-8",
+    )
+    left.write_text(base.read_text(encoding="utf-8"), encoding="utf-8")
+    right.write_text(base.read_text(encoding="utf-8"), encoding="utf-8")
+
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json"]) in {0, 1}
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == "v1"
+    assert payload["report_type"] == "merge_verify"
+    assert "policy_evaluation" in payload
+    assert {"requested", "available", "passed", "checks"}.issubset(payload["policy_evaluation"].keys())
