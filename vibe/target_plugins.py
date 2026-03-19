@@ -18,8 +18,8 @@ class TargetPlugin:
 _TARGETS: dict[str, TargetPlugin] = {
     "python": TargetPlugin("python", ".py", True, "general", "fully implemented"),
     "typescript": TargetPlugin("typescript", ".ts", True, "general", "fully implemented"),
-    "vhdl": TargetPlugin("vhdl", ".vhd", False, "hardware", "phase-7 scaffold emitter"),
-    "systemverilog": TargetPlugin("systemverilog", ".sv", False, "hardware", "phase-7 scaffold emitter"),
+    "vhdl": TargetPlugin("vhdl", ".vhd", True, "hardware", "phase-7.1 deterministic rtl emitter"),
+    "systemverilog": TargetPlugin("systemverilog", ".sv", True, "hardware", "phase-7.1 deterministic rtl emitter"),
     "julia": TargetPlugin("julia", ".jl", False, "scientific_simulation", "phase-7 scaffold emitter"),
     "compliance_report": TargetPlugin("compliance_report", ".md", False, "legal_compliance", "phase-7 scaffold emitter"),
     "snakemake": TargetPlugin("snakemake", ".smk", False, "genomics", "phase-7 scaffold emitter"),

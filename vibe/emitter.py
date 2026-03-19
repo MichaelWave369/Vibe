@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .generator_python import generate_python
+from .generator_systemverilog import generate_systemverilog
 from .generator_typescript import generate_typescript
+from .generator_vhdl import generate_vhdl
 from .ir import IR
 from .target_plugins import get_target_plugin
 
@@ -36,6 +38,22 @@ class TypeScriptEmitter(EmitterBackend):
         return generate_typescript(ir)
 
 
+class VHDLEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="vhdl", extension=".vhd")
+
+    def emit(self, ir: IR) -> str:
+        return generate_vhdl(ir)
+
+
+class SystemVerilogEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="systemverilog", extension=".sv")
+
+    def emit(self, ir: IR) -> str:
+        return generate_systemverilog(ir)
+
+
 class StubEmitter(EmitterBackend):
     def __init__(self, target: str, extension: str) -> None:
         super().__init__(target=target, extension=extension)
@@ -57,6 +75,8 @@ class StubEmitter(EmitterBackend):
 _BACKENDS = {
     "python": PythonEmitter(),
     "typescript": TypeScriptEmitter(),
+    "vhdl": VHDLEmitter(),
+    "systemverilog": SystemVerilogEmitter(),
 }
 
 

@@ -147,6 +147,10 @@ class IRModule:
     domain_issues: list[dict[str, object]] = field(default_factory=list)
     domain_obligations: list[dict[str, object]] = field(default_factory=list)
     domain_target_metadata: dict[str, object] = field(default_factory=dict)
+    hardware_summary: dict[str, object] = field(default_factory=dict)
+    hardware_issues: list[dict[str, object]] = field(default_factory=list)
+    hardware_obligations: list[dict[str, object]] = field(default_factory=list)
+    hardware_target_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

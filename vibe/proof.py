@@ -41,6 +41,7 @@ REQUIRED_FIELDS = {
     "runtime_monitor",
     "package_context",
     "domain",
+    "hardware",
     "notes",
 }
 
@@ -189,6 +190,12 @@ def build_proof_artifact(
             "obligations": result.domain_obligations,
             "target_metadata": result.domain_target_metadata,
         },
+        "hardware": {
+            "summary": result.hardware_summary,
+            "issues": result.hardware_issues,
+            "obligations": result.hardware_obligations,
+            "target_metadata": result.hardware_target_metadata,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -234,6 +241,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     monitor_meta = payload["runtime_monitor"]
     package_meta = payload["package_context"]
     domain_meta = payload["domain"]
+    hardware_meta = payload["hardware"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -264,5 +272,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"monitor_bridge_threshold: {monitor_meta.get('bridge_threshold')}",
             f"package: {package_meta.get('package_name', '<none>')}@{package_meta.get('package_version', '<none>')}",
             f"domain_profile: {domain_meta.get('profile', 'general')}",
+            f"hardware_issue_count: {len(hardware_meta.get('issues', []))}",
         ]
     )

@@ -226,6 +226,10 @@ class VerificationResult:
     domain_issues: list[dict[str, object]] = field(default_factory=list)
     domain_obligations: list[dict[str, object]] = field(default_factory=list)
     domain_target_metadata: dict[str, object] = field(default_factory=dict)
+    hardware_summary: dict[str, object] = field(default_factory=dict)
+    hardware_issues: list[dict[str, object]] = field(default_factory=list)
+    hardware_obligations: list[dict[str, object]] = field(default_factory=list)
+    hardware_target_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -1004,6 +1008,29 @@ def _build_result(
         )
         for row in delegation_rows
     ]
+    hardware_codegen_issues: list[dict[str, object]] = []
+    hardware_codegen_obligations: list[dict[str, object]] = []
+    if ir.domain_profile == "hardware":
+        from .hardware import evaluate_hardware_generated_code
+
+        hardware_codegen_issues, hardware_codegen_obligations = evaluate_hardware_generated_code(ir, generated_code)
+
+    hardware_issues_all = sorted(
+        list(ir.module.hardware_issues) + list(hardware_codegen_issues),
+        key=lambda r: str(r.get("issue_id", "")),
+    )
+    hardware_obligations_all = sorted(
+        list(ir.module.hardware_obligations) + list(hardware_codegen_obligations),
+        key=lambda r: str(r.get("obligation_id", "")),
+    )
+    domain_issues_all = sorted(
+        list(ir.module.domain_issues) + list(hardware_codegen_issues),
+        key=lambda r: str(r.get("issue_id", "")),
+    )
+    domain_obligation_rows = sorted(
+        list(ir.module.domain_obligations) + list(hardware_codegen_obligations),
+        key=lambda r: str(r.get("obligation_id", "")),
+    )
     domain_obligations = [
         VerificationObligation(
             obligation_id=str(row.get("obligation_id", "domain.obligation")),
@@ -1014,7 +1041,7 @@ def _build_result(
             evidence=str(row.get("evidence")) if row.get("evidence") is not None else None,
             critical=bool(row.get("critical", False)),
         )
-        for row in ir.module.domain_obligations
+        for row in domain_obligation_rows
     ]
     all_obligations = (
         list(obligations)
@@ -1117,9 +1144,13 @@ def _build_result(
         runtime_monitor_summary=dict(ir.module.runtime_monitor),
         domain_profile=ir.domain_profile,
         domain_summary=dict(ir.module.domain_summary),
-        domain_issues=list(ir.module.domain_issues),
-        domain_obligations=list(ir.module.domain_obligations),
+        domain_issues=domain_issues_all,
+        domain_obligations=domain_obligation_rows,
         domain_target_metadata=dict(ir.module.domain_target_metadata),
+        hardware_summary=dict(ir.module.hardware_summary),
+        hardware_issues=hardware_issues_all,
+        hardware_obligations=hardware_obligations_all,
+        hardware_target_metadata=dict(ir.module.hardware_target_metadata),
     )
 
 

@@ -203,6 +203,14 @@ def render_report(
             f"  domain_target_metadata: {result.domain_target_metadata}",
         ]
     )
+    lines.extend(
+        [
+            "hardware:",
+            f"  hardware_summary: {result.hardware_summary}",
+            f"  hardware_issues: {result.hardware_issues}",
+            f"  hardware_target_metadata: {result.hardware_target_metadata}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

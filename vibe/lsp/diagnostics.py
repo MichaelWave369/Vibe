@@ -72,6 +72,7 @@ def collect_diagnostics(source: str, path: Path | None = None, include_deep: boo
         (ir.module.agent_boundary_issues, "agent_boundary.issue"),
         (ir.module.delegation_issues, "delegation.issue"),
         (ir.module.domain_issues, "domain.issue"),
+        (ir.module.hardware_issues, "hardware.issue"),
     ]:
         for row in group:
             message = str(row.get("message") or row.get("issue") or row.get("issue_id") or "analysis issue")

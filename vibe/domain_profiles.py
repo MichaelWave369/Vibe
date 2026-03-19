@@ -144,6 +144,10 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
             "target_supported_by_profile": True,
             "scaffold_only": False,
         }
+        ir.module.hardware_summary = {}
+        ir.module.hardware_issues = []
+        ir.module.hardware_obligations = []
+        ir.module.hardware_target_metadata = {}
         return
 
     if profile.obligation_factory is not None:
@@ -170,5 +174,21 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
     ir.module.domain_target_metadata = {
         "planned_target": ir.emit_target,
         "target_supported_by_profile": ir.emit_target in set(profile.supported_emit_targets),
-        "scaffold_only": ir.emit_target in {"vhdl", "systemverilog", "julia", "compliance_report", "snakemake", "nextflow"},
+        "scaffold_only": ir.emit_target in {"julia", "compliance_report", "snakemake", "nextflow"},
     }
+    if profile.name == "hardware":
+        from .hardware import derive_hardware_metadata
+
+        h_summary, h_issues, h_obligations, h_target_meta = derive_hardware_metadata(ir)
+        ir.module.hardware_summary = h_summary
+        ir.module.hardware_issues = h_issues
+        ir.module.hardware_obligations = h_obligations
+        ir.module.hardware_target_metadata = h_target_meta
+        ir.module.domain_summary["hardware_summary"] = h_summary
+        ir.module.domain_issues = sorted(ir.module.domain_issues + h_issues, key=lambda x: str(x.get("issue_id", "")))
+        ir.module.domain_obligations = sorted(ir.module.domain_obligations + h_obligations, key=lambda x: str(x.get("obligation_id", "")))
+    else:
+        ir.module.hardware_summary = {}
+        ir.module.hardware_issues = []
+        ir.module.hardware_obligations = []
+        ir.module.hardware_target_metadata = {}

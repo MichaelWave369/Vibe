@@ -8,11 +8,12 @@ intent ClockController:
     gate_enable: boolean
 
 preserve:
-  timing_setup < 2ns
-  power_budget < 5w
+  timing < 10ns
+  latency_cycles <= 3
 
 constraint:
-  synth ready rtl
-  no_x_state
+  no combinational loops
+  synchronous
+  deterministic
 
 emit vhdl

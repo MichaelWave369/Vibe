@@ -364,6 +364,31 @@ Planned target scaffolds are now wired (truthfully marked as scaffold-level in t
 
 This pass establishes the shared foundation for parallel domain work; it does **not** claim full emitter/proof completeness for all domain targets yet.
 
+## Hardware intent (Phase 7.1)
+
+Vibe now includes the first concrete cross-domain implementation slice for hardware intent.
+
+Implemented in this phase:
+- dedicated hardware subsystem: `vibe/hardware.py`
+- first practical hardware preserve/constraint surfaces:
+  - `preserve: timing < 10ns`
+  - `preserve: latency_cycles <= N`
+  - `constraint: no combinational loops`
+  - `constraint: synchronous`
+  - `constraint: deterministic`
+- hardware metadata in verifier/report/proof:
+  - `hardware_summary`
+  - `hardware_issues`
+  - `hardware_obligations`
+  - `hardware_target_metadata`
+- first real deterministic emitters:
+  - `emit vhdl`
+  - `emit systemverilog`
+
+Truthfulness:
+- generated RTL is structured and target-appropriate, but still scaffold-level for manual completion
+- loop/timing checks are real implemented static checks in this pass, not full post-layout timing proof
+
 ## Multi-candidate synthesis (Phase 3.1)
 
 Compile/verify can now generate and evaluate multiple deterministic candidate implementations from the same IR.
