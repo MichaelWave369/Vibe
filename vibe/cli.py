@@ -29,6 +29,7 @@ from .package_manager import (
     package_summary_json,
     validate_manifest_and_graph,
 )
+from dataclasses import asdict
 from .manifest import VibeManifest
 from .proof import (
     build_proof_artifact,
@@ -613,6 +614,8 @@ emit python
 
 
 def _manifest_check(manifest_path: Path, report: ReportMode) -> int:
+    if manifest_path.is_dir():
+        manifest_path = manifest_path / "vibe.toml"
     manifest, manifest_issues, graph = validate_manifest_and_graph(manifest_path)
     payload = {
         "manifest": {
@@ -626,7 +629,7 @@ def _manifest_check(manifest_path: Path, report: ReportMode) -> int:
         "manifest_issues": [i.__dict__ for i in manifest_issues],
         "dependency_graph": {
             "root_package": graph.root_package,
-            "packages": [p.__dict__ for p in graph.packages],
+            "packages": [asdict(p) for p in graph.packages],
             "edges": list(graph.edges),
             "issues": list(graph.issues),
         },
@@ -646,6 +649,8 @@ def _manifest_check(manifest_path: Path, report: ReportMode) -> int:
 
 
 def _build_project(manifest_path: Path, report: ReportMode) -> int:
+    if manifest_path.is_dir():
+        manifest_path = manifest_path / "vibe.toml"
     payload = build_project(manifest_path)
     if report == "json":
         print(package_summary_json(payload))
@@ -750,11 +755,11 @@ def build_parser() -> argparse.ArgumentParser:
     ipm_init.add_argument("path", type=Path, nargs="?", default=Path("."))
 
     ipm_check = sub.add_parser("manifest-check", help="Validate vibe.toml and local dependency graph")
-    ipm_check.add_argument("manifest_path", type=Path, nargs="?", default=Path("vibe.toml"))
+    ipm_check.add_argument("manifest_path", type=Path, nargs="?", default=Path("vibe.toml"), help="Path to vibe.toml or package directory")
     ipm_check.add_argument("--report", choices=["human", "json"], default="human")
 
     ipm_build = sub.add_parser("build", help="Build multi-file package from vibe.toml")
-    ipm_build.add_argument("manifest_path", type=Path, nargs="?", default=Path("vibe.toml"))
+    ipm_build.add_argument("manifest_path", type=Path, nargs="?", default=Path("vibe.toml"), help="Path to vibe.toml or package directory")
     ipm_build.add_argument("--report", choices=["human", "json"], default="human")
 
     df = sub.add_parser("diff", help="Semantic diff between two .vibe intent specs")
