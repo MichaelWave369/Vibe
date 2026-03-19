@@ -182,6 +182,12 @@ def render_report(
             f"  delegation_obligations: {result.delegation_obligations}",
         ]
     )
+    lines.extend(
+        [
+            "runtime monitor:",
+            f"  runtime_monitor_summary: {result.runtime_monitor_summary}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

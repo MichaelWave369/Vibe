@@ -29,6 +29,7 @@ from .proof import (
     render_proof_summary,
     write_proof_artifact,
 )
+from .runtime_monitor import evaluate_runtime_events, load_runtime_events
 from .refinement import (
     RefinementIterationSummary,
     extract_counterexample,
@@ -485,6 +486,41 @@ def _inspect_proof(path: Path) -> int:
     return 0
 
 
+def _monitor_eval(proof_path: Path, events_path: Path, report: ReportMode, show_events: bool = False) -> int:
+    try:
+        proof = load_proof_artifact(proof_path)
+    except Exception as exc:
+        print(f"monitor-eval failed: {exc}")
+        return 1
+    try:
+        events = load_runtime_events(events_path)
+    except Exception as exc:
+        print(f"monitor-eval failed: {exc}")
+        return 1
+
+    config = dict(proof.get("runtime_monitor", {}))
+    summary = evaluate_runtime_events(config, events)
+    if report == "json":
+        import json
+
+        payload: dict[str, object] = {"runtime_monitor_config": config, "runtime_evaluation": summary}
+        if show_events:
+            payload["events"] = events
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print("=== Vibe Runtime Monitor Eval ===")
+        print(f"events_processed: {summary['events_processed']}")
+        print(f"pipeline_runtime_score: {summary['pipeline_runtime_score']}")
+        print(f"bridge_threshold: {summary['bridge_threshold']}")
+        print(f"fallback_ratio: {summary['fallback_ratio']}")
+        print(f"fallback_recommendation: {summary['fallback_recommendation']}")
+        print(f"alert_recommendations: {summary['alert_recommendations']}")
+        print(f"drift_signals: {summary['drift_signals']}")
+        if show_events:
+            print(f"events: {events}")
+    return 0
+
+
 def _diff(
     old_path: Path,
     new_path: Path,
@@ -560,6 +596,18 @@ def build_parser() -> argparse.ArgumentParser:
     ip = sub.add_parser("inspect-proof", help="Inspect a preservation proof artifact")
     ip.add_argument("path", type=Path)
 
+    me = sub.add_parser("monitor-eval", help="Evaluate runtime events against proof monitor metadata")
+    me.add_argument("proof_path", type=Path)
+    me.add_argument("events_path", type=Path)
+    me.add_argument("--report", choices=["human", "json"], default="human")
+    me.add_argument("--show-events", action="store_true", help="Include input runtime events in output")
+
+    rc = sub.add_parser("runtime-check", help="Alias for monitor-eval")
+    rc.add_argument("proof_path", type=Path)
+    rc.add_argument("events_path", type=Path)
+    rc.add_argument("--report", choices=["human", "json"], default="human")
+    rc.add_argument("--show-events", action="store_true", help="Include input runtime events in output")
+
     df = sub.add_parser("diff", help="Semantic diff between two .vibe intent specs")
     df.add_argument("old_path", type=Path)
     df.add_argument("new_path", type=Path)
@@ -628,6 +676,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "inspect-proof":
         return _inspect_proof(args.path)
+    if args.command in {"monitor-eval", "runtime-check"}:
+        return _monitor_eval(args.proof_path, args.events_path, args.report, show_events=args.show_events)
     if args.command == "diff":
         return _diff(
             args.old_path,

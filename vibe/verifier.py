@@ -219,6 +219,7 @@ class VerificationResult:
     delegation_summary: dict[str, object] = field(default_factory=dict)
     delegation_issues: list[dict[str, object]] = field(default_factory=list)
     delegation_obligations: list[dict[str, object]] = field(default_factory=list)
+    runtime_monitor_summary: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -1094,6 +1095,7 @@ def _build_result(
         delegation_summary=delegation_summary_payload(ir),
         delegation_issues=delegation_issues_as_dicts(delegation_issues),
         delegation_obligations=delegation_rows,
+        runtime_monitor_summary=dict(ir.module.runtime_monitor),
     )
 
 

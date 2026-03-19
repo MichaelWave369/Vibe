@@ -38,6 +38,7 @@ REQUIRED_FIELDS = {
     "agent_graph",
     "agent_boundary_bridges",
     "delegation",
+    "runtime_monitor",
     "notes",
 }
 
@@ -177,6 +178,7 @@ def build_proof_artifact(
             "issues": result.delegation_issues,
             "derived_obligations": result.delegation_obligations,
         },
+        "runtime_monitor": dict(result.runtime_monitor_summary),
         "notes": notes or [],
     }
     return artifact
@@ -219,6 +221,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     agent_graph_meta = payload["agent_graph"]
     boundary_meta = payload["agent_boundary_bridges"]
     delegation_meta = payload["delegation"]
+    monitor_meta = payload["runtime_monitor"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -246,5 +249,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"agent_graph_issue_count: {len(agent_graph_meta['issues'])}",
             f"agent_boundary_issue_count: {len(boundary_meta['issues'])}",
             f"delegation_issue_count: {len(delegation_meta['issues'])}",
+            f"monitor_bridge_threshold: {monitor_meta.get('bridge_threshold')}",
         ]
     )

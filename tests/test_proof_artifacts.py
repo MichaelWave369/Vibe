@@ -107,6 +107,7 @@ def test_invalid_proof_version_handled(tmp_path, capsys) -> None:
                 "agent_graph": {},
                 "agent_boundary_bridges": {},
                 "delegation": {},
+                "runtime_monitor": {},
                 "notes": [],
             }
         ),
@@ -162,5 +163,6 @@ def test_proof_schema_fields_present(tmp_path) -> None:
         "agent_graph",
         "agent_boundary_bridges",
         "delegation",
+        "runtime_monitor",
     ]:
         assert key in payload

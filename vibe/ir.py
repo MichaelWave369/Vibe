@@ -141,6 +141,7 @@ class IRModule:
     delegation_tree: dict[str, object] = field(default_factory=dict)
     delegation_summary: dict[str, object] = field(default_factory=dict)
     delegation_issues: list[dict[str, object]] = field(default_factory=list)
+    runtime_monitor: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -577,6 +578,9 @@ def ast_to_ir(program: Program) -> IR:
         "recursion_metadata": delegation.summary.recursion_metadata,
         "propagation_notes": delegation.summary.propagation_notes,
     }
+    from .runtime_monitor import monitor_config_payload
+
+    ir.module.runtime_monitor = monitor_config_payload(ir)
     validate_ir(ir)
     return ir
 
@@ -670,5 +674,6 @@ def serialize_ir(ir: IR) -> str:
         "delegation_tree": dict(ir.module.delegation_tree),
         "delegation_summary": dict(ir.module.delegation_summary),
         "delegation_issues": list(ir.module.delegation_issues),
+        "runtime_monitor": dict(ir.module.runtime_monitor),
     }
     return json.dumps(payload, indent=2, sort_keys=True)

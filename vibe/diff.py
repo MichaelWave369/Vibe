@@ -339,6 +339,19 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
                 "delegation summary changed",
             ),
         )
+    if old_ir.module.runtime_monitor != new_ir.module.runtime_monitor:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "runtime_monitor",
+                "monitor_config",
+                "modified",
+                "unknown",
+                old_ir.module.runtime_monitor,
+                new_ir.module.runtime_monitor,
+                "runtime monitor config changed",
+            ),
+        )
 
     summary = {
         "total_changes": len(entries),

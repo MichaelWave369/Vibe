@@ -224,6 +224,11 @@ emit python</code></pre>
           static proof inheritance for preserve/constraint/bridge contracts, contract-weakening detection,
           and recursion risk surfacing when delegation chains lack explicit depth/stop reasoning.
         </p>
+        <p>
+          Phase 5.4 adds runtime monitor metadata + event evaluation: emitted monitor configs track agents/edges/
+          thresholds, and offline runtime events are scored for drift/alerts/fallback pressure relative to compiled
+          contracts (observational only; compile-time proof remains authoritative).
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

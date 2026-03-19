@@ -464,6 +464,23 @@ Proof inheritance model in this phase:
 Delegation analysis is static and inspectable (IR/report/proof/diff/emitter metadata), and critical
 contract-weakening violations participate in compile blocking through preservation gating.
 
+## Runtime agent monitor / live bridge telemetry (Phase 5.4)
+
+Vibe now emits runtime monitoring metadata and offline evaluation helpers:
+
+- compile-time monitor config generated from agent graph/boundary/delegation contracts
+- deterministic runtime event model (`agent_invocation_*`, `edge_transfer_observed`, `fallback_triggered`, etc.)
+- runtime drift/threshold/fallback scoring against compiled contracts
+- CLI evaluation via `vibec monitor-eval <proof> <events>` (alias: `vibec runtime-check`)
+
+Important boundary:
+
+- compile-time proof remains the governing truth surface
+- runtime signals are observational drift checks against compiled contracts
+- runtime evaluation does not rewrite compile-time obligations
+
+This phase is monitor metadata + event evaluation (OpenTelemetry-compatible shape), not a full distributed runtime.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
