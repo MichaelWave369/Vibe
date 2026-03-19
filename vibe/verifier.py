@@ -100,6 +100,8 @@ class ObligationEvaluationContext:
     readability_score: float
     epsilon_post: float
     measurement_ratio: float
+    epsilon_floor: float
+    measurement_safe_ratio: float
     delegation_integrity: float
     sovereignty_required: bool
     sovereignty_preserved: bool | None
@@ -134,6 +136,8 @@ class VerificationResult:
     epsilon_pre: float
     epsilon_post: float
     measurement_ratio: float
+    epsilon_floor: float
+    measurement_safe_ratio: float
     q_persistence: float
     q_spatial_consistency: float
     q_cohesion: float
@@ -1147,6 +1151,8 @@ def _build_result(
         epsilon_pre=metrics.epsilon_pre,
         epsilon_post=metrics.epsilon_post,
         measurement_ratio=metrics.measurement_ratio,
+        epsilon_floor=metrics.epsilon_floor,
+        measurement_safe_ratio=metrics.measurement_safe_ratio,
         q_persistence=metrics.q_persistence,
         q_spatial_consistency=metrics.q_spatial_consistency,
         q_cohesion=metrics.q_cohesion,
