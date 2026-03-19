@@ -246,6 +246,11 @@ class VerificationResult:
     genomics_target_metadata: dict[str, object] = field(default_factory=dict)
     metadata_privacy_summary: dict[str, object] = field(default_factory=dict)
     workflow_provenance_metadata: dict[str, object] = field(default_factory=dict)
+    self_hosting_enabled: bool = False
+    compiler_spec_path: str | None = None
+    self_bridge_score: float | None = None
+    self_regression_status: str | None = None
+    self_baseline_reference: str | None = None
 
 
 @dataclass(slots=True)

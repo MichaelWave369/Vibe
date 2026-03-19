@@ -468,6 +468,38 @@ Truthfulness:
 - generated workflow outputs are deterministic, inspectable workflow-native scaffolds for reproducibility/privacy/provenance preservation
 - this is **not** biological/clinical correctness proof or clinical certification
 
+## Meta-intent self-hosting (Phase 8.1)
+
+Vibe now begins bounded self-hosting: the compiler can verify and compile a compiler self-spec written in `.vibe`.
+
+Implemented in this phase:
+- dedicated self-hosting subsystem: `vibe/self_hosting.py`
+- bounded compiler self-spec inputs:
+  - `self_hosting/vibec_core.vibe` (parser/IR/verifier/proof-report contract slice)
+  - `self_hosting/vibec.vibe` (bootstrap path marker)
+- `vibec self-check` CLI:
+  - runs deterministic self-check verification for compiler spec(s)
+  - reports `self_bridge_score` and `measurement_ratio`
+  - supports baseline write/update + regression gating
+- report/proof metadata surfaces:
+  - `self_hosting_enabled`
+  - `compiler_spec_path`
+  - `self_bridge_score`
+  - `self_regression_status`
+  - `self_baseline_reference`
+
+Example:
+
+```bash
+vibec self-check --spec self_hosting/vibec_core.vibe \
+  --baseline-path .vibe_self_hosting/compiler_self_bridge_baseline.json \
+  --fail-on-regression --max-bridge-drop 0.01
+```
+
+Truthfulness:
+- this is a bounded self-spec verification slice, not full compiler rewrite/bootstrapping
+- regression signals are real and inspectable, but release policy wiring remains incremental
+
 ## Multi-candidate synthesis (Phase 3.1)
 
 Compile/verify can now generate and evaluate multiple deterministic candidate implementations from the same IR.

@@ -242,6 +242,16 @@ def render_report(
             f"  workflow_provenance_metadata: {result.workflow_provenance_metadata}",
         ]
     )
+    lines.extend(
+        [
+            "self hosting:",
+            f"  self_hosting_enabled: {result.self_hosting_enabled}",
+            f"  compiler_spec_path: {result.compiler_spec_path}",
+            f"  self_bridge_score: {result.self_bridge_score}",
+            f"  self_regression_status: {result.self_regression_status}",
+            f"  self_baseline_reference: {result.self_baseline_reference}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

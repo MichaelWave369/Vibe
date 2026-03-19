@@ -47,6 +47,7 @@ from .registry import (
     publish_to_local_registry,
     search_local_registry,
 )
+from .self_hosting import SelfCheckConfig, run_self_check
 from .runtime_monitor import evaluate_runtime_events, load_runtime_events
 from .refinement import (
     RefinementIterationSummary,
@@ -877,6 +878,56 @@ def _domains(report: ReportMode) -> int:
     return 0
 
 
+def _self_check(
+    spec: Path,
+    baseline_path: Path | None,
+    update_baseline: bool,
+    fail_on_regression: bool,
+    max_bridge_drop: float,
+    verification_backend: str,
+    fallback_backend: str | None,
+    use_calibration: bool,
+    write_proof: bool,
+    report: ReportMode,
+) -> int:
+    try:
+        checked = run_self_check(
+            SelfCheckConfig(
+                spec_path=spec,
+                baseline_path=baseline_path,
+                update_baseline=update_baseline,
+                fail_on_regression=fail_on_regression,
+                max_bridge_drop=max_bridge_drop,
+                verification_backend=verification_backend,
+                fallback_backend=fallback_backend,
+                use_calibration=use_calibration,
+                write_proof=write_proof,
+            )
+        )
+    except Exception as exc:
+        print(f"self-check failed: {exc}")
+        return 1
+
+    if report == "json":
+        payload = {
+            "self_hosting": checked.summary,
+            "verification": asdict(checked.verification),
+        }
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Self-Hosting Check (Phase 8.1) ===")
+        print("scope: bounded compiler self-spec (not full compiler bootstrap)")
+        print(f"compiler_spec_path: {checked.summary['compiler_spec_path']}")
+        print(f"self_bridge_score: {checked.summary['self_bridge_score']}")
+        print(f"measurement_ratio: {checked.summary['measurement_ratio']}")
+        print(f"self_regression_status: {checked.summary['self_regression_status']}")
+        print(f"baseline_reference: {checked.summary['baseline_reference']}")
+        print(f"proof_artifact_paths: {checked.summary['proof_artifact_paths']}")
+        print(f"regressed: {checked.summary['regressed']}")
+        print(f"pass: {checked.exit_code == 0}")
+    return checked.exit_code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1007,6 +1058,26 @@ def build_parser() -> argparse.ArgumentParser:
     dom = sub.add_parser("domains", help="List available cross-domain intent profiles")
     dom.add_argument("--report", choices=["human", "json"], default="human")
 
+    sh = sub.add_parser("self-check", help="Run Phase 8.1 bounded compiler self-hosting verification")
+    sh.add_argument("--spec", type=Path, default=Path("self_hosting/vibec_core.vibe"))
+    sh.add_argument(
+        "--baseline-path",
+        type=Path,
+        default=Path(".vibe_self_hosting/compiler_self_bridge_baseline.json"),
+    )
+    sh.add_argument("--update-baseline", action="store_true", help="Write/update self-hosting baseline artifact")
+    sh.add_argument(
+        "--fail-on-regression",
+        action="store_true",
+        help="Fail when current self bridge score regresses below allowed threshold",
+    )
+    sh.add_argument("--max-bridge-drop", type=float, default=0.0, help="Allowed drop vs baseline before regression")
+    sh.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
+    sh.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
+    sh.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
+    sh.add_argument("--no-proof", action="store_true", help="Do not write proof artifact for self-check")
+    sh.add_argument("--report", choices=["human", "json"], default="human")
+
     return parser
 
 
@@ -1112,6 +1183,19 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "domains":
         return _domains(args.report)
+    if args.command == "self-check":
+        return _self_check(
+            spec=args.spec,
+            baseline_path=args.baseline_path,
+            update_baseline=args.update_baseline,
+            fail_on_regression=args.fail_on_regression,
+            max_bridge_drop=args.max_bridge_drop,
+            verification_backend=args.backend,
+            fallback_backend=args.fallback_backend,
+            use_calibration=not args.no_calibration,
+            write_proof=not args.no_proof,
+            report=args.report,
+        )
 
     parser.error("unknown command")
     return 2

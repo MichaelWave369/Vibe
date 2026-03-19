@@ -45,6 +45,7 @@ REQUIRED_FIELDS = {
     "scientific_simulation",
     "legal_compliance",
     "genomics",
+    "self_hosting",
     "notes",
 }
 
@@ -221,6 +222,13 @@ def build_proof_artifact(
             "metadata_privacy_summary": result.metadata_privacy_summary,
             "workflow_provenance_metadata": result.workflow_provenance_metadata,
         },
+        "self_hosting": {
+            "self_hosting_enabled": result.self_hosting_enabled,
+            "compiler_spec_path": result.compiler_spec_path,
+            "self_bridge_score": result.self_bridge_score,
+            "self_regression_status": result.self_regression_status,
+            "self_baseline_reference": result.self_baseline_reference,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -270,6 +278,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     simulation_meta = payload["scientific_simulation"]
     legal_meta = payload["legal_compliance"]
     genomics_meta = payload["genomics"]
+    self_hosting_meta = payload["self_hosting"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -304,5 +313,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"scientific_simulation_issue_count: {len(simulation_meta.get('issues', []))}",
             f"legal_compliance_issue_count: {len(legal_meta.get('issues', []))}",
             f"genomics_issue_count: {len(genomics_meta.get('issues', []))}",
+            f"self_hosting_enabled: {self_hosting_meta.get('self_hosting_enabled')}",
+            f"self_regression_status: {self_hosting_meta.get('self_regression_status')}",
         ]
     )

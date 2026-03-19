@@ -273,6 +273,12 @@ emit python</code></pre>
           (including differential-expression reproducibility and no patient-identifiable metadata constraints), and
           genomics metadata in report/proof outputs.
         </p>
+        <p>
+          Phase 8.1 begins bounded self-hosting: Vibe can verify/compiler-check compiler self-specs in
+          <code>.vibe</code> form (for a bounded parser/IR/verifier/proof slice), track a compiler self bridge score,
+          and surface baseline/regression status via <code>vibec self-check</code>. This is intentionally not a full
+          compiler rewrite/bootstrap claim yet.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300
@@ -299,6 +305,7 @@ pass: True</code></pre>
           <li>v0.2: richer grammar and diagnostics</li>
           <li>v0.2: stronger verifier calibrations and rule mapping</li>
           <li>v0.3: additional emit targets after compiler spine hardening</li>
+          <li>v0.3+: expand bounded self-hosting slice toward fuller compiler bootstrapping</li>
           <li>future: hosted workflows built on top of preservation law</li>
         </ul>
       </section>
