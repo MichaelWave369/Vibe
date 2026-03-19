@@ -132,3 +132,184 @@ def test_cli_diff_json_snapshot(capsys, tmp_path) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert "summary" in payload
     assert any(change["category"] == "emit" for change in payload["changes"])
+
+
+def test_bridge_impact_threshold_directionality() -> None:
+    old = _ir(
+        """
+intent T:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+bridge:
+  epsilon_floor = 0.05
+  measurement_safe_ratio = 0.85
+emit python
+"""
+    )
+    new_lower_floor = _ir(
+        """
+intent T:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+emit python
+"""
+    )
+    new_higher_floor = _ir(
+        """
+intent T:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+bridge:
+  epsilon_floor = 0.09
+  measurement_safe_ratio = 0.85
+emit python
+"""
+    )
+
+    lower_payload = json.loads(render_intent_diff_json(compute_intent_diff(old, new_lower_floor)))
+    higher_payload = json.loads(render_intent_diff_json(compute_intent_diff(old, new_higher_floor)))
+
+    lower_op = next(op for op in lower_payload["ops"] if op["field"] == "bridge" and op["address"] == "epsilon_floor")
+    higher_op = next(op for op in higher_payload["ops"] if op["field"] == "bridge" and op["address"] == "epsilon_floor")
+    assert lower_op["bridge_impact"] < 0
+    assert lower_op["severity"] == "warning"
+    assert higher_op["bridge_impact"] > 0
+    assert higher_op["severity"] == "info"
+
+
+def test_bridge_impact_constraint_add_remove_and_sovereignty_severity() -> None:
+    old = _ir(
+        """
+intent C:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+constraint:
+  sovereign custody required
+emit python
+"""
+    )
+    new_removed = _ir(
+        """
+intent C:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+emit python
+"""
+    )
+    new_added = _ir(
+        """
+intent C:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+constraint:
+  sovereign custody required
+  deterministic ordering
+emit python
+"""
+    )
+    removed_payload = json.loads(render_intent_diff_json(compute_intent_diff(old, new_removed)))
+    added_payload = json.loads(render_intent_diff_json(compute_intent_diff(old, new_added)))
+
+    removed_op = next(op for op in removed_payload["ops"] if op["field"] == "constraint")
+    added_op = next(op for op in added_payload["ops"] if op["field"] == "constraint" and op["op"] == "added")
+    assert removed_op["bridge_impact"] == -0.5
+    assert removed_op["severity"] == "high"
+    assert added_op["bridge_impact"] == 0.2
+    assert added_op["severity"] == "info"
+
+
+def test_bridge_impact_preserve_weaken_vs_strengthen() -> None:
+    old = _ir(
+        """
+intent P:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+preserve:
+  latency < 300ms
+emit python
+"""
+    )
+    weakened = _ir(
+        """
+intent P:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+preserve:
+  latency < 500ms
+emit python
+"""
+    )
+    strengthened = _ir(
+        """
+intent P:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+preserve:
+  latency < 100ms
+emit python
+"""
+    )
+    weak_payload = json.loads(render_intent_diff_json(compute_intent_diff(old, weakened)))
+    strong_payload = json.loads(render_intent_diff_json(compute_intent_diff(old, strengthened)))
+    weak_op = next(op for op in weak_payload["ops"] if op["field"] == "preserve")
+    strong_op = next(op for op in strong_payload["ops"] if op["field"] == "preserve")
+    assert weak_op["bridge_impact"] < 0
+    assert strong_op["bridge_impact"] > 0
+
+
+def test_bridge_impact_unknown_cases_remain_null() -> None:
+    old = _ir(
+        """
+intent U:
+  goal: "route cheapest"
+  inputs:
+    a: number
+  outputs:
+    b: number
+emit python
+"""
+    )
+    new = _ir(
+        """
+intent U:
+  goal: "route fastest"
+  inputs:
+    a: number
+  outputs:
+    b: number
+emit python
+"""
+    )
+    payload = json.loads(render_intent_diff_json(compute_intent_diff(old, new)))
+    goal_op = next(op for op in payload["ops"] if op["field"] == "goal")
+    assert goal_op["bridge_impact"] is None

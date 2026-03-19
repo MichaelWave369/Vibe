@@ -42,9 +42,26 @@ Each `ops[]` row includes:
 - `op`, `address`, `field`, `old_value`, `new_value`
 - `semantic_polarity` (`broadened`, `narrowed`, `unknown`)
 - `bridge_impact` (`null` when not derivable yet)
+- `bridge_impact_source` (deterministic derivation source tag, or `null`)
 - `severity`
 
 Legacy `summary` + `changes` are retained for compatibility.
+
+### `bridge_impact` semantics (Phase 1B)
+
+`bridge_impact` is a deterministic signed delta where:
+
+- positive => stronger bridge guarantees inferred
+- negative => weakened bridge guarantees inferred
+- `null` => Vibe cannot honestly attribute impact for that op yet
+
+Currently populated for:
+
+- bridge threshold deltas (`epsilon_floor`, `measurement_safe_ratio`)
+- preserve add/remove and preserve modified with known broadened/narrowed polarity
+- constraint add/remove (with stronger negative impact for sovereignty-like removals)
+
+Still `null` for classes where Vibe cannot defensibly infer op-local bridge impact (for example some goal/shape changes without a grounded attribution path).
 
 ## `.vibe.proof.json`
 
