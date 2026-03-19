@@ -220,6 +220,7 @@ class VerificationResult:
     delegation_issues: list[dict[str, object]] = field(default_factory=list)
     delegation_obligations: list[dict[str, object]] = field(default_factory=list)
     runtime_monitor_summary: dict[str, object] = field(default_factory=dict)
+    package_context: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

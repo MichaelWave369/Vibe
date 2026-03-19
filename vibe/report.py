@@ -188,6 +188,12 @@ def render_report(
             f"  runtime_monitor_summary: {result.runtime_monitor_summary}",
         ]
     )
+    lines.extend(
+        [
+            "package context:",
+            f"  package_context: {result.package_context}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

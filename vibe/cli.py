@@ -22,6 +22,14 @@ from .diff import compute_intent_diff, render_intent_diff_human, render_intent_d
 from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
 from .parser import parse_source
+from .package_manager import (
+    apply_package_defaults_to_source,
+    build_project,
+    package_context_for_path,
+    package_summary_json,
+    validate_manifest_and_graph,
+)
+from .manifest import VibeManifest
 from .proof import (
     build_proof_artifact,
     default_proof_path,
@@ -86,6 +94,19 @@ def _compile(
     max_iters: int = 3,
 ) -> int:
     source = _load(path)
+    pkg_ctx = package_context_for_path(path)
+    if pkg_ctx:
+        source = apply_package_defaults_to_source(
+            source,
+            VibeManifest(
+                package_name=str(pkg_ctx.get("package_name", "")),
+                package_version=str(pkg_ctx.get("package_version", "")),
+                description="",
+                dependencies=dict(pkg_ctx.get("dependencies", {})),
+                bridge_defaults=dict(pkg_ctx.get("bridge_defaults", {})),
+                emit_defaults=dict(pkg_ctx.get("emit_defaults", {})),
+            ),
+        )
     ast = parse_source(source)
     ir = ast_to_ir(ast)
     ir_ser = serialize_ir(ir)
@@ -199,6 +220,7 @@ def _compile(
     assert selected_eval is not None
     assert selected_candidate is not None
     result = selected_eval.result
+    result.package_context = dict(pkg_ctx)
     result.candidate_count = candidate_count
     result.winning_candidate_id = selected_eval.candidate_id
     result.synthesized_winner = candidate_count > 1
@@ -312,6 +334,19 @@ def _explain(
     show_delegation: bool = False,
 ) -> int:
     source = _load(path)
+    pkg_ctx = package_context_for_path(path)
+    if pkg_ctx:
+        source = apply_package_defaults_to_source(
+            source,
+            VibeManifest(
+                package_name=str(pkg_ctx.get("package_name", "")),
+                package_version=str(pkg_ctx.get("package_version", "")),
+                description="",
+                dependencies=dict(pkg_ctx.get("dependencies", {})),
+                bridge_defaults=dict(pkg_ctx.get("bridge_defaults", {})),
+                emit_defaults=dict(pkg_ctx.get("emit_defaults", {})),
+            ),
+        )
     ast = parse_source(source)
     ir = ast_to_ir(ast)
     emitted_code, _ = emit_code(ir)
@@ -366,6 +401,19 @@ def _verify(
     with_tests: bool = False,
 ) -> int:
     source = _load(path)
+    pkg_ctx = package_context_for_path(path)
+    if pkg_ctx:
+        source = apply_package_defaults_to_source(
+            source,
+            VibeManifest(
+                package_name=str(pkg_ctx.get("package_name", "")),
+                package_version=str(pkg_ctx.get("package_version", "")),
+                description="",
+                dependencies=dict(pkg_ctx.get("dependencies", {})),
+                bridge_defaults=dict(pkg_ctx.get("bridge_defaults", {})),
+                emit_defaults=dict(pkg_ctx.get("emit_defaults", {})),
+            ),
+        )
     ast = parse_source(source)
     ir = ast_to_ir(ast)
     candidates = generate_candidates(ir, candidate_count)
@@ -386,6 +434,7 @@ def _verify(
     ranked = rank_candidates(evaluations)
     winner = ranked[0]
     result = winner.result
+    result.package_context = dict(pkg_ctx)
     result.candidate_count = len(candidates)
     result.winning_candidate_id = winner.candidate_id
     result.synthesized_winner = len(candidates) > 1
@@ -521,6 +570,95 @@ def _monitor_eval(proof_path: Path, events_path: Path, report: ReportMode, show_
     return 0
 
 
+def _init_project(path: Path) -> int:
+    root = path.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    manifest = root / "vibe.toml"
+    src_dir = root / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    starter = src_dir / "main.vibe"
+    if not manifest.exists():
+        manifest.write_text(
+            """[package]
+name = "my-intent-package"
+version = "0.1.0"
+description = "Starter Vibe package"
+
+[bridge]
+measurement_safe_ratio = 0.85
+epsilon_floor = 0.02
+
+[emit]
+default_target = "python"
+
+[dependencies]
+""",
+            encoding="utf-8",
+        )
+    if not starter.exists():
+        starter.write_text(
+            """intent StarterIntent:
+  goal: "Starter package intent"
+  inputs:
+    x: number
+  outputs:
+    y: number
+
+emit python
+""",
+            encoding="utf-8",
+        )
+    print(f"initialized: {root}")
+    return 0
+
+
+def _manifest_check(manifest_path: Path, report: ReportMode) -> int:
+    manifest, manifest_issues, graph = validate_manifest_and_graph(manifest_path)
+    payload = {
+        "manifest": {
+            "name": manifest.package_name,
+            "version": manifest.package_version,
+            "description": manifest.description,
+            "bridge_defaults": manifest.bridge_defaults,
+            "emit_defaults": manifest.emit_defaults,
+            "dependencies": manifest.dependencies,
+        },
+        "manifest_issues": [i.__dict__ for i in manifest_issues],
+        "dependency_graph": {
+            "root_package": graph.root_package,
+            "packages": [p.__dict__ for p in graph.packages],
+            "edges": list(graph.edges),
+            "issues": list(graph.issues),
+        },
+    }
+    blocking = [i for i in payload["manifest_issues"] if i["severity"] in {"critical", "high"}] + [
+        i for i in graph.issues if str(i.get("severity", "")) in {"critical", "high"}
+    ]
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Manifest Check ===")
+        print(f"package: {manifest.package_name}@{manifest.package_version}")
+        print(f"manifest_issues: {payload['manifest_issues']}")
+        print(f"dependency_graph_edges: {payload['dependency_graph']['edges']}")
+        print(f"dependency_graph_issues: {payload['dependency_graph']['issues']}")
+    return 1 if blocking else 0
+
+
+def _build_project(manifest_path: Path, report: ReportMode) -> int:
+    payload = build_project(manifest_path)
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Package Build ===")
+        pkg = payload["package"]
+        print(f"package: {pkg['name']}@{pkg['version']}")
+        print(f"modules_built: {len(payload['build_modules'])}")
+        print(f"manifest_issues: {payload['manifest_issues']}")
+        print(f"dependency_issues: {payload['dependency_graph']['issues']}")
+    return 1 if payload["blocking_issues"] else 0
+
+
 def _diff(
     old_path: Path,
     new_path: Path,
@@ -608,6 +746,17 @@ def build_parser() -> argparse.ArgumentParser:
     rc.add_argument("--report", choices=["human", "json"], default="human")
     rc.add_argument("--show-events", action="store_true", help="Include input runtime events in output")
 
+    ipm_init = sub.add_parser("init", help="Initialize a local Vibe package project")
+    ipm_init.add_argument("path", type=Path, nargs="?", default=Path("."))
+
+    ipm_check = sub.add_parser("manifest-check", help="Validate vibe.toml and local dependency graph")
+    ipm_check.add_argument("manifest_path", type=Path, nargs="?", default=Path("vibe.toml"))
+    ipm_check.add_argument("--report", choices=["human", "json"], default="human")
+
+    ipm_build = sub.add_parser("build", help="Build multi-file package from vibe.toml")
+    ipm_build.add_argument("manifest_path", type=Path, nargs="?", default=Path("vibe.toml"))
+    ipm_build.add_argument("--report", choices=["human", "json"], default="human")
+
     df = sub.add_parser("diff", help="Semantic diff between two .vibe intent specs")
     df.add_argument("old_path", type=Path)
     df.add_argument("new_path", type=Path)
@@ -678,6 +827,12 @@ def main(argv: list[str] | None = None) -> int:
         return _inspect_proof(args.path)
     if args.command in {"monitor-eval", "runtime-check"}:
         return _monitor_eval(args.proof_path, args.events_path, args.report, show_events=args.show_events)
+    if args.command == "init":
+        return _init_project(args.path)
+    if args.command == "manifest-check":
+        return _manifest_check(args.manifest_path, args.report)
+    if args.command == "build":
+        return _build_project(args.manifest_path, args.report)
     if args.command == "diff":
         return _diff(
             args.old_path,

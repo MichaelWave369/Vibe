@@ -39,6 +39,7 @@ REQUIRED_FIELDS = {
     "agent_boundary_bridges",
     "delegation",
     "runtime_monitor",
+    "package_context",
     "notes",
 }
 
@@ -179,6 +180,7 @@ def build_proof_artifact(
             "derived_obligations": result.delegation_obligations,
         },
         "runtime_monitor": dict(result.runtime_monitor_summary),
+        "package_context": dict(result.package_context),
         "notes": notes or [],
     }
     return artifact
@@ -196,13 +198,13 @@ def load_proof_artifact(path: Path) -> dict[str, object]:
 
 
 def validate_proof_artifact(payload: dict[str, object]) -> None:
-    missing = sorted(REQUIRED_FIELDS - set(payload.keys()))
-    if missing:
-        raise ValueError(f"invalid proof artifact: missing fields: {', '.join(missing)}")
     if payload.get("artifact_version") != PROOF_ARTIFACT_VERSION:
         raise ValueError(
             f"invalid proof artifact version `{payload.get('artifact_version')}`; expected `{PROOF_ARTIFACT_VERSION}`"
         )
+    missing = sorted(REQUIRED_FIELDS - set(payload.keys()))
+    if missing:
+        raise ValueError(f"invalid proof artifact: missing fields: {', '.join(missing)}")
 
 
 def render_proof_summary(payload: dict[str, object]) -> str:
@@ -222,6 +224,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     boundary_meta = payload["agent_boundary_bridges"]
     delegation_meta = payload["delegation"]
     monitor_meta = payload["runtime_monitor"]
+    package_meta = payload["package_context"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -250,5 +253,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"agent_boundary_issue_count: {len(boundary_meta['issues'])}",
             f"delegation_issue_count: {len(delegation_meta['issues'])}",
             f"monitor_bridge_threshold: {monitor_meta.get('bridge_threshold')}",
+            f"package: {package_meta.get('package_name', '<none>')}@{package_meta.get('package_version', '<none>')}",
         ]
     )
