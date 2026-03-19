@@ -284,6 +284,11 @@ emit python</code></pre>
           recommended bumps are derived from semantic contract changes (for example, removed constraints -> major,
           added outputs/preserves -> minor), with conservative ambiguity notes when change strength is unclear.
         </p>
+        <p>
+          Phase 8.3 introduces intent negotiation with <code>vibec negotiate a.vibe b.vibe ...</code>: Vibe computes a
+          deterministic negotiated contract, makes strengthenings explicit, and surfaces irreconcilable/ambiguous
+          conflicts before downstream compile generation.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300
@@ -312,6 +317,7 @@ pass: True</code></pre>
           <li>v0.3: additional emit targets after compiler spine hardening</li>
           <li>v0.3+: expand bounded self-hosting slice toward fuller compiler bootstrapping</li>
           <li>v0.3+: expand semver rule coverage for additional domain-specific contract surfaces</li>
+          <li>v0.3+: extend negotiation rules for richer cross-domain/interface contracts</li>
           <li>future: hosted workflows built on top of preservation law</li>
         </ul>
       </section>

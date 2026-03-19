@@ -34,6 +34,13 @@ from .package_manager import (
 from dataclasses import asdict
 from .manifest import VibeManifest
 from .lsp.server import run_stdio_server
+from .negotiation import (
+    negotiate_intents,
+    render_negotiated_vibe,
+    render_negotiation_human,
+    render_negotiation_json,
+    write_negotiation_artifact,
+)
 from .proof import (
     build_proof_artifact,
     default_proof_path,
@@ -978,6 +985,48 @@ def _semver(
     return 0
 
 
+def _negotiate(
+    paths: list[Path],
+    report: ReportMode,
+    write_negotiated: Path | None,
+    write_artifact: Path | None,
+    fail_on_conflict: bool,
+    show_conflicts: bool,
+    show_strengthening: bool,
+) -> int:
+    if len(paths) < 2:
+        print("negotiate failed: need at least two .vibe specs")
+        return 1
+    sources = [_load(p) for p in paths]
+    irs = [ast_to_ir(parse_source(src)) for src in sources]
+    contract = negotiate_intents(irs, [str(p) for p in paths])
+
+    if write_artifact is not None:
+        write_negotiation_artifact(write_artifact, contract)
+    if contract.success and write_negotiated is not None:
+        write_negotiated.parent.mkdir(parents=True, exist_ok=True)
+        write_negotiated.write_text(render_negotiated_vibe(contract), encoding="utf-8")
+
+    if report == "json":
+        print(render_negotiation_json(contract))
+    else:
+        print(
+            render_negotiation_human(
+                contract,
+                show_conflicts=show_conflicts,
+                show_strengthening=show_strengthening,
+            )
+        )
+        if write_artifact is not None:
+            print(f"negotiation_artifact: {write_artifact}")
+        if contract.success and write_negotiated is not None:
+            print(f"negotiated_intent: {write_negotiated}")
+
+    if fail_on_conflict and not contract.success:
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1142,6 +1191,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sv.add_argument("--show-rules", action="store_true", help="Show semver classification rule IDs and conservative flags")
 
+    ng = sub.add_parser("negotiate", help="Negotiate multiple intent contracts into a deterministic merged contract")
+    ng.add_argument("paths", nargs="+", type=Path)
+    ng.add_argument("--report", choices=["human", "json"], default="human")
+    ng.add_argument("--write-negotiated", type=Path, default=None, help="Write negotiated .vibe contract when negotiation succeeds")
+    ng.add_argument("--write-artifact", type=Path, default=None, help="Write deterministic negotiation JSON artifact")
+    ng.add_argument("--fail-on-conflict", action="store_true", help="Return non-zero when conflicts/ambiguities are present")
+    ng.add_argument("--show-conflicts", action="store_true", help="Show conflicts and ambiguous clauses in human output")
+    ng.add_argument("--show-strengthening", action="store_true", help="Show strengthened clauses in human output")
+
     return parser
 
 
@@ -1269,6 +1327,16 @@ def main(argv: list[str] | None = None) -> int:
             manifest_path=args.manifest_path,
             apply_manifest=args.apply_manifest,
             show_rules=args.show_rules,
+        )
+    if args.command == "negotiate":
+        return _negotiate(
+            paths=args.paths,
+            report=args.report,
+            write_negotiated=args.write_negotiated,
+            write_artifact=args.write_artifact,
+            fail_on_conflict=args.fail_on_conflict,
+            show_conflicts=args.show_conflicts,
+            show_strengthening=args.show_strengthening,
         )
 
     parser.error("unknown command")

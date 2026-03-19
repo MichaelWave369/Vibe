@@ -535,6 +535,41 @@ Truthfulness:
 - semver is deterministic rule-based interpretation over semantic diff; it is not universal perfect certainty
 - ambiguous changes are called out and handled conservatively
 
+## Intent negotiation protocol (Phase 8.3)
+
+Vibe now supports multi-party intent negotiation before code generation:
+
+- new CLI: `vibec negotiate a.vibe b.vibe [c.vibe ...]`
+- computes a deterministic negotiated contract across:
+  - preserve rules
+  - constraints
+  - bridge config
+  - interface/output surfaces
+- explicitly surfaces:
+  - compatible clauses
+  - strengthened clauses
+  - irreconcilable conflicts
+  - ambiguous clauses
+
+Negotiation behavior:
+- stronger preserve thresholds win where comparable (e.g., `latency < 100` beats `latency < 200`)
+- stronger bridge thresholds win (e.g., `measurement_safe_ratio = 0.90` over `0.85`)
+- direct contradictions (e.g., `no pii in logs` vs `raw debug logs required`) are conflicts
+- irreconcilable/ambiguous negotiation can be configured to fail with `--fail-on-conflict`
+
+Optional outputs:
+
+```bash
+vibec negotiate a.vibe b.vibe \
+  --write-negotiated negotiated.vibe \
+  --write-artifact negotiated.json \
+  --fail-on-conflict
+```
+
+Truthfulness:
+- not all conflicts are auto-resolvable; unresolved/ambiguous cases are explicit
+- negotiation output is deterministic and inspectable, and conflicts can block downstream compile source generation
+
 ## Multi-candidate synthesis (Phase 3.1)
 
 Compile/verify can now generate and evaluate multiple deterministic candidate implementations from the same IR.
