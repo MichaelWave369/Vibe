@@ -1,0 +1,23 @@
+intent VibecCoreSelfSpec:
+  goal: "Preserve bounded compiler core contracts for parser, IR serialization, verifier, and proof/report surfaces"
+  inputs:
+    parser_grammar: string
+    ir_schema: string
+    verifier_rules: string
+    proof_report_schema: string
+  outputs:
+    compiler_bridge_summary: string
+    compiler_proof_artifact: string
+
+preserve:
+  parser_determinism >= 1
+  ir_serialization_determinism >= 1
+  verifier_report_proof_reproducibility >= 1
+  compiler_self_bridge_visibility >= 1
+
+constraint:
+  no hidden weakening of bridge thresholds
+  explicit self-hosting scope boundaries
+  deterministic self-check summary output
+
+emit python
