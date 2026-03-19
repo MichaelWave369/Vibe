@@ -241,6 +241,27 @@ Safety rules:
 
 This is empirical calibration, not proof.
 
+## Preservation proof artifacts
+
+Vibe now supports deterministic preservation proof artifacts (`.vibe.proof.json`) that record verification context and outcomes.
+
+Proof artifacts include:
+- source + IR hashes
+- backend and backend metadata
+- calibration state and model metadata
+- obligation summaries and full obligation rows
+- equivalence/drift summaries and correspondence entries
+- bridge/epsilon metrics
+- final pass/fail + emission-blocked state
+
+Commands:
+- `vibec verify file.vibe --write-proof`
+- `vibec compile file.vibe --write-proof`
+- `vibec verify-proof file.vibe` (always writes proof)
+- `vibec inspect-proof file.vibe.proof.json`
+
+These artifacts are deterministic and inspectable, but they are not overclaimed as full formal certificates.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -272,6 +293,7 @@ Current supported targets: `python`, `typescript`.
 vibec explain vibe/examples/payment_router.vibe
 vibec calibrate vibe/calibration_corpus/seed_corpus.json
 vibec verify vibe/examples/payment_router.vibe
+vibec verify vibe/examples/payment_router.vibe --write-proof
 vibec verify vibe/examples/payment_router.vibe --report json
 vibec verify vibe/examples/sovereign_bridge.vibe --show-obligations
 vibec verify vibe/examples/payment_router.vibe --backend heuristic
@@ -285,6 +307,9 @@ vibec compile vibe/examples/payment_router.vibe --backend heuristic
 vibec compile vibe/examples/payment_router.vibe --backend smt
 vibec compile vibe/examples/payment_router.vibe --show-equivalence
 vibec compile vibe/examples/payment_router.vibe --no-calibration
+vibec compile vibe/examples/payment_router.vibe --write-proof
+vibec verify-proof vibe/examples/payment_router.vibe
+vibec inspect-proof vibe/examples/payment_router.vibe.proof.json
 vibec compile vibe/examples/edge_contract_ts.vibe
 ```
 

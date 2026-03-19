@@ -21,6 +21,13 @@ from .calibration import (
 from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
 from .parser import parse_source
+from .proof import (
+    build_proof_artifact,
+    default_proof_path,
+    load_proof_artifact,
+    render_proof_summary,
+    write_proof_artifact,
+)
 from .report import render_report, render_report_json
 from .verifier import available_backends, verify
 
@@ -56,6 +63,7 @@ def _compile(
     verification_backend: str = "heuristic",
     fallback_backend: str | None = None,
     use_calibration: bool = True,
+    write_proof: bool = False,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
@@ -104,6 +112,19 @@ def _compile(
         show_obligations=show_obligations,
         show_equivalence=show_equivalence,
     )
+
+    proof_path = default_proof_path(path)
+    if write_proof:
+        proof = build_proof_artifact(
+            path,
+            source,
+            ir,
+            result,
+            emitted_blocked=not result.passed,
+            notes=["compile flow proof artifact"],
+        )
+        write_proof_artifact(proof_path, proof)
+        print(f"proof: {proof_path}")
 
     if not result.passed:
         if result.backend_error:
@@ -169,6 +190,7 @@ def _verify(
     verification_backend: str = "heuristic",
     fallback_backend: str | None = None,
     use_calibration: bool = True,
+    write_proof: bool = False,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
@@ -189,6 +211,18 @@ def _verify(
     )
     if result.backend_error:
         print(f"verify failed: {result.backend_error}")
+    if write_proof:
+        proof_path = default_proof_path(path)
+        proof = build_proof_artifact(
+            path,
+            source,
+            ir,
+            result,
+            emitted_blocked=not result.passed,
+            notes=["verify flow proof artifact"],
+        )
+        write_proof_artifact(proof_path, proof)
+        print(f"proof: {proof_path}")
     return 0 if result.passed else 1
 
 
@@ -201,6 +235,36 @@ def _calibrate(corpus_path: Path) -> int:
     print(f"model_version: {model.model_version}")
     print(f"fit_confidence: {model.fit_confidence:.4f}")
     print(f"artifact: {artifact}")
+    return 0
+
+
+def _verify_proof(
+    path: Path,
+    report: ReportMode,
+    verification_backend: str,
+    fallback_backend: str | None,
+    use_calibration: bool,
+) -> int:
+    rc = _verify(
+        path,
+        report,
+        show_obligations=True,
+        show_equivalence=True,
+        verification_backend=verification_backend,
+        fallback_backend=fallback_backend,
+        use_calibration=use_calibration,
+        write_proof=True,
+    )
+    return rc
+
+
+def _inspect_proof(path: Path) -> int:
+    try:
+        payload = load_proof_artifact(path)
+    except Exception as exc:
+        print(f"inspect-proof failed: {exc}")
+        return 1
+    print(render_proof_summary(payload))
     return 0
 
 
@@ -218,6 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
     cp.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
     cp.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
+    cp.add_argument("--write-proof", action="store_true", help="Write deterministic preservation proof artifact")
 
     ex = sub.add_parser("explain", help="Explain AST and IR")
     ex.add_argument("path", type=Path)
@@ -230,9 +295,20 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
     vf.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
     vf.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
+    vf.add_argument("--write-proof", action="store_true", help="Write deterministic preservation proof artifact")
 
     cal = sub.add_parser("calibrate", help="Fit/update empirical epsilon calibration model")
     cal.add_argument("corpus_path", type=Path)
+
+    vp = sub.add_parser("verify-proof", help="Verify and always write proof artifact")
+    vp.add_argument("path", type=Path)
+    vp.add_argument("--report", choices=["human", "json"], default="human")
+    vp.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
+    vp.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
+    vp.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
+
+    ip = sub.add_parser("inspect-proof", help="Inspect a preservation proof artifact")
+    ip.add_argument("path", type=Path)
 
     return parser
 
@@ -252,6 +328,7 @@ def main(argv: list[str] | None = None) -> int:
             verification_backend=args.backend,
             fallback_backend=args.fallback_backend,
             use_calibration=not args.no_calibration,
+            write_proof=args.write_proof,
         )
     if args.command == "explain":
         return _explain(args.path)
@@ -264,9 +341,20 @@ def main(argv: list[str] | None = None) -> int:
             verification_backend=args.backend,
             fallback_backend=args.fallback_backend,
             use_calibration=not args.no_calibration,
+            write_proof=args.write_proof,
         )
     if args.command == "calibrate":
         return _calibrate(args.corpus_path)
+    if args.command == "verify-proof":
+        return _verify_proof(
+            args.path,
+            args.report,
+            args.backend,
+            args.fallback_backend,
+            use_calibration=not args.no_calibration,
+        )
+    if args.command == "inspect-proof":
+        return _inspect_proof(args.path)
 
     parser.error("unknown command")
     return 2
