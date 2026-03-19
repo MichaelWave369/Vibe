@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+
+.vibe_cache/
+.vibe_calibration/
