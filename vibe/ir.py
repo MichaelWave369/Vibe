@@ -35,6 +35,7 @@ class SSAValue:
     uses: list[str] = field(default_factory=list)
     semantic_qualifiers: list[str] = field(default_factory=list)
     effect_tags: list[str] = field(default_factory=list)
+    resource_tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -128,6 +129,8 @@ class IRModule:
     semantic_issues: list[dict[str, object]] = field(default_factory=list)
     effect_summary: dict[str, object] = field(default_factory=dict)
     effect_issues: list[dict[str, object]] = field(default_factory=list)
+    resource_summary: dict[str, object] = field(default_factory=dict)
+    resource_issues: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -472,6 +475,16 @@ def ast_to_ir(program: Program) -> IR:
         "value_effects": effects.summary.value_effects,
         "propagation_notes": effects.summary.propagation_notes,
     }
+    from .resources import annotate_resources
+
+    resources = annotate_resources(ir)
+    ir.module.resource_summary = {
+        "inferred_resources": resources.summary.inferred_resources,
+        "declared_bounds": resources.summary.declared_bounds,
+        "module_profile": resources.summary.module_profile,
+        "value_resources": resources.summary.value_resources,
+        "propagation_notes": resources.summary.propagation_notes,
+    }
     validate_ir(ir)
     return ir
 
@@ -553,5 +566,7 @@ def serialize_ir(ir: IR) -> str:
         "semantic_issues": list(ir.module.semantic_issues),
         "effect_summary": dict(ir.module.effect_summary),
         "effect_issues": list(ir.module.effect_issues),
+        "resource_summary": dict(ir.module.resource_summary),
+        "resource_issues": list(ir.module.resource_issues),
     }
     return json.dumps(payload, indent=2, sort_keys=True)

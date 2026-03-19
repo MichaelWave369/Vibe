@@ -102,6 +102,7 @@ def test_invalid_proof_version_handled(tmp_path, capsys) -> None:
                 "refinement": {},
                 "semantic_types": {},
                 "effect_types": {},
+                "resource_types": {},
                 "notes": [],
             }
         ),
@@ -152,5 +153,6 @@ def test_proof_schema_fields_present(tmp_path) -> None:
         "refinement",
         "semantic_types",
         "effect_types",
+        "resource_types",
     ]:
         assert key in payload

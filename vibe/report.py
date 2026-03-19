@@ -142,6 +142,14 @@ def render_report(
             f"  effect_type_obligations: {result.effect_type_obligations}",
         ]
     )
+    lines.extend(
+        [
+            "resource types:",
+            f"  resource_type_summary: {result.resource_type_summary}",
+            f"  resource_type_issues: {result.resource_type_issues}",
+            f"  resource_type_obligations: {result.resource_type_obligations}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

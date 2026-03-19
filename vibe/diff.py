@@ -248,6 +248,19 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
                 "effect type summary changed",
             ),
         )
+    if old_ir.module.resource_summary != new_ir.module.resource_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "resource_types",
+                "resource_summary",
+                "modified",
+                "unknown",
+                old_ir.module.resource_summary,
+                new_ir.module.resource_summary,
+                "resource type summary changed",
+            ),
+        )
 
     summary = {
         "total_changes": len(entries),

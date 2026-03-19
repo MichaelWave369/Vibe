@@ -49,6 +49,7 @@ def generate_python(ir: IR) -> str:
         "",
         f"# SEMANTIC_QUALIFIERS: {ir.module.semantic_summary.get('binding_qualifiers', {})}",
         f"# EFFECT_PROFILE: {ir.module.effect_summary}",
+        f"# RESOURCE_PROFILE: {ir.module.resource_summary}",
         f"def {fn_name}({params}) -> {returns}:",
         f'    """{ir.goal}"""',
         "    # TODO(v0.2): refine implementation using richer planning semantics.",

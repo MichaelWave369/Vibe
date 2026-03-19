@@ -33,6 +33,7 @@ REQUIRED_FIELDS = {
     "refinement",
     "semantic_types",
     "effect_types",
+    "resource_types",
     "notes",
 }
 
@@ -147,6 +148,11 @@ def build_proof_artifact(
             "issues": result.effect_type_issues,
             "derived_obligations": result.effect_type_obligations,
         },
+        "resource_types": {
+            "summary": result.resource_type_summary,
+            "issues": result.resource_type_issues,
+            "derived_obligations": result.resource_type_obligations,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -184,6 +190,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     refinement_meta = payload["refinement"]
     semantic_meta = payload["semantic_types"]
     effect_meta = payload["effect_types"]
+    resource_meta = payload["resource_types"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -206,5 +213,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"refinement_success: {refinement_meta['refinement_success']}",
             f"semantic_issue_count: {len(semantic_meta['issues'])}",
             f"effect_issue_count: {len(effect_meta['issues'])}",
+            f"resource_issue_count: {len(resource_meta['issues'])}",
         ]
     )

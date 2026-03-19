@@ -300,7 +300,7 @@ def _compile(
     return 0
 
 
-def _explain(path: Path, show_types: bool = False, show_effects: bool = False) -> int:
+def _explain(path: Path, show_types: bool = False, show_effects: bool = False, show_resources: bool = False) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
@@ -320,6 +320,10 @@ def _explain(path: Path, show_types: bool = False, show_effects: bool = False) -
         print("\nEffect types:")
         print(f"summary: {ir.module.effect_summary}")
         print(f"issues: {ir.module.effect_issues}")
+    if show_resources:
+        print("\nResource types:")
+        print(f"summary: {ir.module.resource_summary}")
+        print(f"issues: {ir.module.resource_issues}")
     return 0
 
 
@@ -499,6 +503,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("path", type=Path)
     ex.add_argument("--show-types", action="store_true", help="Show semantic type summary and issues")
     ex.add_argument("--show-effects", action="store_true", help="Show effect type summary and issues")
+    ex.add_argument("--show-resources", action="store_true", help="Show resource type summary and issues")
 
     vf = sub.add_parser("verify", help="Run verifier without emission")
     vf.add_argument("path", type=Path)
@@ -558,7 +563,12 @@ def main(argv: list[str] | None = None) -> int:
             max_iters=args.max_iters,
         )
     if args.command == "explain":
-        return _explain(args.path, show_types=args.show_types, show_effects=args.show_effects)
+        return _explain(
+            args.path,
+            show_types=args.show_types,
+            show_effects=args.show_effects,
+            show_resources=args.show_resources,
+        )
     if args.command == "verify":
         return _verify(
             args.path,

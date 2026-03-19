@@ -20,6 +20,12 @@ from .effects import (
     issues_as_dicts as effect_issues_as_dicts,
 )
 from .ir import DEFAULT_EPSILON_FLOOR, DEFAULT_MEASUREMENT_SAFE_RATIO, IR
+from .resources import (
+    check_resource_issues,
+    issues_as_dicts as resource_issues_as_dicts,
+    resource_issues_to_obligation_rows,
+    resource_summary_payload,
+)
 from .semantic_types import (
     check_semantic_type_issues,
     issues_as_dicts,
@@ -174,6 +180,9 @@ class VerificationResult:
     effect_type_summary: dict[str, object] = field(default_factory=dict)
     effect_type_issues: list[dict[str, object]] = field(default_factory=list)
     effect_type_obligations: list[dict[str, object]] = field(default_factory=list)
+    resource_type_summary: dict[str, object] = field(default_factory=dict)
+    resource_type_issues: list[dict[str, object]] = field(default_factory=list)
+    resource_type_obligations: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -862,7 +871,22 @@ def _build_result(
         )
         for row in effect_rows
     ]
-    all_obligations = list(obligations) + semantic_obligations + effect_obligations
+    resource_issues = check_resource_issues(ir, generated_code)
+    ir.module.resource_issues = resource_issues_as_dicts(resource_issues)
+    resource_rows = resource_issues_to_obligation_rows(resource_issues)
+    resource_obligations = [
+        VerificationObligation(
+            obligation_id=str(row["obligation_id"]),
+            category=str(row["category"]),
+            description=str(row["description"]),
+            source_location=str(row["source_location"]) if row.get("source_location") is not None else None,
+            status=str(row["status"]),
+            evidence=str(row["evidence"]) if row.get("evidence") is not None else None,
+            critical=bool(row["critical"]),
+        )
+        for row in resource_rows
+    ]
+    all_obligations = list(obligations) + semantic_obligations + effect_obligations + resource_obligations
 
     counts = _compute_obligation_counts(all_obligations)
     critical_unknown = any(o.status == "unknown" and o.critical for o in all_obligations)
@@ -935,6 +959,9 @@ def _build_result(
         effect_type_summary=effect_summary_payload(ir),
         effect_type_issues=effect_issues_as_dicts(effect_issues),
         effect_type_obligations=effect_rows,
+        resource_type_summary=resource_summary_payload(ir),
+        resource_type_issues=resource_issues_as_dicts(resource_issues),
+        resource_type_obligations=resource_rows,
     )
 
 
