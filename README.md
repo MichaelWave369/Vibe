@@ -134,6 +134,10 @@ What this is **not**:
 
 When this README says “proof,” it refers to **current machine-checkable proof metadata produced by Vibe’s implemented verifier/proof pipeline**.
 
+### Muse integration JSON contract (Issue #34 kickoff)
+
+For the Vibe-side integration contract consumed by Muse (`verify --report json`, `diff --report json`, and `.vibe.proof.json` schema/versioning), see `docs/muse_integration_contract.md`.
+
 ---
 
 ## Package manager, registry, LSP, and CI

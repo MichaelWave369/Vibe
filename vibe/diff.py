@@ -7,6 +7,8 @@ import json
 
 from .ir import IR
 
+DIFF_REPORT_SCHEMA_VERSION = "v1"
+
 
 @dataclass(slots=True)
 class IntentDiffEntry:
@@ -557,8 +559,33 @@ def render_intent_diff_human(result: IntentDiffResult, *, show_unchanged: bool =
     return "\n".join(lines)
 
 
-def render_intent_diff_json(result: IntentDiffResult) -> str:
+def render_intent_diff_json(
+    result: IntentDiffResult,
+    *,
+    old_spec: str = "<unknown>",
+    new_spec: str = "<unknown>",
+) -> str:
+    ops = [
+        {
+            "op": c.change_type,
+            "address": c.source_location or c.item,
+            "field": c.category,
+            "old_value": c.old_value,
+            "new_value": c.new_value,
+            "semantic_polarity": c.semantic_effect,
+            "bridge_impact": None,
+            "severity": "warning" if c.semantic_effect == "broadened" else "info",
+            "message": c.explanation,
+        }
+        for c in result.changes
+    ]
     payload = {
+        "schema_version": DIFF_REPORT_SCHEMA_VERSION,
+        "report_type": "diff",
+        "old_spec": old_spec,
+        "new_spec": new_spec,
+        "drift_score": float(result.summary.get("broadened", 0)) / max(1, result.summary.get("total_changes", 1)),
+        "ops": ops,
         "summary": result.summary,
         "changes": [asdict(c) for c in result.changes],
     }

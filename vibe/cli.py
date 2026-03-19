@@ -77,6 +77,7 @@ from .refinement import (
     to_history_row,
 )
 from .report import render_report, render_report_json
+from .verification_flow import prepare_verification_input
 from .synthesis import (
     generate_candidates,
     rank_candidate,
@@ -90,20 +91,16 @@ from .verifier import available_backends, verify
 ReportMode = str
 
 
-def _load(path: Path) -> str:
-    if not path.exists():
-        raise FileNotFoundError(f"Input file not found: {path}")
-    return path.read_text(encoding="utf-8")
-
-
 def _print_report(
     result,
     report: ReportMode,
     show_obligations: bool = True,
     show_equivalence: bool = False,
+    spec_path: str = "<unknown>",
+    proof_artifact_path: str | None = None,
 ) -> None:
     if report == "json":
-        print(render_report_json(result))
+        print(render_report_json(result, spec_path=spec_path, proof_artifact_path=proof_artifact_path))
     else:
         print(render_report(result, show_obligations=show_obligations, show_equivalence=show_equivalence))
 
@@ -124,22 +121,10 @@ def _compile(
     refine: bool = False,
     max_iters: int = 3,
 ) -> int:
-    source = _load(path)
-    pkg_ctx = package_context_for_path(path)
-    if pkg_ctx:
-        source = apply_package_defaults_to_source(
-            source,
-            VibeManifest(
-                package_name=str(pkg_ctx.get("package_name", "")),
-                package_version=str(pkg_ctx.get("package_version", "")),
-                description="",
-                dependencies=dict(pkg_ctx.get("dependencies", {})),
-                bridge_defaults=dict(pkg_ctx.get("bridge_defaults", {})),
-                emit_defaults=dict(pkg_ctx.get("emit_defaults", {})),
-            ),
-        )
-    ast = parse_source(source)
-    ir = ast_to_ir(ast)
+    prepared = prepare_verification_input(path=path)
+    source = prepared.source_text
+    ir = prepared.ir
+    pkg_ctx = prepared.package_context
     ir_ser = serialize_ir(ir)
     source_hash = sha256_text(source)
     ir_hash = sha256_text(ir_ser)
@@ -288,13 +273,6 @@ def _compile(
     )
     result.refinement_failure_summary = sorted(set(refinement_failure_summary))
     result.refinement_history = [to_history_row(h) for h in refinement_history]
-    _print_report(
-        result,
-        report,
-        show_obligations=show_obligations,
-        show_equivalence=show_equivalence,
-    )
-
     proof_path = default_proof_path(path)
     if write_proof:
         proof = build_proof_artifact(
@@ -306,6 +284,16 @@ def _compile(
             notes=["compile flow proof artifact"],
         )
         write_proof_artifact(proof_path, proof)
+
+    _print_report(
+        result,
+        report,
+        show_obligations=show_obligations,
+        show_equivalence=show_equivalence,
+        spec_path=str(path),
+        proof_artifact_path=str(proof_path) if write_proof else None,
+    )
+    if write_proof:
         print(f"proof: {proof_path}")
 
     if not result.passed:
@@ -369,22 +357,11 @@ def _explain(
     show_compliance: bool = False,
     show_genomics: bool = False,
 ) -> int:
-    source = _load(path)
-    pkg_ctx = package_context_for_path(path)
-    if pkg_ctx:
-        source = apply_package_defaults_to_source(
-            source,
-            VibeManifest(
-                package_name=str(pkg_ctx.get("package_name", "")),
-                package_version=str(pkg_ctx.get("package_version", "")),
-                description="",
-                dependencies=dict(pkg_ctx.get("dependencies", {})),
-                bridge_defaults=dict(pkg_ctx.get("bridge_defaults", {})),
-                emit_defaults=dict(pkg_ctx.get("emit_defaults", {})),
-            ),
-        )
+    prepared = prepare_verification_input(path=path)
+    source = prepared.source_text
+    ir = prepared.ir
+    pkg_ctx = prepared.package_context
     ast = parse_source(source)
-    ir = ast_to_ir(ast)
     emitted_code, _ = emit_code(ir)
     result = verify(ir, emitted_code)
     print("AST:")
@@ -470,22 +447,10 @@ def _verify(
     candidate_count: int = 3,
     with_tests: bool = False,
 ) -> int:
-    source = _load(path)
-    pkg_ctx = package_context_for_path(path)
-    if pkg_ctx:
-        source = apply_package_defaults_to_source(
-            source,
-            VibeManifest(
-                package_name=str(pkg_ctx.get("package_name", "")),
-                package_version=str(pkg_ctx.get("package_version", "")),
-                description="",
-                dependencies=dict(pkg_ctx.get("dependencies", {})),
-                bridge_defaults=dict(pkg_ctx.get("bridge_defaults", {})),
-                emit_defaults=dict(pkg_ctx.get("emit_defaults", {})),
-            ),
-        )
-    ast = parse_source(source)
-    ir = ast_to_ir(ast)
+    prepared = prepare_verification_input(path=path)
+    source = prepared.source_text
+    ir = prepared.ir
+    pkg_ctx = prepared.package_context
     candidates = generate_candidates(ir, candidate_count)
     evaluations = [
         rank_candidate(
@@ -538,16 +503,8 @@ def _verify(
         result.uncovered_items = list(generated_suite.uncovered_items)
         result.partial_coverage_items = list(generated_suite.partial_coverage_items)
         result.test_generation_notes = list(generated_suite.notes)
-    _print_report(
-        result,
-        report,
-        show_obligations=show_obligations,
-        show_equivalence=show_equivalence,
-    )
-    if result.backend_error:
-        print(f"verify failed: {result.backend_error}")
+    proof_path = default_proof_path(path)
     if write_proof:
-        proof_path = default_proof_path(path)
         proof = build_proof_artifact(
             path,
             source,
@@ -557,6 +514,18 @@ def _verify(
             notes=["verify flow proof artifact"],
         )
         write_proof_artifact(proof_path, proof)
+
+    _print_report(
+        result,
+        report,
+        show_obligations=show_obligations,
+        show_equivalence=show_equivalence,
+        spec_path=str(path),
+        proof_artifact_path=str(proof_path) if write_proof else None,
+    )
+    if result.backend_error:
+        print(f"verify failed: {result.backend_error}")
+    if write_proof:
         print(f"proof: {proof_path}")
     return 0 if result.passed else 1
 
@@ -740,13 +709,13 @@ def _diff(
     show_unchanged: bool = False,
     summary_only: bool = False,
 ) -> int:
-    old_source = _load(old_path)
-    new_source = _load(new_path)
+    old_source = old_path.read_text(encoding="utf-8")
+    new_source = new_path.read_text(encoding="utf-8")
     old_ir = ast_to_ir(parse_source(old_source))
     new_ir = ast_to_ir(parse_source(new_source))
     result = compute_intent_diff(old_ir, new_ir)
     if report == "json":
-        print(render_intent_diff_json(result))
+        print(render_intent_diff_json(result, old_spec=str(old_path), new_spec=str(new_path)))
     else:
         print(render_intent_diff_human(result, show_unchanged=show_unchanged, summary_only=summary_only))
     return 0
@@ -957,8 +926,8 @@ def _semver(
     apply_manifest: Path | None,
     show_rules: bool,
 ) -> int:
-    old_source = _load(old_path)
-    new_source = _load(new_path)
+    old_source = old_path.read_text(encoding="utf-8")
+    new_source = new_path.read_text(encoding="utf-8")
     old_ir = ast_to_ir(parse_source(old_source))
     new_ir = ast_to_ir(parse_source(new_source))
 
@@ -1003,7 +972,7 @@ def _negotiate(
     if len(paths) < 2:
         print("negotiate failed: need at least two .vibe specs")
         return 1
-    sources = [_load(p) for p in paths]
+    sources = [p.read_text(encoding="utf-8") for p in paths]
     irs = [ast_to_ir(parse_source(src)) for src in sources]
     contract = negotiate_intents(irs, [str(p) for p in paths])
 
@@ -1052,7 +1021,7 @@ def _stdlib_list(report: ReportMode, root: Path = Path("stdlib")) -> int:
 
 def _interchange_from_text(input_path: Path, report: ReportMode, write_output: Path | None) -> int:
     try:
-        source_text = _load(input_path)
+        source_text = input_path.read_text(encoding="utf-8")
     except Exception as exc:
         print(f"interchange-from-text failed: {exc}")
         return 1
@@ -1076,7 +1045,7 @@ def _interchange_from_text(input_path: Path, report: ReportMode, write_output: P
 
 def _intent_brief(path: Path, report: ReportMode, write_output: Path | None) -> int:
     try:
-        source_text = _load(path)
+        source_text = path.read_text(encoding="utf-8")
         brief = build_intent_brief(path, source_text)
     except Exception as exc:
         print(f"intent-brief failed: {exc}")
