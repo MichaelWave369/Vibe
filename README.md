@@ -214,8 +214,9 @@ Vibe includes a stdio Language Server for editor integration (diagnostics, symbo
 `merge-verify --report json` now includes bridge-aware `verification_context` (base/left/right/merged summaries + merged-vs-base bridge delta), conservative `intent_conflicts`, and a bounded `regression_evidence` block (top problematic obligations) for CI triage.
 Use `--regression-top-n <int>` to tune only regression-evidence verbosity (with deterministic clamping); it does not change merge/verification outcomes.
 Use `--require-merged-bridge <float>` to enforce a minimum merged `bridge_score` in CI (opt-in; default behavior unchanged).
+Use `--max-bridge-regression <float>` to enforce an upper bound on allowed bridge regression vs base (`bridge_score_delta_vs_base >= -value`), e.g. `0.00` disallows any regression and `0.05` allows regression up to `0.05`.
 Use `--fail-on-intent-conflicts` to fail merges that still produce non-empty `intent_conflicts` (opt-in; default behavior unchanged).
-When either policy flag is used, merge-verify JSON includes `policy_evaluation` with `requested`, `available`, `passed`, and per-check machine-readable status rows.
+When any merge policy flag is used, merge-verify JSON includes `policy_evaluation` with `requested`, `available`, `passed`, and per-check machine-readable status rows.
 
 ---
 

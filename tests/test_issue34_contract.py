@@ -111,9 +111,14 @@ emit python
     left.write_text(base.read_text(encoding="utf-8"), encoding="utf-8")
     right.write_text(base.read_text(encoding="utf-8"), encoding="utf-8")
 
-    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json"]) in {0, 1}
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--max-bridge-regression", "0.00"]) in {
+        0,
+        1,
+    }
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "v1"
     assert payload["report_type"] == "merge_verify"
     assert "policy_evaluation" in payload
     assert {"requested", "available", "passed", "checks"}.issubset(payload["policy_evaluation"].keys())
+    names = [c["policy_name"] for c in payload["policy_evaluation"]["checks"]]
+    assert names == ["max_bridge_regression"]

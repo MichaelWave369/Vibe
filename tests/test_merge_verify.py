@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from vibe.cli import main
 
 
@@ -930,6 +932,8 @@ emit python
                 "json",
                 "--require-merged-bridge",
                 "0.9999",
+                "--max-bridge-regression",
+                "0.05",
                 "--fail-on-intent-conflicts",
             ]
         )
@@ -938,9 +942,226 @@ emit python
     payload = json.loads(capsys.readouterr().out)
     checks = payload["policy_evaluation"]["checks"]
     assert payload["policy_evaluation"]["requested"] is True
-    assert len(checks) == 2
+    assert len(checks) == 3
     names = [c["policy_name"] for c in checks]
-    assert names == ["require_merged_bridge", "fail_on_intent_conflicts"]
+    assert names == ["require_merged_bridge", "max_bridge_regression", "fail_on_intent_conflicts"]
+
+
+def test_merge_verify_policy_max_bridge_regression_zero_passes_when_delta_non_negative(tmp_path: Path, capsys) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+emit python
+""",
+    )
+    left = _write(tmp_path / "left.vibe", base.read_text(encoding="utf-8"))
+    right = _write(tmp_path / "right.vibe", base.read_text(encoding="utf-8"))
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--max-bridge-regression", "0.00"]) in {0, 1}
+    payload = json.loads(capsys.readouterr().out)
+    check = next(c for c in payload["policy_evaluation"]["checks"] if c["policy_name"] == "max_bridge_regression")
+    assert check["available"] is True
+    assert float(check["effective_value"]) >= 0.0
+    assert check["passed"] is True
+
+
+def test_merge_verify_policy_max_bridge_regression_zero_fails_when_delta_negative(tmp_path: Path, capsys) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+preserve:
+  p0 = false
+  p1 = false
+  p2 = false
+  p3 = false
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+emit python
+""",
+    )
+    left = _write(
+        tmp_path / "left.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+emit python
+""",
+    )
+    right = _write(tmp_path / "right.vibe", base.read_text(encoding="utf-8"))
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--max-bridge-regression", "0.00"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    check = next(c for c in payload["policy_evaluation"]["checks"] if c["policy_name"] == "max_bridge_regression")
+    assert float(check["effective_value"]) < 0.0
+    assert check["passed"] is False
+    assert check["reason"] == "exceeds_allowed_regression"
+
+
+def test_merge_verify_policy_max_bridge_regression_allows_small_negative_and_blocks_larger(tmp_path: Path, capsys, monkeypatch) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+preserve:
+  p0 = false
+  p1 = false
+  p2 = false
+  p3 = false
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+emit python
+""",
+    )
+    left = _write(
+        tmp_path / "left.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    a: number
+  outputs:
+    b: number
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+emit python
+""",
+    )
+    right = _write(tmp_path / "right.vibe", base.read_text(encoding="utf-8"))
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--max-bridge-regression", "0.05"]) in {0, 1}
+    payload = json.loads(capsys.readouterr().out)
+    check = next(c for c in payload["policy_evaluation"]["checks"] if c["policy_name"] == "max_bridge_regression")
+    assert -0.05 <= float(check["effective_value"]) < 0.0
+    assert check["passed"] is True
+
+    from vibe.merge_verify import MergeVerifyResult
+
+    def _fake_merge_verify(*args, **kwargs):
+        return MergeVerifyResult(
+            merge_status="merged",
+            conflicts=[],
+            merged_text="intent M:\n  goal: \"g\"\nemit python\n",
+            verification={
+                "passed": True,
+                "bridge_score": 0.8,
+                "epsilon_post": 0.0,
+                "measurement_ratio": 0.0,
+                "epsilon_floor": 0.0,
+                "measurement_safe_ratio": 1.0,
+                "obligations_total": 1,
+                "obligations_satisfied": 1,
+            },
+            verification_context={
+                "requested": True,
+                "available": True,
+                "reason": None,
+                "base": {},
+                "left": {},
+                "right": {},
+                "merged": {},
+                "bridge_score_delta_vs_base": -0.2,
+            },
+            intent_conflicts=[],
+            regression_evidence={"available": True, "selection_policy": {}, "top_problem_obligations": []},
+            policy_evaluation={
+                "requested": True,
+                "available": True,
+                "passed": False,
+                "checks": [
+                    {
+                        "policy_name": "max_bridge_regression",
+                        "requested_value": 0.05,
+                        "effective_value": -0.2,
+                        "available": True,
+                        "passed": False,
+                        "reason": "exceeds_allowed_regression",
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr("vibe.cli.merge_verify", _fake_merge_verify)
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--max-bridge-regression", "0.05"]) == 1
+    payload_forced = json.loads(capsys.readouterr().out)
+    forced_check = next(c for c in payload_forced["policy_evaluation"]["checks"] if c["policy_name"] == "max_bridge_regression")
+    assert forced_check["passed"] is False
+    assert forced_check["requested_value"] == 0.05
+
+
+def test_merge_verify_policy_max_bridge_regression_unavailable_on_conflict(tmp_path: Path, capsys) -> None:
+    base = _write(
+        tmp_path / "base.vibe",
+        """
+intent M:
+  goal: "g"
+  inputs:
+    x: number
+  outputs:
+    y: number
+emit python
+""",
+    )
+    left = _write(
+        tmp_path / "left.vibe",
+        """
+intent M:
+  goal: "left-goal"
+  inputs:
+    x: number
+  outputs:
+    y: number
+emit python
+""",
+    )
+    right = _write(
+        tmp_path / "right.vibe",
+        """
+intent M:
+  goal: "right-goal"
+  inputs:
+    x: number
+  outputs:
+    y: number
+emit python
+""",
+    )
+    assert main(["merge-verify", str(base), str(left), str(right), "--report", "json", "--max-bridge-regression", "0.05"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    check = next(c for c in payload["policy_evaluation"]["checks"] if c["policy_name"] == "max_bridge_regression")
+    assert payload["merge_status"] == "conflict"
+    assert check["available"] is False
+    assert check["reason"] == "bridge_score_delta_not_available"
+
+
+def test_merge_verify_policy_max_bridge_regression_rejects_negative_input(tmp_path: Path) -> None:
+    base = _write(tmp_path / "base.vibe", "intent M:\n  goal: \"g\"\nemit python\n")
+    with pytest.raises(SystemExit) as excinfo:
+        main(["merge-verify", str(base), str(base), str(base), "--max-bridge-regression", "-0.01"])
+    assert excinfo.value.code == 2
 
 
 def test_diff_verification_context_failure_path_is_machine_readable(tmp_path: Path, capsys, monkeypatch) -> None:

@@ -273,6 +273,7 @@ Outcome behavior:
 `vibec merge-verify` now supports explicit opt-in policy checks:
 
 - `--require-merged-bridge <float>`
+- `--max-bridge-regression <float>`
 - `--fail-on-intent-conflicts`
 
 Default behavior is unchanged when no policy flags are provided.
@@ -299,7 +300,20 @@ Each check row includes:
 Current `policy_name` values:
 
 - `require_merged_bridge`
+- `max_bridge_regression`
 - `fail_on_intent_conflicts`
+
+`max_bridge_regression` pass condition is explicit:
+
+- let `delta = verification_context.bridge_score_delta_vs_base`
+- let `limit = requested_value`
+- pass iff `delta >= -limit`
+
+Examples:
+
+- `--max-bridge-regression 0.00` => no regression allowed (`delta` must be `>= 0`)
+- `--max-bridge-regression 0.05` => regression allowed down to `-0.05`
+- positive deltas always pass
 
 Availability semantics:
 
