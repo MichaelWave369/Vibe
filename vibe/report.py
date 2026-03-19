@@ -4,14 +4,78 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from pathlib import Path
 
+from .cache import sha256_text
 from .verifier import VerificationResult
+
+VERIFY_REPORT_SCHEMA_VERSION = "v1"
 
 
 def report_dict(result: VerificationResult) -> dict[str, object]:
     """Return a JSON-serializable bridge report payload."""
 
     return asdict(result)
+
+
+def _obligation_severity(result_row: dict[str, object]) -> str:
+    if result_row.get("critical"):
+        return "error"
+    status = str(result_row.get("status", "")).lower()
+    if status == "violated":
+        return "warning"
+    if status == "unknown":
+        return "advisory"
+    return "info"
+
+
+def verify_contract_payload(
+    result: VerificationResult,
+    *,
+    spec_path: str | None,
+    proof_artifact_path: str | None = None,
+    proof_sha256: str | None = None,
+    input_mode: str = "path",
+    snapshot_id: str | None = None,
+    snapshot_store: str | None = None,
+) -> dict[str, object]:
+    """Stable, versioned verify JSON contract used by Muse integration."""
+
+    legacy = report_dict(result)
+    obligations: list[dict[str, object]] = []
+    for row in legacy.get("obligations", []):
+        obligation = {
+            "id": row.get("obligation_id"),
+            "category": row.get("category"),
+            "address": row.get("source_location"),
+            "status": row.get("status"),
+            "message": row.get("description"),
+            "severity": _obligation_severity(row),
+            "expected": None,
+            "observed": None,
+        }
+        obligations.append(obligation)
+
+    obligations_satisfied = sum(1 for o in obligations if o["status"] == "satisfied")
+    payload: dict[str, object] = dict(legacy)
+    payload["schema_version"] = VERIFY_REPORT_SCHEMA_VERSION
+    payload["report_type"] = "verify"
+    payload["spec_path"] = spec_path
+    payload["input_mode"] = input_mode
+    payload["snapshot_id"] = snapshot_id
+    payload["snapshot_store"] = snapshot_store
+    payload["bridge_score"] = result.bridge_score
+    payload["epsilon_post"] = result.epsilon_post
+    payload["measurement_ratio"] = result.measurement_ratio
+    payload["epsilon_floor"] = result.epsilon_floor
+    payload["measurement_safe_ratio"] = result.measurement_safe_ratio
+    payload["obligations_total"] = len(obligations)
+    payload["obligations_satisfied"] = obligations_satisfied
+    payload["obligations"] = obligations
+    payload["proof_artifact_path"] = proof_artifact_path
+    payload["proof_sha256"] = proof_sha256
+    payload["legacy_report"] = legacy
+    return payload
 
 
 def render_report(
@@ -277,7 +341,29 @@ def render_report(
     return "\n".join(lines)
 
 
-def render_report_json(result: VerificationResult) -> str:
+def render_report_json(
+    result: VerificationResult,
+    *,
+    spec_path: str | Path | None = "<unknown>",
+    proof_artifact_path: str | Path | None = None,
+    input_mode: str = "path",
+    snapshot_id: str | None = None,
+    snapshot_store: str | Path | None = None,
+) -> str:
     """Render a deterministic JSON bridge report."""
 
-    return json.dumps(report_dict(result), indent=2, sort_keys=True)
+    proof_sha256 = None
+    if proof_artifact_path is not None:
+        proof_text = Path(proof_artifact_path).read_text(encoding="utf-8") if Path(proof_artifact_path).exists() else None
+        if proof_text is not None:
+            proof_sha256 = sha256_text(proof_text)
+    payload = verify_contract_payload(
+        result,
+        spec_path=str(spec_path) if spec_path is not None else None,
+        proof_artifact_path=str(proof_artifact_path) if proof_artifact_path is not None else None,
+        proof_sha256=proof_sha256,
+        input_mode=input_mode,
+        snapshot_id=snapshot_id,
+        snapshot_store=str(snapshot_store) if snapshot_store is not None else None,
+    )
+    return json.dumps(payload, indent=2, sort_keys=True)
