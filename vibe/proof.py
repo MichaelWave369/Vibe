@@ -229,6 +229,12 @@ def build_proof_artifact(
             "self_regression_status": result.self_regression_status,
             "self_baseline_reference": result.self_baseline_reference,
         },
+        "interchange": {
+            "source_kind": "direct_vibe_source",
+            "transformation_state": "verified_compiled_intent",
+            "artifact_links": [],
+            "consumer_brief_links": [],
+        },
         "notes": notes or [],
     }
     return artifact
@@ -279,6 +285,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     legal_meta = payload["legal_compliance"]
     genomics_meta = payload["genomics"]
     self_hosting_meta = payload["self_hosting"]
+    interchange_meta = payload.get("interchange", {})
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -315,5 +322,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"genomics_issue_count: {len(genomics_meta.get('issues', []))}",
             f"self_hosting_enabled: {self_hosting_meta.get('self_hosting_enabled')}",
             f"self_regression_status: {self_hosting_meta.get('self_regression_status')}",
+            f"interchange_source_kind: {interchange_meta.get('source_kind', '<unknown>')}",
         ]
     )

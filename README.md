@@ -39,7 +39,8 @@ Vibe currently includes:
 - **Phase 8.1** bounded self-hosting self-check.
 - **Phase 8.2** semver derivation from semantic intent diff.
 - **Phase 8.3** intent negotiation protocol.
-- **Phase 8.4** initial standard library packages (`vibe_http`, `vibe_payment`, `vibe_vector`, `vibe_agent`).
+- **Phase 8.4** intent-as-interchange layer (`interchange-from-text`, `intent-brief`, `proof-brief`) for bounded NL->`.vibe` scaffolding and machine-consumable proof summaries.
+- Initial standard-library package set (`vibe_http`, `vibe_payment`, `vibe_vector`, `vibe_agent`) as reusable intent contracts.
 
 This is still a prototype compiler with bounded slices, not complete language coverage.
 
@@ -95,6 +96,9 @@ Primary commands:
 - `vibec self-check` — bounded self-hosting check.
 - `vibec domains` — list domain profiles.
 - `vibec stdlib-list` — list built-in standard-library packages in `stdlib/`.
+- `vibec interchange-from-text <requirements.txt>` — deterministic NL-to-`.vibe` interchange scaffold artifact.
+- `vibec intent-brief <file.vibe>` — deterministic machine-readable intent brief.
+- `vibec proof-brief <file.vibe.proof.json>` — deterministic machine-readable consumer proof brief.
 
 ---
 
@@ -179,7 +183,7 @@ These currently provide bounded, deterministic metadata/check/emitter surfaces a
 
 ---
 
-## Standard library (Phase 8.4)
+## Ecosystem: initial standard library
 
 Vibe now includes an initial **standard library of reusable intent packages** under `stdlib/`.
 
@@ -210,6 +214,28 @@ vibec stdlib-list --report json
 ```
 
 Scope note: this is an initial, bounded standard library. Coverage will expand in future phases.
+
+---
+
+## Intent as universal intermediate language (Phase 8.4 roadmap alignment)
+
+Vibe now treats `.vibe` as an interchange contract between humans/LLMs/agents and downstream compilers/proof consumers.
+
+Implemented bounded interchange slice:
+
+- `vibec interchange-from-text <requirements.txt>` builds a deterministic NL-to-`.vibe` interchange artifact (scaffold, not autonomous correctness magic).
+- `vibec intent-brief <file.vibe>` exports a deterministic machine-readable intent contract summary.
+- `vibec proof-brief <file.vibe.proof.json>` exports a deterministic machine-readable consumer brief from proof data.
+
+This enables the roadmap pipeline:
+
+`natural language requirement -> interchange artifact -> .vibe intent contract -> verify/prove -> machine-consumable proof brief`.
+
+Truthfulness boundaries:
+
+- no live hosted LLM provider integration in this phase,
+- no claim of perfect natural-language understanding,
+- no claim that proof brief equals complete formal behavioral proof.
 
 ---
 

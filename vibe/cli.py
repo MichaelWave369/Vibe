@@ -34,6 +34,12 @@ from .package_manager import (
 from dataclasses import asdict
 from .manifest import VibeManifest
 from .lsp.server import run_stdio_server
+from .interchange import (
+    build_interchange_from_text,
+    build_intent_brief,
+    build_proof_brief,
+    write_json_artifact,
+)
 from .negotiation import (
     negotiate_intents,
     render_negotiated_vibe,
@@ -1044,6 +1050,81 @@ def _stdlib_list(report: ReportMode, root: Path = Path("stdlib")) -> int:
     return 0
 
 
+def _interchange_from_text(input_path: Path, report: ReportMode, write_output: Path | None) -> int:
+    try:
+        source_text = _load(input_path)
+    except Exception as exc:
+        print(f"interchange-from-text failed: {exc}")
+        return 1
+
+    artifact = build_interchange_from_text(source_text, source_path=input_path)
+    if write_output is not None:
+        write_json_artifact(write_output, artifact)
+
+    if report == "json":
+        print(package_summary_json(artifact))
+    else:
+        print("=== Vibe Interchange Artifact ===")
+        print(f"artifact_version: {artifact['artifact_version']}")
+        print(f"source_path: {input_path}")
+        print(f"intent_name: {artifact['generated_intent']['intent_name']}")
+        print("mode: deterministic_scaffold")
+        if write_output is not None:
+            print(f"artifact_path: {write_output}")
+    return 0
+
+
+def _intent_brief(path: Path, report: ReportMode, write_output: Path | None) -> int:
+    try:
+        source_text = _load(path)
+        brief = build_intent_brief(path, source_text)
+    except Exception as exc:
+        print(f"intent-brief failed: {exc}")
+        return 1
+
+    if write_output is not None:
+        write_json_artifact(write_output, brief)
+
+    if report == "json":
+        print(package_summary_json(brief))
+    else:
+        print("=== Vibe Intent Brief ===")
+        print(f"source_path: {brief['source_path']}")
+        intent = brief["intent"]
+        print(f"intent: {intent['name']}")
+        print(f"emit_target: {brief['emit_target']}")
+        print(f"inputs: {[r['name'] for r in intent['inputs']]}")
+        print(f"outputs: {[r['name'] for r in intent['outputs']]}")
+        if write_output is not None:
+            print(f"brief_path: {write_output}")
+    return 0
+
+
+def _proof_brief(path: Path, report: ReportMode, write_output: Path | None) -> int:
+    try:
+        proof = load_proof_artifact(path)
+    except Exception as exc:
+        print(f"proof-brief failed: {exc}")
+        return 1
+
+    brief = build_proof_brief(proof, proof_path=path)
+    if write_output is not None:
+        write_json_artifact(write_output, brief)
+
+    if report == "json":
+        print(package_summary_json(brief))
+    else:
+        print("=== Vibe Proof Consumer Brief ===")
+        print(f"proof_path: {path}")
+        print(f"source_path: {brief['source_path']}")
+        print(f"bridge_verdict: {brief['bridge_result']['verdict']}")
+        print(f"bridge_score: {brief['bridge_result']['bridge_score']}")
+        print(f"equivalence_score: {brief['equivalence_drift_summary']['intent_equivalence_score']}")
+        if write_output is not None:
+            print(f"brief_path: {write_output}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1220,6 +1301,21 @@ def build_parser() -> argparse.ArgumentParser:
     sl = sub.add_parser("stdlib-list", help="List built-in standard library packages")
     sl.add_argument("--report", choices=["human", "json"], default="human")
 
+    it = sub.add_parser("interchange-from-text", help="Build deterministic NL->.vibe interchange scaffold artifact")
+    it.add_argument("input_path", type=Path, help="Plain-text requirement file")
+    it.add_argument("--report", choices=["human", "json"], default="human")
+    it.add_argument("--write-output", type=Path, default=None, help="Optional JSON artifact path")
+
+    ib = sub.add_parser("intent-brief", help="Build deterministic machine-readable brief from .vibe intent spec")
+    ib.add_argument("path", type=Path)
+    ib.add_argument("--report", choices=["human", "json"], default="human")
+    ib.add_argument("--write-output", type=Path, default=None, help="Optional JSON brief path")
+
+    pb = sub.add_parser("proof-brief", help="Build deterministic machine-readable consumer brief from .vibe.proof.json")
+    pb.add_argument("path", type=Path)
+    pb.add_argument("--report", choices=["human", "json"], default="human")
+    pb.add_argument("--write-output", type=Path, default=None, help="Optional JSON brief path")
+
     return parser
 
 
@@ -1360,6 +1456,12 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "stdlib-list":
         return _stdlib_list(args.report)
+    if args.command == "interchange-from-text":
+        return _interchange_from_text(args.input_path, args.report, args.write_output)
+    if args.command == "intent-brief":
+        return _intent_brief(args.path, args.report, args.write_output)
+    if args.command == "proof-brief":
+        return _proof_brief(args.path, args.report, args.write_output)
 
     parser.error("unknown command")
     return 2

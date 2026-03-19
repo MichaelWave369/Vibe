@@ -89,7 +89,7 @@ python -m pytest -q</code></pre>
       </section>
 
       <section class="container section" id="standard-library">
-        <h3>Standard Library (Phase 8.4)</h3>
+        <h3>Ecosystem: Initial Standard Library</h3>
         <p>
           Vibe now includes an initial bounded standard library of reusable intent-contract packages:
           <code>vibe_http</code>, <code>vibe_payment</code>, <code>vibe_vector</code>, and <code>vibe_agent</code>.
@@ -101,6 +101,23 @@ python -m pytest -q</code></pre>
         </p>
         <p>
           Scope note: this is an initial package set, not complete standard-library coverage.
+        </p>
+      </section>
+
+      <section class="container section" id="interchange">
+        <h3>Phase 8.4: Intent as Universal Intermediate Language</h3>
+        <p>
+          Vibe now treats <code>.vibe</code> as an interchange layer between natural-language requirements,
+          verifiable intent contracts, and proof consumers.
+        </p>
+        <p>
+          Bounded interchange commands:
+          <code>interchange-from-text</code> (deterministic NL scaffold),
+          <code>intent-brief</code> (machine-readable intent summary),
+          and <code>proof-brief</code> (machine-readable proof consumer summary).
+        </p>
+        <p>
+          Scope is intentionally honest: no hosted LLM integration and no claim of perfect natural-language understanding.
         </p>
       </section>
 
