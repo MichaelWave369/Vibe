@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from vibe.cache import sha256_text
 from vibe.cli import main
 from vibe.proof import load_proof_artifact
 
@@ -83,6 +84,7 @@ def test_invalid_proof_version_handled(tmp_path, capsys) -> None:
     proof.write_text(
         json.dumps(
             {
+                "schema_version": "v1",
                 "artifact_version": "v0",
                 "source_path": "x",
                 "source_hash": "x",
@@ -139,6 +141,7 @@ def test_proof_schema_fields_present(tmp_path) -> None:
 
     payload = json.loads(case.with_suffix(".vibe.proof.json").read_text(encoding="utf-8"))
     for key in [
+        "schema_version",
         "artifact_version",
         "source_path",
         "source_hash",
@@ -164,5 +167,49 @@ def test_proof_schema_fields_present(tmp_path) -> None:
         "agent_boundary_bridges",
         "delegation",
         "runtime_monitor",
+        "provenance",
     ]:
         assert key in payload
+
+
+def test_proof_artifact_includes_path_mode_provenance(tmp_path) -> None:
+    src = Path("vibe/examples/payment_router.vibe")
+    case = tmp_path / "payment_router.vibe"
+    case.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["verify", str(case), "--write-proof"]) == 0
+
+    payload = json.loads(case.with_suffix(".vibe.proof.json").read_text(encoding="utf-8"))
+    assert payload["provenance"]["input_mode"] == "path"
+    assert payload["provenance"]["spec_path"] == str(case)
+    assert payload["provenance"]["snapshot_id"] is None
+    assert payload["provenance"]["snapshot_store"] is None
+
+
+def test_proof_artifact_includes_snapshot_mode_provenance(tmp_path, capsys) -> None:
+    store = tmp_path / "store"
+    store.mkdir()
+    source = Path("vibe/examples/payment_router.vibe").read_text(encoding="utf-8")
+    sid = sha256_text(source)
+    (store / sid).write_text(source, encoding="utf-8")
+
+    rc = main(
+        [
+            "verify",
+            "--snapshot",
+            sid,
+            "--snapshot-store",
+            str(store),
+            "--write-proof",
+            "--report",
+            "json",
+        ]
+    )
+    assert rc in {0, 1}
+    capsys.readouterr()
+
+    proof_path = store / f"{sid}.vibe.proof.json"
+    payload = json.loads(proof_path.read_text(encoding="utf-8"))
+    assert payload["provenance"]["input_mode"] == "snapshot"
+    assert payload["provenance"]["spec_path"] is None
+    assert payload["provenance"]["snapshot_id"] == sid
+    assert payload["provenance"]["snapshot_store"] == str(store.resolve())

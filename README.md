@@ -58,6 +58,14 @@ Verify an intent spec:
 vibec verify vibe/examples/payment_router.vibe
 ```
 
+Store a local snapshot and verify by snapshot id:
+
+```bash
+vibec snapshot-put vibe/examples/payment_router.vibe --report json
+# capture snapshot_id from output
+vibec verify --snapshot <sha256> --snapshot-store ./.vibe_snapshots --report json
+```
+
 Compile when preservation passes:
 
 ```bash
@@ -84,9 +92,12 @@ Primary commands:
 
 - `vibec compile <file.vibe>` — verify + emit when preservation passes.
 - `vibec verify <file.vibe>` — verification only.
+- `vibec snapshot-put <file.vibe>` — store local file in content-addressed snapshot store.
+- `vibec verify --snapshot <sha256> --snapshot-store <dir>` — verify blob content by content hash.
 - `vibec verify-proof <file.vibe>` — verification + proof artifact write.
 - `vibec inspect-proof <file.vibe.proof.json>` — inspect proof summary.
 - `vibec diff <old.vibe> <new.vibe>` — semantic intent diff.
+- `vibec merge-verify <base.vibe> <left.vibe> <right.vibe>` — conservative three-way merge + verification.
 - `vibec semver <old.vibe> <new.vibe>` — derive recommended semver bump.
 - `vibec negotiate <a.vibe> <b.vibe> ...` — deterministic contract negotiation.
 - `vibec init` / `manifest-check` / `build` — package lifecycle.
@@ -134,6 +145,38 @@ What this is **not**:
 
 When this README says “proof,” it refers to **current machine-checkable proof metadata produced by Vibe’s implemented verifier/proof pipeline**.
 
+### Muse integration JSON contract (Issue #34 kickoff)
+
+For the Vibe-side integration contract consumed by Muse (`verify --report json`, `diff --report json`, and `.vibe.proof.json` schema/versioning), see `docs/muse_integration_contract.md`.
+
+Snapshot mode and proof provenance are explicitly local-first:
+
+- `snapshot-put` writes only to a local content-addressed store.
+- snapshot verification proof artifacts include honest provenance (`input_mode`, `snapshot_id`, `snapshot_store`) and do not claim filesystem source paths for snapshot inputs.
+
+### External obligation registration seam (Phase 4A)
+
+Vibe now includes a controlled Python-level extension seam for registering additional obligation categories.
+
+What it does today:
+
+- lets Python code register deterministic external obligation providers by category name,
+- executes registered providers during `verify`,
+- surfaces resulting obligations through normal machine-readable outputs (`verify --report json`, `.vibe.proof.json`).
+- emits provider execution diagnostics (`external_obligation_providers`) with stable provider identity, emitted count, status summary, and error fields.
+
+What it does **not** do yet:
+
+- no plugin marketplace or automatic discovery,
+- no remote loading,
+- no automatic bridge-score math changes for external obligations.
+
+Minimal API:
+
+```python
+from vibe.obligation_registry import register_external_obligation_provider
+```
+
 ---
 
 ## Package manager, registry, LSP, and CI
@@ -167,6 +210,9 @@ Vibe includes a stdio Language Server for editor integration (diagnostics, symbo
 ### CI
 
 `vibec ci-check` provides deterministic bridge-check outputs for local CI and GitHub Actions usage.
+
+`merge-verify --report json` now includes bridge-aware `verification_context` (base/left/right/merged summaries + merged-vs-base bridge delta), conservative `intent_conflicts`, and a bounded `regression_evidence` block (top problematic obligations) for CI triage.
+Use `--regression-top-n <int>` to tune only regression-evidence verbosity (with deterministic clamping); it does not change merge/verification outcomes.
 
 ---
 
