@@ -13,6 +13,11 @@ from .cache import (
     save_cache_record,
     sha256_text,
 )
+from .calibration import (
+    fit_calibration_model,
+    load_calibration_corpus,
+    save_calibration_model,
+)
 from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
 from .parser import parse_source
@@ -38,13 +43,7 @@ def _print_report(
     if report == "json":
         print(render_report_json(result))
     else:
-        print(
-            render_report(
-                result,
-                show_obligations=show_obligations,
-                show_equivalence=show_equivalence,
-            )
-        )
+        print(render_report(result, show_obligations=show_obligations, show_equivalence=show_equivalence))
 
 
 def _compile(
@@ -56,6 +55,7 @@ def _compile(
     show_equivalence: bool = False,
     verification_backend: str = "heuristic",
     fallback_backend: str | None = None,
+    use_calibration: bool = True,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
@@ -91,7 +91,13 @@ def _compile(
         else:
             print("cache: miss")
 
-    result = verify(ir, emitted_code, backend=verification_backend, fallback_backend=fallback_backend)
+    result = verify(
+        ir,
+        emitted_code,
+        backend=verification_backend,
+        fallback_backend=fallback_backend,
+        use_calibration=use_calibration,
+    )
     _print_report(
         result,
         report,
@@ -162,12 +168,19 @@ def _verify(
     show_equivalence: bool = False,
     verification_backend: str = "heuristic",
     fallback_backend: str | None = None,
+    use_calibration: bool = True,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
     emitted_code, _ = emit_code(ir)
-    result = verify(ir, emitted_code, backend=verification_backend, fallback_backend=fallback_backend)
+    result = verify(
+        ir,
+        emitted_code,
+        backend=verification_backend,
+        fallback_backend=fallback_backend,
+        use_calibration=use_calibration,
+    )
     _print_report(
         result,
         report,
@@ -177,6 +190,18 @@ def _verify(
     if result.backend_error:
         print(f"verify failed: {result.backend_error}")
     return 0 if result.passed else 1
+
+
+def _calibrate(corpus_path: Path) -> int:
+    records = load_calibration_corpus(corpus_path)
+    model = fit_calibration_model(records)
+    artifact = save_calibration_model(model)
+    print("=== Vibe Calibration Summary ===")
+    print(f"corpus_records: {len(records)}")
+    print(f"model_version: {model.model_version}")
+    print(f"fit_confidence: {model.fit_confidence:.4f}")
+    print(f"artifact: {artifact}")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -192,6 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--show-equivalence", action="store_true", help="Show detailed equivalence/diff entries in human report")
     cp.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
     cp.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
+    cp.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
 
     ex = sub.add_parser("explain", help="Explain AST and IR")
     ex.add_argument("path", type=Path)
@@ -203,6 +229,10 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("--show-equivalence", action="store_true", help="Show detailed equivalence/diff entries in human report")
     vf.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
     vf.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
+    vf.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
+
+    cal = sub.add_parser("calibrate", help="Fit/update empirical epsilon calibration model")
+    cal.add_argument("corpus_path", type=Path)
 
     return parser
 
@@ -221,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
             show_equivalence=args.show_equivalence,
             verification_backend=args.backend,
             fallback_backend=args.fallback_backend,
+            use_calibration=not args.no_calibration,
         )
     if args.command == "explain":
         return _explain(args.path)
@@ -232,7 +263,10 @@ def main(argv: list[str] | None = None) -> int:
             show_equivalence=args.show_equivalence,
             verification_backend=args.backend,
             fallback_backend=args.fallback_backend,
+            use_calibration=not args.no_calibration,
         )
+    if args.command == "calibrate":
+        return _calibrate(args.corpus_path)
 
     parser.error("unknown command")
     return 2

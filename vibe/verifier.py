@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from dataclasses import replace
 import re
 from typing import Protocol
 
+from .calibration import (
+    apply_calibration,
+    extract_calibration_features,
+    load_calibration_model,
+)
 from .equivalence import CorrespondenceEntry, analyze_intent_equivalence
 from .ir import DEFAULT_EPSILON_FLOOR, DEFAULT_MEASUREMENT_SAFE_RATIO, IR
 
@@ -126,6 +132,11 @@ class VerificationResult:
     drift_score: float = 1.0
     mapping_notes: list[str] = field(default_factory=list)
     correspondence_entries: list[CorrespondenceEntry] = field(default_factory=list)
+    calibration_applied: bool = False
+    calibration_model_version: str | None = None
+    calibration_artifact_path: str | None = None
+    calibration_confidence: float | None = None
+    calibration_notes: str = ""
 
 
 @dataclass(slots=True)
@@ -782,6 +793,7 @@ def _build_result(
     obligations: list[VerificationObligation],
     metadata: VerificationBackendMetadata,
     backend_error: str | None,
+    calibration_meta: dict[str, object] | None = None,
 ) -> VerificationResult:
     counts = _compute_obligation_counts(obligations)
     critical_unknown = any(o.status == "unknown" and o.critical for o in obligations)
@@ -843,6 +855,11 @@ def _build_result(
         drift_score=equivalence.drift_score,
         mapping_notes=list(equivalence.mapping_notes),
         correspondence_entries=list(equivalence.correspondences),
+        calibration_applied=bool((calibration_meta or {}).get("applied", False)),
+        calibration_model_version=(calibration_meta or {}).get("model_version"),
+        calibration_artifact_path=(calibration_meta or {}).get("artifact_path"),
+        calibration_confidence=(calibration_meta or {}).get("confidence"),
+        calibration_notes=str((calibration_meta or {}).get("notes", "")),
     )
 
 
@@ -888,10 +905,61 @@ def verify(
     generated_code: str,
     backend: str = "heuristic",
     fallback_backend: str | None = None,
+    use_calibration: bool = True,
+    calibration_path: str | None = None,
 ) -> VerificationResult:
     """Compute bridge preservation metrics and evaluate obligations via backend."""
 
     metrics = _compute_metrics(ir, generated_code)
+    calibration_meta: dict[str, object] = {
+        "applied": False,
+        "model_version": None,
+        "artifact_path": str(calibration_path or ".vibe_calibration/bridge_calibration.json"),
+        "confidence": None,
+        "notes": "default heuristic epsilon surfaces",
+    }
+    if use_calibration:
+        model = load_calibration_model(calibration_path)
+        if model is None:
+            calibration_meta["notes"] = "calibration artifact missing or invalid; using default epsilon surfaces"
+        else:
+            eq_preview = analyze_intent_equivalence(ir, generated_code)
+            features = extract_calibration_features(
+                intent_complexity=len(ir.inputs) + len(ir.outputs),
+                preserve_count=len(ir.preserve_rules),
+                constraint_count=len(ir.constraints),
+                bridge_setting_count=len(ir.bridge_config),
+                equivalence_score=eq_preview.intent_equivalence_score,
+                drift_score=eq_preview.drift_score,
+                target=ir.emit_target.lower(),
+            )
+            conservative_no_rescue = (
+                metrics.epsilon_post <= metrics.epsilon_floor
+                or metrics.measurement_ratio < metrics.measurement_safe_ratio
+            )
+            cal_pre, cal_post, cal_info = apply_calibration(
+                model,
+                metrics.epsilon_pre,
+                metrics.epsilon_post,
+                features,
+                conservative_no_rescue=conservative_no_rescue,
+            )
+            metrics = replace(
+                metrics,
+                epsilon_pre=cal_pre,
+                epsilon_post=cal_post,
+                measurement_ratio=cal_post / max(cal_pre, metrics.epsilon_floor),
+            )
+            calibration_meta = {
+                "applied": True,
+                "model_version": model.model_version,
+                "artifact_path": str(calibration_path or ".vibe_calibration/bridge_calibration.json"),
+                "confidence": float(cal_info.get("fit_confidence", 0.0)),
+                "notes": (
+                    f"empirical calibration applied "
+                    f"(delta_pre={cal_info.get('delta_pre')}, delta_post={cal_info.get('delta_post')})"
+                ),
+            }
     observed_scalars, observed_bools, observed_symbols = _build_observed_facts(ir, metrics, generated_code)
     context = ObligationEvaluationContext(
         epsilon_floor=metrics.epsilon_floor,
@@ -943,6 +1011,7 @@ def verify(
             fallback_obligations,
             metadata,
             backend_error=str(exc),
+            calibration_meta=calibration_meta,
         )
 
     try:
@@ -982,7 +1051,15 @@ def verify(
                 metadata.details["fallback_backend"] = fallback_backend
                 metadata.details["fallback_error"] = str(exc)
 
-        return _build_result(ir, generated_code, metrics, obligations, metadata, backend_error=None)
+        return _build_result(
+            ir,
+            generated_code,
+            metrics,
+            obligations,
+            metadata,
+            backend_error=None,
+            calibration_meta=calibration_meta,
+        )
     except NotImplementedError as exc:
         metadata = VerificationBackendMetadata(
             name=backend,
@@ -1009,4 +1086,5 @@ def verify(
             fallback_obligations,
             metadata,
             backend_error=str(exc),
+            calibration_meta=calibration_meta,
         )

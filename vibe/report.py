@@ -75,6 +75,17 @@ def render_report(
 
     lines.extend(
         [
+            "calibration:",
+            f"  calibration_applied: {result.calibration_applied}",
+            f"  calibration_model_version: {result.calibration_model_version}",
+            f"  calibration_artifact_path: {result.calibration_artifact_path}",
+            f"  calibration_confidence: {result.calibration_confidence}",
+            f"  calibration_notes: {result.calibration_notes}",
+        ]
+    )
+
+    lines.extend(
+        [
             "equivalence/drift:",
             f"  intent_items_total: {result.intent_items_total}",
             f"  intent_items_matched: {result.intent_items_matched}",

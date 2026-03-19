@@ -221,6 +221,26 @@ This layer strengthens drift visibility and does not replace bridge truth:
 - founding-law and critical obligations remain authoritative for pass/fail.
 - equivalence/diff is an additional inspectable verification surface.
 
+## Empirical epsilon calibration (Calibration as learning)
+
+Vibe now supports an empirical calibration subsystem for epsilon estimation.
+
+- Corpus location (seed): `vibe/calibration_corpus/seed_corpus.json`
+- Calibration artifact (local deterministic output): `.vibe_calibration/bridge_calibration.json`
+- Command: `vibec calibrate <corpus-path>`
+
+Calibration is intentionally simple and inspectable (deterministic weighted linear adjustment), and it only refines epsilon surfaces:
+
+- `epsilon_pre`
+- `epsilon_post`
+
+Safety rules:
+- calibration never bypasses failed critical obligations/founding-law failures
+- if artifact is missing/corrupt, verification falls back explicitly to default heuristic epsilon estimation
+- reports always state whether calibration was applied
+
+This is empirical calibration, not proof.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -250,6 +270,7 @@ Current supported targets: `python`, `typescript`.
 
 ```bash
 vibec explain vibe/examples/payment_router.vibe
+vibec calibrate vibe/calibration_corpus/seed_corpus.json
 vibec verify vibe/examples/payment_router.vibe
 vibec verify vibe/examples/payment_router.vibe --report json
 vibec verify vibe/examples/sovereign_bridge.vibe --show-obligations
@@ -257,11 +278,13 @@ vibec verify vibe/examples/payment_router.vibe --backend heuristic
 vibec verify vibe/examples/payment_router.vibe --backend smt
 vibec verify vibe/examples/payment_router.vibe --backend smt --fallback-backend heuristic
 vibec verify vibe/examples/payment_router.vibe --show-equivalence
+vibec verify vibe/examples/payment_router.vibe --no-calibration
 vibec compile vibe/examples/payment_router.vibe
 vibec compile vibe/examples/payment_router.vibe --report json
 vibec compile vibe/examples/payment_router.vibe --backend heuristic
 vibec compile vibe/examples/payment_router.vibe --backend smt
 vibec compile vibe/examples/payment_router.vibe --show-equivalence
+vibec compile vibe/examples/payment_router.vibe --no-calibration
 vibec compile vibe/examples/edge_contract_ts.vibe
 ```
 

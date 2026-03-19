@@ -37,6 +37,7 @@ def test_verify_json_snapshot_contains_bridge_and_agent_metrics(capsys, tmp_path
     assert '"passed": true' in out
     assert '"verification_backend": "heuristic"' in out
     assert '"intent_equivalence_score"' in out
+    assert '"calibration_applied"' in out
 
 
 def test_verify_symbolic_backend_fails_gracefully(capsys, tmp_path) -> None:
@@ -62,3 +63,11 @@ def test_verify_smt_backend_reports_solver_metadata(capsys, tmp_path) -> None:
     out = capsys.readouterr().out
     assert '"verification_backend": "smt"' in out
     assert '"solver_evaluated"' in out
+
+
+def test_calibrate_command_writes_summary(capsys) -> None:
+    code = main(["calibrate", "vibe/calibration_corpus/seed_corpus.json"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "Vibe Calibration Summary" in out
+    assert "artifact:" in out
