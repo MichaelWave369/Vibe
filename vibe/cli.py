@@ -38,6 +38,12 @@ from .proof import (
     render_proof_summary,
     write_proof_artifact,
 )
+from .registry import (
+    compatibility_summary,
+    inspect_registry_entry,
+    publish_to_local_registry,
+    search_local_registry,
+)
 from .runtime_monitor import evaluate_runtime_events, load_runtime_events
 from .refinement import (
     RefinementIterationSummary,
@@ -683,6 +689,103 @@ def _diff(
     return 0
 
 
+def _publish(project_dir: Path, report: ReportMode, registry_root: Path | None = None) -> int:
+    try:
+        payload = publish_to_local_registry(project_dir.resolve(), registry_root=registry_root)
+    except Exception as exc:
+        print(f"publish failed: {exc}")
+        return 1
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Local Registry Publish ===")
+        print(f"entry_id: {payload['entry_id']}")
+        print(f"entry_hash: {payload['entry_hash']}")
+        print(f"proof_status: {payload['proof_status']}")
+        print(f"registry_root: {payload['registry_root']}")
+        print(f"entry_path: {payload['entry_path']}")
+        print("note: published to local filesystem registry (hosted registry is a future phase).")
+    return 0
+
+
+def _search(query: str, report: ReportMode, tags: list[str], domain: str | None, registry_root: Path | None = None) -> int:
+    payload = search_local_registry(
+        query,
+        tag_filters=tags,
+        domain_filter=domain,
+        registry_root=registry_root,
+    )
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Local Registry Search ===")
+        print(f"query: {query}")
+        print(f"results: {payload['result_count']}")
+        for row in payload["results"]:
+            print(
+                f"- {row['entry_id']} | score={row['score']} | proof={row['proof_status']} | "
+                f"domain={row.get('domain') or '-'} | tags={','.join(row.get('tags', []))}"
+            )
+            if row.get("description"):
+                print(f"  {row['description']}")
+    return 0
+
+
+def _registry_inspect(package_ref: str, report: ReportMode, registry_root: Path | None = None) -> int:
+    try:
+        payload = inspect_registry_entry(package_ref, registry_root=registry_root)
+    except Exception as exc:
+        print(f"registry-inspect failed: {exc}")
+        return 1
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        pkg = payload["package"]
+        proof = payload["proof"]
+        print("=== Vibe Local Registry Inspect ===")
+        print(f"entry: {payload['entry_id']}")
+        print(f"hash: {payload['entry_hash']}")
+        print(f"package: {pkg.get('name')}@{pkg.get('version')}")
+        print(f"description: {pkg.get('description', '')}")
+        print(f"dependencies: {pkg.get('dependencies', {})}")
+        print(f"bridge_defaults: {pkg.get('bridge_defaults', {})}")
+        print(f"emit_defaults: {pkg.get('emit_defaults', {})}")
+        print(f"modules: {[m.get('module') for m in pkg.get('modules', [])]}")
+        print(f"domain: {pkg.get('domain')}")
+        print(f"tags: {pkg.get('tags', [])}")
+        print(
+            "proof_summary: "
+            f"status={proof.get('proof_status')} "
+            f"artifacts={proof.get('proof_artifacts_present')}/{proof.get('total_modules')} "
+            f"versions={proof.get('proof_artifact_versions')}"
+        )
+    return 0
+
+
+def _compat(package_ref_a: str, package_ref_b: str, report: ReportMode, registry_root: Path | None = None) -> int:
+    try:
+        payload = compatibility_summary(package_ref_a, package_ref_b, registry_root=registry_root)
+    except Exception as exc:
+        print(f"compat failed: {exc}")
+        return 1
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Compatibility (Local Registry Hints) ===")
+        print(payload["disclaimer"])
+        p0, p1 = payload["packages"]
+        print(f"a: {p0['entry_id']} proof={p0['proof_status']}")
+        print(f"b: {p1['entry_id']} proof={p1['proof_status']}")
+        print(f"major_compatible: {payload['semver']['major_compatible']}")
+        print(f"minor_relation: {payload['semver']['minor_relation']}")
+        print(f"dependency_mismatches: {payload['dependency_comparison']['mismatches']}")
+        print(f"bridge_defaults_diff: {payload['bridge_defaults_diff']}")
+        print(f"emit_defaults_equal: {payload['emit_defaults_equal']}")
+        print(f"proof_version_overlap: {payload['proof_compatibility']['artifact_versions_overlap']}")
+        print(f"compatibility_status: {payload['compatibility_status']}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -769,6 +872,29 @@ def build_parser() -> argparse.ArgumentParser:
     df.add_argument("--show-unchanged", action="store_true", help="Show unchanged summary row if there are no semantic changes")
     df.add_argument("--summary-only", action="store_true", help="Show summary only")
 
+    pub = sub.add_parser("publish", help="Publish a package into the local filesystem intent registry")
+    pub.add_argument("project_dir", type=Path, nargs="?", default=Path("."))
+    pub.add_argument("--registry-root", type=Path, default=None, help="Optional registry root (defaults to ./.vibe_registry or VIBE_REGISTRY_ROOT)")
+    pub.add_argument("--report", choices=["human", "json"], default="human")
+
+    srch = sub.add_parser("search", help="Search local intent registry entries")
+    srch.add_argument("query", type=str)
+    srch.add_argument("--tag", dest="tags", action="append", default=[], help="Filter by tag (can be repeated)")
+    srch.add_argument("--domain", type=str, default=None, help="Filter by domain")
+    srch.add_argument("--registry-root", type=Path, default=None, help="Optional registry root override")
+    srch.add_argument("--report", choices=["human", "json"], default="human")
+
+    insp = sub.add_parser("registry-inspect", help="Inspect a package entry in the local registry")
+    insp.add_argument("package_ref", type=str, help="package[@version]")
+    insp.add_argument("--registry-root", type=Path, default=None, help="Optional registry root override")
+    insp.add_argument("--report", choices=["human", "json"], default="human")
+
+    cmpa = sub.add_parser("compat", help="Compute deterministic compatibility hints between two registry packages")
+    cmpa.add_argument("package_ref_a", type=str)
+    cmpa.add_argument("package_ref_b", type=str)
+    cmpa.add_argument("--registry-root", type=Path, default=None, help="Optional registry root override")
+    cmpa.add_argument("--report", choices=["human", "json"], default="human")
+
     return parser
 
 
@@ -846,6 +972,14 @@ def main(argv: list[str] | None = None) -> int:
             show_unchanged=args.show_unchanged,
             summary_only=args.summary_only,
         )
+    if args.command == "publish":
+        return _publish(args.project_dir, args.report, registry_root=args.registry_root)
+    if args.command == "search":
+        return _search(args.query, args.report, args.tags, args.domain, registry_root=args.registry_root)
+    if args.command == "registry-inspect":
+        return _registry_inspect(args.package_ref, args.report, registry_root=args.registry_root)
+    if args.command == "compat":
+        return _compat(args.package_ref_a, args.package_ref_b, args.report, registry_root=args.registry_root)
 
     parser.error("unknown command")
     return 2
