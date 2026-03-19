@@ -344,6 +344,7 @@ def _explain(
     show_delegation: bool = False,
     show_domain: bool = False,
     show_hardware: bool = False,
+    show_simulation: bool = False,
 ) -> int:
     source = _load(path)
     pkg_ctx = package_context_for_path(path)
@@ -409,6 +410,12 @@ def _explain(
         print(f"issues: {ir.module.hardware_issues}")
         print(f"obligations: {ir.module.hardware_obligations}")
         print(f"target_metadata: {ir.module.hardware_target_metadata}")
+    if show_simulation:
+        print("\nScientific Simulation:")
+        print(f"summary: {ir.module.scientific_simulation_summary}")
+        print(f"issues: {ir.module.scientific_simulation_issues}")
+        print(f"obligations: {ir.module.scientific_simulation_obligations}")
+        print(f"target_metadata: {ir.module.scientific_target_metadata}")
     return 0
 
 
@@ -883,6 +890,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--show-delegation", action="store_true", help="Show delegation summary and issues")
     ex.add_argument("--show-domain", action="store_true", help="Show active domain profile summary/issues")
     ex.add_argument("--show-hardware", action="store_true", help="Show hardware domain summary/issues/obligations")
+    ex.add_argument("--show-simulation", action="store_true", help="Show scientific simulation summary/issues/obligations")
 
     vf = sub.add_parser("verify", help="Run verifier without emission")
     vf.add_argument("path", type=Path)
@@ -1015,6 +1023,7 @@ def main(argv: list[str] | None = None) -> int:
             show_delegation=args.show_delegation,
             show_domain=args.show_domain,
             show_hardware=args.show_hardware,
+            show_simulation=args.show_simulation,
         )
     if args.command == "verify":
         return _verify(

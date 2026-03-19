@@ -27,6 +27,12 @@ from .grammar import GRAMMAR
 
 COMPARISON_OPS = ("<=", ">=", "<", ">", "=")
 PRELUDE_PREFIXES = ("vibe_version ", "domain ", "import ", "module ", "type ", "enum ", "interface ")
+BARE_PRESERVE_RULES = {
+    "conservation of energy",
+    "conservation of mass",
+    "stable_time_step",
+    "monotonic entropy",
+}
 
 
 class ParseError(ValueError):
@@ -116,6 +122,8 @@ def _parse_rule(line: str, line_no: int) -> PreserveRule:
             key, value = [x.strip() for x in line.split(op, 1)]
             if key and value:
                 return PreserveRule(key=key, op=op, value=value)
+    if line.strip().lower() in BARE_PRESERVE_RULES:
+        return PreserveRule(key=line.strip(), op="", value="")
     raise ParseError(f"Invalid preserve rule `{line}`. Expected `<key> <op> <value>`", line_no, 1)
 
 

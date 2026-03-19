@@ -26,7 +26,7 @@ def generate_systemverilog(ir: IR) -> str:
     ports.extend([f"input {_port_type(tp)} {name}" for name, tp in inputs])
     ports.extend([f"output {_port_type(tp)} {name}" for name, tp in outputs])
 
-    preserve_lines = [f"// preserve: {k} {op} {v}" for k, op, v in ir.preserve_rules]
+    preserve_lines = [f"// preserve: {k} {op} {v}".rstrip() for k, op, v in ir.preserve_rules]
     constraint_lines = [f"// constraint: {c}" for c in ir.constraints]
     hardware_lines = [
         f"// hardware_profile: {ir.domain_profile}",

@@ -20,7 +20,7 @@ _TARGETS: dict[str, TargetPlugin] = {
     "typescript": TargetPlugin("typescript", ".ts", True, "general", "fully implemented"),
     "vhdl": TargetPlugin("vhdl", ".vhd", True, "hardware", "phase-7.1 deterministic rtl emitter"),
     "systemverilog": TargetPlugin("systemverilog", ".sv", True, "hardware", "phase-7.1 deterministic rtl emitter"),
-    "julia": TargetPlugin("julia", ".jl", False, "scientific_simulation", "phase-7 scaffold emitter"),
+    "julia": TargetPlugin("julia", ".jl", True, "scientific_simulation", "phase-7.2 deterministic simulation emitter"),
     "compliance_report": TargetPlugin("compliance_report", ".md", False, "legal_compliance", "phase-7 scaffold emitter"),
     "snakemake": TargetPlugin("snakemake", ".smk", False, "genomics", "phase-7 scaffold emitter"),
     "nextflow": TargetPlugin("nextflow", ".nf", False, "genomics", "phase-7 scaffold emitter"),

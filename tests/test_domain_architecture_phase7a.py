@@ -87,6 +87,7 @@ def test_domain_examples_compile_through_architecture_layer() -> None:
     examples = [
         Path("vibe/examples/hardware_intent.vibe"),
         Path("vibe/examples/scientific_simulation_intent.vibe"),
+        Path("vibe/examples/scientific_simulation_reproducible.vibe"),
         Path("vibe/examples/legal_compliance_intent.vibe"),
         Path("vibe/examples/genomics_intent.vibe"),
     ]
@@ -96,7 +97,7 @@ def test_domain_examples_compile_through_architecture_layer() -> None:
         emitted, backend = emit_code(ir)
         assert ir.domain_profile in {"hardware", "scientific_simulation", "legal_compliance", "genomics"}
         assert backend.target == ir.emit_target
-        assert "scaffold" in emitted or backend.target in {"python", "typescript"}
+        assert "scaffold" in emitted or backend.target in {"python", "typescript", "julia", "vhdl", "systemverilog"}
 
 
 def test_cli_domains_and_explain_show_domain(capsys) -> None:

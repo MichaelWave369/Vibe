@@ -42,6 +42,7 @@ REQUIRED_FIELDS = {
     "package_context",
     "domain",
     "hardware",
+    "scientific_simulation",
     "notes",
 }
 
@@ -196,6 +197,12 @@ def build_proof_artifact(
             "obligations": result.hardware_obligations,
             "target_metadata": result.hardware_target_metadata,
         },
+        "scientific_simulation": {
+            "summary": result.scientific_simulation_summary,
+            "issues": result.scientific_simulation_issues,
+            "obligations": result.scientific_simulation_obligations,
+            "target_metadata": result.scientific_target_metadata,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -242,6 +249,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     package_meta = payload["package_context"]
     domain_meta = payload["domain"]
     hardware_meta = payload["hardware"]
+    simulation_meta = payload["scientific_simulation"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -273,5 +281,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"package: {package_meta.get('package_name', '<none>')}@{package_meta.get('package_version', '<none>')}",
             f"domain_profile: {domain_meta.get('profile', 'general')}",
             f"hardware_issue_count: {len(hardware_meta.get('issues', []))}",
+            f"scientific_simulation_issue_count: {len(simulation_meta.get('issues', []))}",
         ]
     )

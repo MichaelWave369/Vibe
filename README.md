@@ -357,7 +357,6 @@ New architecture surfaces:
 Planned target scaffolds are now wired (truthfully marked as scaffold-level in this pass):
 - `emit vhdl`
 - `emit systemverilog`
-- `emit julia`
 - `emit compliance_report`
 - `emit snakemake`
 - `emit nextflow`
@@ -388,6 +387,32 @@ Implemented in this phase:
 Truthfulness:
 - generated RTL is structured and target-appropriate, but still scaffold-level for manual completion
 - loop/timing checks are real implemented static checks in this pass, not full post-layout timing proof
+
+## Scientific simulation intent (Phase 7.2)
+
+Vibe now includes the second concrete cross-domain implementation slice for scientific simulation intent.
+
+Implemented in this phase:
+- dedicated scientific simulation subsystem: `vibe/scientific_simulation.py`
+- first practical scientific simulation preserve/constraint surfaces:
+  - `preserve: conservation of energy`
+  - `preserve: conservation of mass`
+  - `preserve: bounded_error < X`
+  - `preserve: stable_time_step`
+  - `constraint: reproducible`
+  - `constraint: seeded_rng`
+  - `constraint: deterministic_fp`
+- scientific simulation metadata in verifier/report/proof:
+  - `scientific_simulation_summary`
+  - `scientific_simulation_issues`
+  - `scientific_simulation_obligations`
+  - `scientific_target_metadata`
+- first real deterministic scientific emitter:
+  - `emit julia`
+
+Truthfulness:
+- generated Julia is structured and inspectable, but remains scaffold-level for manual numerical model completion
+- invariant/reproducibility checks are real implemented metadata/structural checks in this pass, not full scientific correctness proof
 
 ## Multi-candidate synthesis (Phase 3.1)
 

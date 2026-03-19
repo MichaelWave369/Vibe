@@ -255,6 +255,13 @@ emit python</code></pre>
           <code>emit systemverilog</code> RTL stubs, hardware preserve/constraint checks (timing, latency cycles,
           no combinational loops, synchronous/deterministic), and hardware metadata in report/proof outputs.
         </p>
+        <p>
+          Phase 7.2 delivers the first real scientific simulation slice: deterministic <code>emit julia</code>
+          simulation stubs, preserve/constraint checks for conservation invariants and reproducibility
+          (<code>conservation of energy</code>, <code>conservation of mass</code>, <code>bounded_error</code>,
+          <code>stable_time_step</code>, <code>reproducible</code>, <code>seeded_rng</code>, <code>deterministic_fp</code>),
+          and scientific simulation metadata in report/proof outputs.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

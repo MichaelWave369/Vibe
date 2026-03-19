@@ -1,18 +1,20 @@
 domain scientific_simulation
 
-intent FluidSimulation:
-  goal: "Preserve stable convergence for timestep integration"
+intent EnergyPreservingOrbit:
+  goal: "Preserve orbital energy under fixed-step integration"
   inputs:
     dt: number
+    state: number
   outputs:
-    residual: number
+    energy_error: number
 
 preserve:
-  stability_margin > 0.2
-  convergence_steps < 500
+  conservation of energy
+  bounded_error < 0.001
+  stable_time_step
 
 constraint:
-  units_si_only
-  deterministic_seed_required
+  reproducible
+  deterministic_fp
 
 emit julia

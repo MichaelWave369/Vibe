@@ -151,6 +151,10 @@ class IRModule:
     hardware_issues: list[dict[str, object]] = field(default_factory=list)
     hardware_obligations: list[dict[str, object]] = field(default_factory=list)
     hardware_target_metadata: dict[str, object] = field(default_factory=dict)
+    scientific_simulation_summary: dict[str, object] = field(default_factory=dict)
+    scientific_simulation_issues: list[dict[str, object]] = field(default_factory=list)
+    scientific_simulation_obligations: list[dict[str, object]] = field(default_factory=list)
+    scientific_target_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

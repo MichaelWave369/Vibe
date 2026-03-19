@@ -230,6 +230,10 @@ class VerificationResult:
     hardware_issues: list[dict[str, object]] = field(default_factory=list)
     hardware_obligations: list[dict[str, object]] = field(default_factory=list)
     hardware_target_metadata: dict[str, object] = field(default_factory=dict)
+    scientific_simulation_summary: dict[str, object] = field(default_factory=dict)
+    scientific_simulation_issues: list[dict[str, object]] = field(default_factory=list)
+    scientific_simulation_obligations: list[dict[str, object]] = field(default_factory=list)
+    scientific_target_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -704,6 +708,7 @@ def generate_normalized_obligations(ir: IR) -> list[NormalizedObligation]:
     obligations: list[NormalizedObligation] = []
 
     for idx, (key, op, value) in enumerate(ir.preserve_rules, start=1):
+        preserve_text = f"{key} {op} {value}".rstrip()
         key_lower = key.lower()
         if key_lower in {"readability", "testability"}:
             predicate = {"kind": "readability_min", "metric": "readability_score", "min": 0.85}
@@ -741,7 +746,7 @@ def generate_normalized_obligations(ir: IR) -> list[NormalizedObligation]:
             NormalizedObligation(
                 obligation_id=f"preserve.{idx}",
                 category="preserve",
-                description=f"Preserve rule `{key} {op} {value}`",
+                description=f"Preserve rule `{preserve_text}`",
                 source_location=None,
                 subject_ref=f"preserve.{idx}",
                 expected_predicate=predicate,
@@ -1010,10 +1015,16 @@ def _build_result(
     ]
     hardware_codegen_issues: list[dict[str, object]] = []
     hardware_codegen_obligations: list[dict[str, object]] = []
+    simulation_codegen_issues: list[dict[str, object]] = []
+    simulation_codegen_obligations: list[dict[str, object]] = []
     if ir.domain_profile == "hardware":
         from .hardware import evaluate_hardware_generated_code
 
         hardware_codegen_issues, hardware_codegen_obligations = evaluate_hardware_generated_code(ir, generated_code)
+    elif ir.domain_profile == "scientific_simulation":
+        from .scientific_simulation import evaluate_scientific_generated_code
+
+        simulation_codegen_issues, simulation_codegen_obligations = evaluate_scientific_generated_code(ir, generated_code)
 
     hardware_issues_all = sorted(
         list(ir.module.hardware_issues) + list(hardware_codegen_issues),
@@ -1023,12 +1034,20 @@ def _build_result(
         list(ir.module.hardware_obligations) + list(hardware_codegen_obligations),
         key=lambda r: str(r.get("obligation_id", "")),
     )
+    simulation_issues_all = sorted(
+        list(ir.module.scientific_simulation_issues) + list(simulation_codegen_issues),
+        key=lambda r: str(r.get("issue_id", "")),
+    )
+    simulation_obligations_all = sorted(
+        list(ir.module.scientific_simulation_obligations) + list(simulation_codegen_obligations),
+        key=lambda r: str(r.get("obligation_id", "")),
+    )
     domain_issues_all = sorted(
-        list(ir.module.domain_issues) + list(hardware_codegen_issues),
+        list(ir.module.domain_issues) + list(hardware_codegen_issues) + list(simulation_codegen_issues),
         key=lambda r: str(r.get("issue_id", "")),
     )
     domain_obligation_rows = sorted(
-        list(ir.module.domain_obligations) + list(hardware_codegen_obligations),
+        list(ir.module.domain_obligations) + list(hardware_codegen_obligations) + list(simulation_codegen_obligations),
         key=lambda r: str(r.get("obligation_id", "")),
     )
     domain_obligations = [
@@ -1151,6 +1170,10 @@ def _build_result(
         hardware_issues=hardware_issues_all,
         hardware_obligations=hardware_obligations_all,
         hardware_target_metadata=dict(ir.module.hardware_target_metadata),
+        scientific_simulation_summary=dict(ir.module.scientific_simulation_summary),
+        scientific_simulation_issues=simulation_issues_all,
+        scientific_simulation_obligations=simulation_obligations_all,
+        scientific_target_metadata=dict(ir.module.scientific_target_metadata),
     )
 
 

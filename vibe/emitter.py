@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .generator_julia import generate_julia
 from .generator_python import generate_python
 from .generator_systemverilog import generate_systemverilog
 from .generator_typescript import generate_typescript
@@ -36,6 +37,14 @@ class TypeScriptEmitter(EmitterBackend):
 
     def emit(self, ir: IR) -> str:
         return generate_typescript(ir)
+
+
+class JuliaEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="julia", extension=".jl")
+
+    def emit(self, ir: IR) -> str:
+        return generate_julia(ir)
 
 
 class VHDLEmitter(EmitterBackend):
@@ -75,6 +84,7 @@ class StubEmitter(EmitterBackend):
 _BACKENDS = {
     "python": PythonEmitter(),
     "typescript": TypeScriptEmitter(),
+    "julia": JuliaEmitter(),
     "vhdl": VHDLEmitter(),
     "systemverilog": SystemVerilogEmitter(),
 }

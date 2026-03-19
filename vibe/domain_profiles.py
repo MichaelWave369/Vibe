@@ -64,13 +64,17 @@ DOMAIN_PROFILES: dict[str, DomainProfile] = {
     ),
     "scientific_simulation": DomainProfile(
         name="scientific_simulation",
-        preserve_families=["stability", "convergence", "precision", "reproducibility"],
-        constraint_families=["units", "boundary", "solver", "deterministic_seed"],
+        preserve_families=["conservation of energy", "conservation of mass", "bounded_error", "stable_time_step"],
+        constraint_families=["reproducible", "seeded_rng", "deterministic_fp", "fixed_precision"],
         supported_emit_targets=["julia", "python"],
         proof_extensions={"numerics": "tracked", "solver_assumptions": "explicit"},
         report_extensions={"domain_track": "7.2 scientific simulation intent"},
         compatibility_hooks=["solver_family", "numerical_stability"],
-        obligation_factory=_prefix_obligations("scientific_simulation", ["stability", "convergence", "precision", "reproducibility"], family="preserve"),
+        obligation_factory=_prefix_obligations(
+            "scientific_simulation",
+            ["conservation of energy", "conservation of mass", "bounded_error", "stable_time_step", "monotonic entropy"],
+            family="preserve",
+        ),
     ),
     "legal_compliance": DomainProfile(
         name="legal_compliance",
@@ -148,6 +152,10 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.hardware_issues = []
         ir.module.hardware_obligations = []
         ir.module.hardware_target_metadata = {}
+        ir.module.scientific_simulation_summary = {}
+        ir.module.scientific_simulation_issues = []
+        ir.module.scientific_simulation_obligations = []
+        ir.module.scientific_target_metadata = {}
         return
 
     if profile.obligation_factory is not None:
@@ -174,7 +182,7 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
     ir.module.domain_target_metadata = {
         "planned_target": ir.emit_target,
         "target_supported_by_profile": ir.emit_target in set(profile.supported_emit_targets),
-        "scaffold_only": ir.emit_target in {"julia", "compliance_report", "snakemake", "nextflow"},
+        "scaffold_only": ir.emit_target in {"compliance_report", "snakemake", "nextflow"},
     }
     if profile.name == "hardware":
         from .hardware import derive_hardware_metadata
@@ -187,8 +195,34 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.domain_summary["hardware_summary"] = h_summary
         ir.module.domain_issues = sorted(ir.module.domain_issues + h_issues, key=lambda x: str(x.get("issue_id", "")))
         ir.module.domain_obligations = sorted(ir.module.domain_obligations + h_obligations, key=lambda x: str(x.get("obligation_id", "")))
+        ir.module.scientific_simulation_summary = {}
+        ir.module.scientific_simulation_issues = []
+        ir.module.scientific_simulation_obligations = []
+        ir.module.scientific_target_metadata = {}
+    elif profile.name == "scientific_simulation":
+        from .scientific_simulation import derive_scientific_simulation_metadata
+
+        s_summary, s_issues, s_obligations, s_target_meta = derive_scientific_simulation_metadata(ir)
+        ir.module.scientific_simulation_summary = s_summary
+        ir.module.scientific_simulation_issues = s_issues
+        ir.module.scientific_simulation_obligations = s_obligations
+        ir.module.scientific_target_metadata = s_target_meta
+        ir.module.domain_summary["scientific_simulation_summary"] = s_summary
+        ir.module.domain_issues = sorted(ir.module.domain_issues + s_issues, key=lambda x: str(x.get("issue_id", "")))
+        ir.module.domain_obligations = sorted(
+            ir.module.domain_obligations + s_obligations,
+            key=lambda x: str(x.get("obligation_id", "")),
+        )
+        ir.module.hardware_summary = {}
+        ir.module.hardware_issues = []
+        ir.module.hardware_obligations = []
+        ir.module.hardware_target_metadata = {}
     else:
         ir.module.hardware_summary = {}
         ir.module.hardware_issues = []
         ir.module.hardware_obligations = []
         ir.module.hardware_target_metadata = {}
+        ir.module.scientific_simulation_summary = {}
+        ir.module.scientific_simulation_issues = []
+        ir.module.scientific_simulation_obligations = []
+        ir.module.scientific_target_metadata = {}

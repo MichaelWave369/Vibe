@@ -211,6 +211,15 @@ def render_report(
             f"  hardware_target_metadata: {result.hardware_target_metadata}",
         ]
     )
+    lines.extend(
+        [
+            "scientific simulation:",
+            f"  scientific_simulation_summary: {result.scientific_simulation_summary}",
+            f"  scientific_simulation_issues: {result.scientific_simulation_issues}",
+            f"  scientific_simulation_obligations: {result.scientific_simulation_obligations}",
+            f"  scientific_target_metadata: {result.scientific_target_metadata}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:
