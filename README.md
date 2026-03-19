@@ -260,7 +260,84 @@ Commands:
 - `vibec verify-proof file.vibe` (always writes proof)
 - `vibec inspect-proof file.vibe.proof.json`
 
+## Local-first intent registry (Phase 6.2)
+
+Vibe now includes a **local-first intent registry** for indexing reusable intent contracts plus preservation metadata.
+
+Pipeline surface:
+
+`package/project -> manifest/proof/package metadata -> local registry entry -> search/inspect/compatibility -> build/use`
+
+This phase is intentionally local and deterministic:
+- registry root defaults to `./.vibe_registry` (or `VIBE_REGISTRY_ROOT`)
+- entries are inspectable JSON files
+- no hosted/public network registry, auth, or sync in this phase
+
+Registry entries include:
+- package identity (`name`, `version`, `description`)
+- dependency and build summaries
+- bridge defaults and emit defaults
+- module inventory
+- tags/domain metadata from `vibe.toml` `[metadata]`
+- proof artifact presence/summary and proof-version metadata
+- deterministic entry hash
+
+CLI commands:
+- `vibec publish <project-dir>`: publish into local registry only (honest local publication)
+- `vibec search "<query>" [--tag ...] [--domain ...]`
+- `vibec registry-inspect <package[@version]>`
+- `vibec compat <package-ref-a> <package-ref-b>`
+
+All registry commands support deterministic JSON output via `--report json`.
+
+Compatibility output is a **deterministic hint matrix**, not a formal theorem of interchangeability.
+Proof status is surfaced explicitly (`complete` / `partial` / `absent`) and never overclaimed.
+
 These artifacts are deterministic and inspectable, but they are not overclaimed as full formal certificates.
+
+## Language Server Protocol (Phase 6.3)
+
+Vibe now includes an editor-native **Language Server Protocol** implementation.
+
+Launch:
+- `vibec lsp` (stdio server)
+- `vibec lsp --check` (startup health check)
+
+Current LSP surfaces:
+- document sync (`didOpen`, `didChange`, `didSave`)
+- diagnostics (parse + semantic/effect/resource/inference/agent/delegation + import checks)
+- hover (intent-aware type/summary metadata)
+- completion (keywords/blocks/bridge keys/import suggestions)
+- go-to-definition (local symbols + basic module import targets)
+- document symbols
+- semantic tokens (major Vibe syntax classes)
+- lightweight intent code lenses (bridge + semantic summaries)
+
+Truthfulness boundaries:
+- fast editor diagnostics are local and incremental
+- deeper checks are save-oriented, not full heavy verification on each keystroke
+- LSP hints do not replace compile-time preservation proof surfaces
+
+## GitHub Actions native bridge check (Phase 6.4)
+
+Vibe now includes an in-repo GitHub Action implementation for deterministic CI bridge gating.
+
+Implemented action surfaces:
+- root `action.yml` + local dogfood action at `.github/actions/bridge-check/action.yml`
+- Python entrypoint: `.github/actions/bridge-check/run_bridge_check.py`
+- local reproducible CLI helper: `vibec ci-check`
+
+Core behavior:
+- discovers `.vibe` files via configurable glob
+- runs real Vibe verification per file
+- writes deterministic JSON report + markdown summary
+- appends markdown into `GITHUB_STEP_SUMMARY` when available
+- supports merge-blocking fail-on gating (`verdict` rules and `bridge_score_below_threshold:<n>`)
+
+Important truthfulness boundaries:
+- this phase is native CI integration, not a hosted Vibe platform
+- action is in-repo and publication as `vibe-lang/bridge-check@v1` is a future split/release step
+- fail-on gating is implemented now; baseline-regression comparison remains optional future work
 
 ## Multi-candidate synthesis (Phase 3.1)
 

@@ -18,6 +18,7 @@ from .calibration import (
     load_calibration_corpus,
     save_calibration_model,
 )
+from .ci import CICheckConfig, run_ci_check
 from .diff import compute_intent_diff, render_intent_diff_human, render_intent_diff_json
 from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
@@ -31,12 +32,19 @@ from .package_manager import (
 )
 from dataclasses import asdict
 from .manifest import VibeManifest
+from .lsp.server import run_stdio_server
 from .proof import (
     build_proof_artifact,
     default_proof_path,
     load_proof_artifact,
     render_proof_summary,
     write_proof_artifact,
+)
+from .registry import (
+    compatibility_summary,
+    inspect_registry_entry,
+    publish_to_local_registry,
+    search_local_registry,
 )
 from .runtime_monitor import evaluate_runtime_events, load_runtime_events
 from .refinement import (
@@ -683,6 +691,143 @@ def _diff(
     return 0
 
 
+def _publish(project_dir: Path, report: ReportMode, registry_root: Path | None = None) -> int:
+    try:
+        payload = publish_to_local_registry(project_dir.resolve(), registry_root=registry_root)
+    except Exception as exc:
+        print(f"publish failed: {exc}")
+        return 1
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Local Registry Publish ===")
+        print(f"entry_id: {payload['entry_id']}")
+        print(f"entry_hash: {payload['entry_hash']}")
+        print(f"proof_status: {payload['proof_status']}")
+        print(f"registry_root: {payload['registry_root']}")
+        print(f"entry_path: {payload['entry_path']}")
+        print("note: published to local filesystem registry (hosted registry is a future phase).")
+    return 0
+
+
+def _search(query: str, report: ReportMode, tags: list[str], domain: str | None, registry_root: Path | None = None) -> int:
+    payload = search_local_registry(
+        query,
+        tag_filters=tags,
+        domain_filter=domain,
+        registry_root=registry_root,
+    )
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Local Registry Search ===")
+        print(f"query: {query}")
+        print(f"results: {payload['result_count']}")
+        for row in payload["results"]:
+            print(
+                f"- {row['entry_id']} | score={row['score']} | proof={row['proof_status']} | "
+                f"domain={row.get('domain') or '-'} | tags={','.join(row.get('tags', []))}"
+            )
+            if row.get("description"):
+                print(f"  {row['description']}")
+    return 0
+
+
+def _registry_inspect(package_ref: str, report: ReportMode, registry_root: Path | None = None) -> int:
+    try:
+        payload = inspect_registry_entry(package_ref, registry_root=registry_root)
+    except Exception as exc:
+        print(f"registry-inspect failed: {exc}")
+        return 1
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        pkg = payload["package"]
+        proof = payload["proof"]
+        print("=== Vibe Local Registry Inspect ===")
+        print(f"entry: {payload['entry_id']}")
+        print(f"hash: {payload['entry_hash']}")
+        print(f"package: {pkg.get('name')}@{pkg.get('version')}")
+        print(f"description: {pkg.get('description', '')}")
+        print(f"dependencies: {pkg.get('dependencies', {})}")
+        print(f"bridge_defaults: {pkg.get('bridge_defaults', {})}")
+        print(f"emit_defaults: {pkg.get('emit_defaults', {})}")
+        print(f"modules: {[m.get('module') for m in pkg.get('modules', [])]}")
+        print(f"domain: {pkg.get('domain')}")
+        print(f"tags: {pkg.get('tags', [])}")
+        print(
+            "proof_summary: "
+            f"status={proof.get('proof_status')} "
+            f"artifacts={proof.get('proof_artifacts_present')}/{proof.get('total_modules')} "
+            f"versions={proof.get('proof_artifact_versions')}"
+        )
+    return 0
+
+
+def _compat(package_ref_a: str, package_ref_b: str, report: ReportMode, registry_root: Path | None = None) -> int:
+    try:
+        payload = compatibility_summary(package_ref_a, package_ref_b, registry_root=registry_root)
+    except Exception as exc:
+        print(f"compat failed: {exc}")
+        return 1
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Compatibility (Local Registry Hints) ===")
+        print(payload["disclaimer"])
+        p0, p1 = payload["packages"]
+        print(f"a: {p0['entry_id']} proof={p0['proof_status']}")
+        print(f"b: {p1['entry_id']} proof={p1['proof_status']}")
+        print(f"major_compatible: {payload['semver']['major_compatible']}")
+        print(f"minor_relation: {payload['semver']['minor_relation']}")
+        print(f"dependency_mismatches: {payload['dependency_comparison']['mismatches']}")
+        print(f"bridge_defaults_diff: {payload['bridge_defaults_diff']}")
+        print(f"emit_defaults_equal: {payload['emit_defaults_equal']}")
+        print(f"proof_version_overlap: {payload['proof_compatibility']['artifact_versions_overlap']}")
+        print(f"compatibility_status: {payload['compatibility_status']}")
+    return 0
+
+
+def _lsp(check: bool = False) -> int:
+    if check:
+        print("vibe-lsp: ready")
+        return 0
+    return run_stdio_server()
+
+
+def _ci_check(
+    files: str,
+    fail_on: str,
+    report_json_path: str,
+    backend: str,
+    fallback_backend: str | None,
+    with_proofs: bool,
+    with_tests: bool,
+    report: ReportMode,
+) -> int:
+    payload, code = run_ci_check(
+        CICheckConfig(
+            files_glob=files,
+            fail_on=fail_on,
+            report_json_path=report_json_path,
+            backend=backend,
+            fallback_backend=fallback_backend,
+            with_proofs=with_proofs,
+            with_tests=with_tests,
+        )
+    )
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe CI Bridge Check ===")
+        print(f"files_checked: {payload['files_checked']}")
+        print(f"files_failed: {payload['files_failed']}")
+        print(f"worst_bridge_score: {payload['worst_bridge_score']}")
+        print(f"report_json_path: {payload['report_json_path']}")
+        print(f"summary_markdown_path: {payload['summary_markdown_path']}")
+    return code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -769,6 +914,42 @@ def build_parser() -> argparse.ArgumentParser:
     df.add_argument("--show-unchanged", action="store_true", help="Show unchanged summary row if there are no semantic changes")
     df.add_argument("--summary-only", action="store_true", help="Show summary only")
 
+    pub = sub.add_parser("publish", help="Publish a package into the local filesystem intent registry")
+    pub.add_argument("project_dir", type=Path, nargs="?", default=Path("."))
+    pub.add_argument("--registry-root", type=Path, default=None, help="Optional registry root (defaults to ./.vibe_registry or VIBE_REGISTRY_ROOT)")
+    pub.add_argument("--report", choices=["human", "json"], default="human")
+
+    srch = sub.add_parser("search", help="Search local intent registry entries")
+    srch.add_argument("query", type=str)
+    srch.add_argument("--tag", dest="tags", action="append", default=[], help="Filter by tag (can be repeated)")
+    srch.add_argument("--domain", type=str, default=None, help="Filter by domain")
+    srch.add_argument("--registry-root", type=Path, default=None, help="Optional registry root override")
+    srch.add_argument("--report", choices=["human", "json"], default="human")
+
+    insp = sub.add_parser("registry-inspect", help="Inspect a package entry in the local registry")
+    insp.add_argument("package_ref", type=str, help="package[@version]")
+    insp.add_argument("--registry-root", type=Path, default=None, help="Optional registry root override")
+    insp.add_argument("--report", choices=["human", "json"], default="human")
+
+    cmpa = sub.add_parser("compat", help="Compute deterministic compatibility hints between two registry packages")
+    cmpa.add_argument("package_ref_a", type=str)
+    cmpa.add_argument("package_ref_b", type=str)
+    cmpa.add_argument("--registry-root", type=Path, default=None, help="Optional registry root override")
+    cmpa.add_argument("--report", choices=["human", "json"], default="human")
+
+    lsp = sub.add_parser("lsp", help="Run Vibe Language Server Protocol (LSP) server over stdio")
+    lsp.add_argument("--check", action="store_true", help="Validate launch path and exit")
+
+    cic = sub.add_parser("ci-check", help="Run deterministic CI-style bridge checks for .vibe files")
+    cic.add_argument("--files", default="**/*.vibe", help="Glob pattern for .vibe files")
+    cic.add_argument("--fail-on", default="", help="Comma-separated fail conditions (e.g. ENTROPY_NOISE,bridge_score_below_threshold:0.9)")
+    cic.add_argument("--report-json-path", default=".vibe_ci/bridge_report.json")
+    cic.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
+    cic.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
+    cic.add_argument("--with-proofs", action="store_true", help="Write proof artifacts for checked files")
+    cic.add_argument("--with-tests", action="store_true", help="Generate intent-guided tests during check")
+    cic.add_argument("--report", choices=["human", "json"], default="human")
+
     return parser
 
 
@@ -845,6 +1026,27 @@ def main(argv: list[str] | None = None) -> int:
             args.report,
             show_unchanged=args.show_unchanged,
             summary_only=args.summary_only,
+        )
+    if args.command == "publish":
+        return _publish(args.project_dir, args.report, registry_root=args.registry_root)
+    if args.command == "search":
+        return _search(args.query, args.report, args.tags, args.domain, registry_root=args.registry_root)
+    if args.command == "registry-inspect":
+        return _registry_inspect(args.package_ref, args.report, registry_root=args.registry_root)
+    if args.command == "compat":
+        return _compat(args.package_ref_a, args.package_ref_b, args.report, registry_root=args.registry_root)
+    if args.command == "lsp":
+        return _lsp(check=args.check)
+    if args.command == "ci-check":
+        return _ci_check(
+            files=args.files,
+            fail_on=args.fail_on,
+            report_json_path=args.report_json_path,
+            backend=args.backend,
+            fallback_backend=args.fallback_backend,
+            with_proofs=args.with_proofs,
+            with_tests=args.with_tests,
+            report=args.report,
         )
 
     parser.error("unknown command")
