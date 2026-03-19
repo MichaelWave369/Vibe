@@ -56,6 +56,10 @@ from .semantic_types import (
     issues_to_obligation_rows,
     semantic_summary_payload,
 )
+from .obligation_registry import (
+    ExternalObligationContext,
+    evaluate_external_obligations,
+)
 
 ObligationStatus = str
 
@@ -913,6 +917,7 @@ def _build_result(
     metadata: VerificationBackendMetadata,
     backend_error: str | None,
     calibration_meta: dict[str, object] | None = None,
+    external_obligations: list[VerificationObligation] | None = None,
 ) -> VerificationResult:
     semantic_issues = check_semantic_type_issues(ir, generated_code)
     ir.module.semantic_issues = issues_as_dicts(semantic_issues)
@@ -1121,6 +1126,7 @@ def _build_result(
     ]
     all_obligations = (
         list(obligations)
+        + list(external_obligations or [])
         + semantic_obligations
         + effect_obligations
         + resource_obligations
@@ -1367,6 +1373,43 @@ def verify(
     )
 
     normalized = normalize_obligations(generate_normalized_obligations(ir))
+    external_context = ExternalObligationContext(
+        ir=ir,
+        generated_code=generated_code,
+        observed_scalars=observed_scalars,
+        observed_bools=observed_bools,
+        observed_symbols=observed_symbols,
+    )
+
+    def _evaluate_external_rows() -> list[VerificationObligation]:
+        external_rows: list[VerificationObligation] = []
+        try:
+            evaluated = evaluate_external_obligations(external_context)
+        except Exception as exc:
+            return [
+                VerificationObligation(
+                    obligation_id="external.registry.error",
+                    category="external",
+                    description="External obligation provider execution failed",
+                    source_location=None,
+                    status="unknown",
+                    evidence=str(exc),
+                    critical=False,
+                )
+            ]
+        for row in evaluated:
+            external_rows.append(
+                VerificationObligation(
+                    obligation_id=row.obligation_id,
+                    category=row.category,
+                    description=row.description,
+                    source_location=row.source_location,
+                    status=row.status,
+                    evidence=row.evidence,
+                    critical=row.critical,
+                )
+            )
+        return external_rows
 
     try:
         evaluator = get_backend(backend)
@@ -1397,6 +1440,7 @@ def verify(
             metadata,
             backend_error=str(exc),
             calibration_meta=calibration_meta,
+            external_obligations=_evaluate_external_rows(),
         )
 
     try:
@@ -1444,6 +1488,7 @@ def verify(
             metadata,
             backend_error=None,
             calibration_meta=calibration_meta,
+            external_obligations=_evaluate_external_rows(),
         )
     except NotImplementedError as exc:
         metadata = VerificationBackendMetadata(
@@ -1472,4 +1517,5 @@ def verify(
             metadata,
             backend_error=str(exc),
             calibration_meta=calibration_meta,
+            external_obligations=_evaluate_external_rows(),
         )

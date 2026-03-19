@@ -229,3 +229,29 @@ This command is local content-addressed storage only; it is not a remote Muse ob
 - in-memory source loading (`source_text` + `source_name`)
 
 This powers real local snapshot verification (`verify --snapshot ...`) and local snapshot writes (`snapshot-put`), while remaining explicitly local (not a remote object-store integration).
+
+## External obligation registration seam (Phase 4A)
+
+Vibe exposes a controlled Python-level registry for external obligation providers:
+
+- `register_external_obligation_provider(category, provider, override=False)`
+- `unregister_external_obligation_provider(category)`
+- `list_external_obligation_categories()`
+
+Provider shape:
+
+- input: `ExternalObligationContext` (IR + generated code + observed scalar/bool/symbol facts)
+- output: list of `ExternalObligation` rows (`obligation_id`, `category`, `description`, `status`, `source_location`, `evidence`, `critical`)
+
+Contract behavior:
+
+- external obligations flow through existing obligation surfaces (`verify` JSON `obligations[]`, proof artifact `obligations[]`, rollups),
+- schema versions remain unchanged (`v1`) because this is additive and uses existing obligation row shape,
+- registration is explicit and deterministic (category-keyed, duplicate rejection unless `override=True`),
+- no auto-discovery, no remote plugin loading, no plugin marketplace semantics in this phase.
+
+Current scoring scope:
+
+- external obligations contribute to obligation rows and status counts,
+- they only affect pass/fail where the existing verifier model already applies (`critical` violated/unknown obligations block pass),
+- no additional bridge-score math is introduced for external obligations in this phase.

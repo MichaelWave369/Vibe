@@ -154,6 +154,28 @@ Snapshot mode and proof provenance are explicitly local-first:
 - `snapshot-put` writes only to a local content-addressed store.
 - snapshot verification proof artifacts include honest provenance (`input_mode`, `snapshot_id`, `snapshot_store`) and do not claim filesystem source paths for snapshot inputs.
 
+### External obligation registration seam (Phase 4A)
+
+Vibe now includes a controlled Python-level extension seam for registering additional obligation categories.
+
+What it does today:
+
+- lets Python code register deterministic external obligation providers by category name,
+- executes registered providers during `verify`,
+- surfaces resulting obligations through normal machine-readable outputs (`verify --report json`, `.vibe.proof.json`).
+
+What it does **not** do yet:
+
+- no plugin marketplace or automatic discovery,
+- no remote loading,
+- no automatic bridge-score math changes for external obligations.
+
+Minimal API:
+
+```python
+from vibe.obligation_registry import register_external_obligation_provider
+```
+
 ---
 
 ## Package manager, registry, LSP, and CI
