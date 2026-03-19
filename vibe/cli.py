@@ -31,6 +31,7 @@ from .package_manager import (
 )
 from dataclasses import asdict
 from .manifest import VibeManifest
+from .lsp.server import run_stdio_server
 from .proof import (
     build_proof_artifact,
     default_proof_path,
@@ -786,6 +787,13 @@ def _compat(package_ref_a: str, package_ref_b: str, report: ReportMode, registry
     return 0
 
 
+def _lsp(check: bool = False) -> int:
+    if check:
+        print("vibe-lsp: ready")
+        return 0
+    return run_stdio_server()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -895,6 +903,9 @@ def build_parser() -> argparse.ArgumentParser:
     cmpa.add_argument("--registry-root", type=Path, default=None, help="Optional registry root override")
     cmpa.add_argument("--report", choices=["human", "json"], default="human")
 
+    lsp = sub.add_parser("lsp", help="Run Vibe Language Server Protocol (LSP) server over stdio")
+    lsp.add_argument("--check", action="store_true", help="Validate launch path and exit")
+
     return parser
 
 
@@ -980,6 +991,8 @@ def main(argv: list[str] | None = None) -> int:
         return _registry_inspect(args.package_ref, args.report, registry_root=args.registry_root)
     if args.command == "compat":
         return _compat(args.package_ref_a, args.package_ref_b, args.report, registry_root=args.registry_root)
+    if args.command == "lsp":
+        return _lsp(check=args.check)
 
     parser.error("unknown command")
     return 2

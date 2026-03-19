@@ -295,6 +295,29 @@ Proof status is surfaced explicitly (`complete` / `partial` / `absent`) and neve
 
 These artifacts are deterministic and inspectable, but they are not overclaimed as full formal certificates.
 
+## Language Server Protocol (Phase 6.3)
+
+Vibe now includes an editor-native **Language Server Protocol** implementation.
+
+Launch:
+- `vibec lsp` (stdio server)
+- `vibec lsp --check` (startup health check)
+
+Current LSP surfaces:
+- document sync (`didOpen`, `didChange`, `didSave`)
+- diagnostics (parse + semantic/effect/resource/inference/agent/delegation + import checks)
+- hover (intent-aware type/summary metadata)
+- completion (keywords/blocks/bridge keys/import suggestions)
+- go-to-definition (local symbols + basic module import targets)
+- document symbols
+- semantic tokens (major Vibe syntax classes)
+- lightweight intent code lenses (bridge + semantic summaries)
+
+Truthfulness boundaries:
+- fast editor diagnostics are local and incremental
+- deeper checks are save-oriented, not full heavy verification on each keystroke
+- LSP hints do not replace compile-time preservation proof surfaces
+
 ## Multi-candidate synthesis (Phase 3.1)
 
 Compile/verify can now generate and evaluate multiple deterministic candidate implementations from the same IR.
