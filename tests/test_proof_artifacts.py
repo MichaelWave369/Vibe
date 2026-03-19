@@ -83,6 +83,7 @@ def test_invalid_proof_version_handled(tmp_path, capsys) -> None:
     proof.write_text(
         json.dumps(
             {
+                "schema_version": "v1",
                 "artifact_version": "v0",
                 "source_path": "x",
                 "source_hash": "x",
@@ -139,6 +140,7 @@ def test_proof_schema_fields_present(tmp_path) -> None:
 
     payload = json.loads(case.with_suffix(".vibe.proof.json").read_text(encoding="utf-8"))
     for key in [
+        "schema_version",
         "artifact_version",
         "source_path",
         "source_hash",

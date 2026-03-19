@@ -11,10 +11,12 @@ from .ir import IR, serialize_ir
 from .verifier import VerificationResult
 
 PROOF_ARTIFACT_VERSION = "v1"
+PROOF_SCHEMA_VERSION = "v1"
 
 
 REQUIRED_FIELDS = {
     "artifact_version",
+    "schema_version",
     "source_path",
     "source_hash",
     "ir_hash",
@@ -66,6 +68,7 @@ def build_proof_artifact(
     ir_ser = serialize_ir(ir)
     artifact = {
         "artifact_version": PROOF_ARTIFACT_VERSION,
+        "schema_version": PROOF_SCHEMA_VERSION,
         "source_path": str(source_path),
         "source_hash": sha256_text(source_text),
         "ir_hash": sha256_text(ir_ser),
@@ -252,6 +255,10 @@ def load_proof_artifact(path: Path) -> dict[str, object]:
 
 
 def validate_proof_artifact(payload: dict[str, object]) -> None:
+    if payload.get("schema_version") != PROOF_SCHEMA_VERSION:
+        raise ValueError(
+            f"invalid proof schema version `{payload.get('schema_version')}`; expected `{PROOF_SCHEMA_VERSION}`"
+        )
     if payload.get("artifact_version") != PROOF_ARTIFACT_VERSION:
         raise ValueError(
             f"invalid proof artifact version `{payload.get('artifact_version')}`; expected `{PROOF_ARTIFACT_VERSION}`"
