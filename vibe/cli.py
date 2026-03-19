@@ -20,6 +20,7 @@ from .calibration import (
 )
 from .ci import CICheckConfig, run_ci_check
 from .diff import compute_intent_diff, render_intent_diff_human, render_intent_diff_json
+from .domain_profiles import domain_summary_json
 from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
 from .parser import parse_source
@@ -341,6 +342,7 @@ def _explain(
     show_agents: bool = False,
     show_agent_bridges: bool = False,
     show_delegation: bool = False,
+    show_domain: bool = False,
 ) -> int:
     source = _load(path)
     pkg_ctx = package_context_for_path(path)
@@ -394,6 +396,12 @@ def _explain(
         print("\nDelegation:")
         print(f"summary: {ir.module.delegation_summary}")
         print(f"issues: {ir.module.delegation_issues}")
+    if show_domain:
+        print("\nDomain:")
+        print(f"profile: {ir.domain_profile}")
+        print(f"summary: {ir.module.domain_summary}")
+        print(f"issues: {ir.module.domain_issues}")
+        print(f"obligations: {ir.module.domain_obligations}")
     return 0
 
 
@@ -828,6 +836,15 @@ def _ci_check(
     return code
 
 
+def _domains(report: ReportMode) -> int:
+    if report == "json":
+        print(domain_summary_json())
+    else:
+        print("=== Vibe Domain Profiles ===")
+        print(domain_summary_json())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -857,6 +874,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--show-agents", action="store_true", help="Show agent graph summary and issues")
     ex.add_argument("--show-agent-bridges", action="store_true", help="Show boundary bridge propagation summary and issues")
     ex.add_argument("--show-delegation", action="store_true", help="Show delegation summary and issues")
+    ex.add_argument("--show-domain", action="store_true", help="Show active domain profile summary/issues")
 
     vf = sub.add_parser("verify", help="Run verifier without emission")
     vf.add_argument("path", type=Path)
@@ -950,6 +968,9 @@ def build_parser() -> argparse.ArgumentParser:
     cic.add_argument("--with-tests", action="store_true", help="Generate intent-guided tests during check")
     cic.add_argument("--report", choices=["human", "json"], default="human")
 
+    dom = sub.add_parser("domains", help="List available cross-domain intent profiles")
+    dom.add_argument("--report", choices=["human", "json"], default="human")
+
     return parser
 
 
@@ -984,6 +1005,7 @@ def main(argv: list[str] | None = None) -> int:
             show_agents=args.show_agents,
             show_agent_bridges=args.show_agent_bridges,
             show_delegation=args.show_delegation,
+            show_domain=args.show_domain,
         )
     if args.command == "verify":
         return _verify(
@@ -1048,6 +1070,8 @@ def main(argv: list[str] | None = None) -> int:
             with_tests=args.with_tests,
             report=args.report,
         )
+    if args.command == "domains":
+        return _domains(args.report)
 
     parser.error("unknown command")
     return 2

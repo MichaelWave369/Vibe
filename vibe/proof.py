@@ -40,6 +40,7 @@ REQUIRED_FIELDS = {
     "delegation",
     "runtime_monitor",
     "package_context",
+    "domain",
     "notes",
 }
 
@@ -181,6 +182,13 @@ def build_proof_artifact(
         },
         "runtime_monitor": dict(result.runtime_monitor_summary),
         "package_context": dict(result.package_context),
+        "domain": {
+            "profile": result.domain_profile,
+            "summary": result.domain_summary,
+            "issues": result.domain_issues,
+            "obligations": result.domain_obligations,
+            "target_metadata": result.domain_target_metadata,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -225,6 +233,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     delegation_meta = payload["delegation"]
     monitor_meta = payload["runtime_monitor"]
     package_meta = payload["package_context"]
+    domain_meta = payload["domain"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -254,5 +263,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"delegation_issue_count: {len(delegation_meta['issues'])}",
             f"monitor_bridge_threshold: {monitor_meta.get('bridge_threshold')}",
             f"package: {package_meta.get('package_name', '<none>')}@{package_meta.get('package_version', '<none>')}",
+            f"domain_profile: {domain_meta.get('profile', 'general')}",
         ]
     )

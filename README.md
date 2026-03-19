@@ -339,6 +339,31 @@ Important truthfulness boundaries:
 - action is in-repo and publication as `vibe-lang/bridge-check@v1` is a future split/release step
 - fail-on gating is implemented now; baseline-regression comparison remains optional future work
 
+## Cross-domain intent architecture (Phase 7A)
+
+Vibe now includes a shared **cross-domain architecture layer** for Phase 7 tracks:
+- hardware
+- scientific_simulation
+- legal_compliance
+- genomics
+
+New architecture surfaces:
+- domain profile subsystem: `vibe/domain_profiles.py`
+- target plugin scaffolding: `vibe/target_plugins.py`
+- IR domain metadata: active profile + domain summaries/issues/obligations + target metadata
+- verifier/report/proof propagation of domain metadata
+- CLI domain introspection: `vibec domains`, `vibec explain --show-domain`
+
+Planned target scaffolds are now wired (truthfully marked as scaffold-level in this pass):
+- `emit vhdl`
+- `emit systemverilog`
+- `emit julia`
+- `emit compliance_report`
+- `emit snakemake`
+- `emit nextflow`
+
+This pass establishes the shared foundation for parallel domain work; it does **not** claim full emitter/proof completeness for all domain targets yet.
+
 ## Multi-candidate synthesis (Phase 3.1)
 
 Compile/verify can now generate and evaluate multiple deterministic candidate implementations from the same IR.

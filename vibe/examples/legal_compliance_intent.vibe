@@ -1,0 +1,18 @@
+domain legal_compliance
+
+intent DataRetentionPolicy:
+  goal: "Preserve auditable retention and jurisdiction controls"
+  inputs:
+    event_id: string
+  outputs:
+    decision: string
+
+preserve:
+  retention_days > 365
+  audit_trail = strict
+
+constraint:
+  gdpr_data_minimization
+  policy_disclosure_required
+
+emit compliance_report
