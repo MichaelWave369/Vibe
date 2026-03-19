@@ -37,6 +37,7 @@ class MergeVerifyResult:
     verification_context: dict[str, object] | None = None
     intent_conflicts: list[dict[str, object]] | None = None
     regression_evidence: dict[str, object] | None = None
+    policy_evaluation: dict[str, object] | None = None
     error: str | None = None
 
 
@@ -436,6 +437,7 @@ def _build_regression_evidence(
     merge_status: str,
     merged_result: object | None,
     requested_top_n: int | None = None,
+    include_evidence: bool = False,
     unavailable_reason: str | None = None,
 ) -> dict[str, object]:
     requested = requested_top_n if requested_top_n is not None else REGRESSION_EVIDENCE_DEFAULT_TOP_N
@@ -446,6 +448,8 @@ def _build_regression_evidence(
         "effective_top_n": effective_top_n,
         "min_top_n": REGRESSION_EVIDENCE_MIN_TOP_N,
         "max_top_n": REGRESSION_EVIDENCE_MAX_TOP_N,
+        "include_evidence_requested": bool(include_evidence),
+        "include_evidence_effective": bool(include_evidence),
         "problem_statuses": ["violated", "unknown"],
         "ordering": [
             "severity_priority(desc)",
@@ -478,16 +482,19 @@ def _build_regression_evidence(
         severity = _obligation_severity(critical=bool(o.critical), status=str(o.status))
         status_counts[o.status] = status_counts.get(o.status, 0) + 1
         severity_counts[severity] = severity_counts.get(severity, 0) + 1
-        problems.append(
-            {
-                "id": o.obligation_id,
-                "category": o.category,
-                "address": o.source_location,
-                "status": o.status,
-                "severity": severity,
-                "message": o.description,
-            }
-        )
+        row: dict[str, object] = {
+            "id": o.obligation_id,
+            "category": o.category,
+            "address": o.source_location,
+            "status": o.status,
+            "severity": severity,
+            "message": o.description,
+        }
+        if include_evidence and o.evidence:
+            evidence_compact = " ".join(str(o.evidence).split())
+            if evidence_compact:
+                row["evidence_text"] = evidence_compact[:200]
+        problems.append(row)
     problems_sorted = sorted(
         problems,
         key=lambda row: (
@@ -511,7 +518,85 @@ def _build_regression_evidence(
     }
 
 
-def merge_verify(base_text: str, left_text: str, right_text: str, regression_top_n: int | None = None) -> MergeVerifyResult:
+def _build_policy_evaluation(
+    *,
+    merge_status: str,
+    verification: dict[str, object] | None,
+    intent_conflicts: list[dict[str, object]] | None,
+    require_merged_bridge: float | None = None,
+    fail_on_intent_conflicts: bool = False,
+) -> dict[str, object]:
+    checks: list[dict[str, object]] = []
+    if require_merged_bridge is not None:
+        if merge_status == "merged" and verification is not None and verification.get("bridge_score") is not None:
+            merged_bridge = float(verification["bridge_score"])
+            passed = merged_bridge >= float(require_merged_bridge)
+            checks.append(
+                {
+                    "policy_name": "require_merged_bridge",
+                    "requested_value": float(require_merged_bridge),
+                    "effective_value": merged_bridge,
+                    "available": True,
+                    "passed": passed,
+                    "reason": "threshold_met" if passed else "threshold_not_met",
+                }
+            )
+        else:
+            checks.append(
+                {
+                    "policy_name": "require_merged_bridge",
+                    "requested_value": float(require_merged_bridge),
+                    "effective_value": None,
+                    "available": False,
+                    "passed": False,
+                    "reason": "merged_verification_not_available",
+                }
+            )
+    if fail_on_intent_conflicts:
+        if merge_status == "merged":
+            conflict_count = len(intent_conflicts or [])
+            passed = conflict_count == 0
+            checks.append(
+                {
+                    "policy_name": "fail_on_intent_conflicts",
+                    "requested_value": True,
+                    "effective_value": conflict_count,
+                    "available": True,
+                    "passed": passed,
+                    "reason": "no_intent_conflicts" if passed else "intent_conflicts_present",
+                }
+            )
+        else:
+            checks.append(
+                {
+                    "policy_name": "fail_on_intent_conflicts",
+                    "requested_value": True,
+                    "effective_value": None,
+                    "available": False,
+                    "passed": False,
+                    "reason": "merged_result_not_available",
+                }
+            )
+    requested = bool(checks)
+    available = True if not requested else all(bool(c.get("available")) for c in checks)
+    passed = True if not requested else all(bool(c.get("passed")) for c in checks)
+    return {
+        "requested": requested,
+        "available": available,
+        "passed": passed,
+        "checks": checks,
+    }
+
+
+def merge_verify(
+    base_text: str,
+    left_text: str,
+    right_text: str,
+    regression_top_n: int | None = None,
+    regression_include_evidence: bool = False,
+    require_merged_bridge: float | None = None,
+    fail_on_intent_conflicts: bool = False,
+) -> MergeVerifyResult:
     try:
         base_summary, base_ir, _ = _verification_summary(base_text)
         left_summary, left_ir, _ = _verification_summary(left_text)
@@ -537,7 +622,15 @@ def merge_verify(base_text: str, left_text: str, right_text: str, regression_top
                 merge_status="error",
                 merged_result=None,
                 requested_top_n=regression_top_n,
+                include_evidence=regression_include_evidence,
                 unavailable_reason="merge_verify_input_error",
+            ),
+            policy_evaluation=_build_policy_evaluation(
+                merge_status="error",
+                verification=None,
+                intent_conflicts=[],
+                require_merged_bridge=require_merged_bridge,
+                fail_on_intent_conflicts=fail_on_intent_conflicts,
             ),
             error=str(exc),
         )
@@ -732,7 +825,15 @@ def merge_verify(base_text: str, left_text: str, right_text: str, regression_top
                 merge_status="conflict",
                 merged_result=None,
                 requested_top_n=regression_top_n,
+                include_evidence=regression_include_evidence,
                 unavailable_reason="merge_conflict_no_merged_spec",
+            ),
+            policy_evaluation=_build_policy_evaluation(
+                merge_status="conflict",
+                verification=None,
+                intent_conflicts=[],
+                require_merged_bridge=require_merged_bridge,
+                fail_on_intent_conflicts=fail_on_intent_conflicts,
             ),
         )
 
@@ -785,6 +886,14 @@ def merge_verify(base_text: str, left_text: str, right_text: str, regression_top
             merge_status="merged",
             merged_result=merged_result,
             requested_top_n=regression_top_n,
+            include_evidence=regression_include_evidence,
+        ),
+        policy_evaluation=_build_policy_evaluation(
+            merge_status="merged",
+            verification=merged_summary,
+            intent_conflicts=intent_conflicts,
+            require_merged_bridge=require_merged_bridge,
+            fail_on_intent_conflicts=fail_on_intent_conflicts,
         ),
     )
 
@@ -813,6 +922,7 @@ def merge_verify_payload(
         "verification_context": result.verification_context,
         "intent_conflicts": list(result.intent_conflicts or []),
         "regression_evidence": result.regression_evidence,
+        "policy_evaluation": result.policy_evaluation,
         "conflicts": [
             {
                 "address": c.address,
@@ -865,6 +975,11 @@ def render_merge_verify_human(result: MergeVerifyResult) -> str:
         lines.append(f"  available: {result.regression_evidence.get('available')}")
         lines.append(f"  total_problem_obligations: {result.regression_evidence.get('total_problem_obligations')}")
         lines.append(f"  shown_problem_obligations: {result.regression_evidence.get('shown_problem_obligations')}")
+    if result.policy_evaluation is not None:
+        lines.append("policy_evaluation:")
+        lines.append(f"  requested: {result.policy_evaluation.get('requested')}")
+        lines.append(f"  available: {result.policy_evaluation.get('available')}")
+        lines.append(f"  passed: {result.policy_evaluation.get('passed')}")
     return "\n".join(lines)
 
 

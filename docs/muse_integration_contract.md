@@ -131,6 +131,7 @@ Top-level JSON fields:
 - `verification_context` (bridge-aware summaries for base/left/right/merged when available)
 - `intent_conflicts` (conservative intent-level conflict classifications for merged outputs)
 - `regression_evidence` (compact CI-focused summary of top problematic merged obligations)
+- `policy_evaluation` (optional policy-gate evaluation block for explicit CI policy flags)
 - `conflicts` (structured list on conflict)
 - `error` (for parse/runtime failures)
 
@@ -266,6 +267,51 @@ Outcome behavior:
 - writes the machine-readable merge-verify JSON report artifact to disk
 - writes for merged, conflict, and error outcomes
 - does not imply merge success; check `merge_status` and `verification`
+
+### `policy_evaluation` optional merge policy gates (Phase 5E)
+
+`vibec merge-verify` now supports explicit opt-in policy checks:
+
+- `--require-merged-bridge <float>`
+- `--fail-on-intent-conflicts`
+
+Default behavior is unchanged when no policy flags are provided.
+
+Policy checks do not change merge computation, verification logic, bridge math, intent-conflict classification, or regression-evidence selection.
+They only evaluate already-produced merge/verification signals.
+
+`policy_evaluation` shape:
+
+- `requested` (boolean)
+- `available` (boolean)
+- `passed` (boolean)
+- `checks` (stable ordered list of per-policy checks)
+
+Each check row includes:
+
+- `policy_name`
+- `requested_value`
+- `effective_value`
+- `available`
+- `passed`
+- `reason`
+
+Current `policy_name` values:
+
+- `require_merged_bridge`
+- `fail_on_intent_conflicts`
+
+Availability semantics:
+
+- for merged outputs, checks evaluate against merged verification/context surfaces
+- for structural conflicts or runtime errors, merged-dependent checks are `available=false` with explicit reason; no fake pass
+
+Exit semantics:
+
+- structural conflict: non-zero (unchanged)
+- merged verification failed: non-zero (unchanged)
+- merged verification passed + requested policy failed: non-zero (new, explicit opt-in behavior)
+- no policy flags: unchanged exit behavior
 
 ### `bridge_impact` semantics (Phase 1B)
 

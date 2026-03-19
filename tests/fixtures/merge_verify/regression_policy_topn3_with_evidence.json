@@ -4,8 +4,8 @@
   "effective_top_n": 3,
   "min_top_n": 1,
   "max_top_n": 20,
-  "include_evidence_requested": false,
-  "include_evidence_effective": false,
+  "include_evidence_requested": true,
+  "include_evidence_effective": true,
   "ordering": [
     "severity_priority(desc)",
     "status_priority(violated>unknown)",

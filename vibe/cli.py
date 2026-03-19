@@ -1230,12 +1230,18 @@ def _merge_verify(
     write_merged: Path | None,
     write_merge_report_path: Path | None,
     regression_top_n: int | None = None,
+    regression_include_evidence: bool = False,
+    require_merged_bridge: float | None = None,
+    fail_on_intent_conflicts: bool = False,
 ) -> int:
     result = merge_verify(
         base_path.read_text(encoding="utf-8"),
         left_path.read_text(encoding="utf-8"),
         right_path.read_text(encoding="utf-8"),
         regression_top_n=regression_top_n,
+        regression_include_evidence=regression_include_evidence,
+        require_merged_bridge=require_merged_bridge,
+        fail_on_intent_conflicts=fail_on_intent_conflicts,
     )
     payload = merge_verify_payload(
         result,
@@ -1268,7 +1274,11 @@ def _merge_verify(
     if result.merge_status == "conflict":
         return 1
     assert result.verification is not None
-    return 0 if bool(result.verification.get("passed")) else 1
+    if not bool(result.verification.get("passed")):
+        return 1
+    if bool((result.policy_evaluation or {}).get("requested")) and not bool((result.policy_evaluation or {}).get("passed")):
+        return 1
+    return 0
 
 
 def _interchange_from_text(input_path: Path, report: ReportMode, write_output: Path | None) -> int:
@@ -1562,6 +1572,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Max number of regression_evidence top_problem_obligations rows to show (clamped to safe bounds)",
     )
+    mv.add_argument(
+        "--regression-include-evidence",
+        action="store_true",
+        help="Include compact evidence_text in regression_evidence rows when available",
+    )
+    mv.add_argument(
+        "--require-merged-bridge",
+        type=float,
+        default=None,
+        help="Fail with non-zero exit if merged bridge_score is below this threshold",
+    )
+    mv.add_argument(
+        "--fail-on-intent-conflicts",
+        action="store_true",
+        help="Fail with non-zero exit if merged result contains any intent_conflicts",
+    )
 
     return parser
 
@@ -1723,6 +1749,9 @@ def main(argv: list[str] | None = None) -> int:
             write_merged=args.write_merged,
             write_merge_report_path=args.write_merge_report,
             regression_top_n=args.regression_top_n,
+            regression_include_evidence=args.regression_include_evidence,
+            require_merged_bridge=args.require_merged_bridge,
+            fail_on_intent_conflicts=args.fail_on_intent_conflicts,
         )
 
     parser.error("unknown command")
