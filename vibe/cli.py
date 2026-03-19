@@ -18,6 +18,7 @@ from .calibration import (
     load_calibration_corpus,
     save_calibration_model,
 )
+from .diff import compute_intent_diff, render_intent_diff_human, render_intent_diff_json
 from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
 from .parser import parse_source
@@ -447,6 +448,25 @@ def _inspect_proof(path: Path) -> int:
     return 0
 
 
+def _diff(
+    old_path: Path,
+    new_path: Path,
+    report: ReportMode,
+    show_unchanged: bool = False,
+    summary_only: bool = False,
+) -> int:
+    old_source = _load(old_path)
+    new_source = _load(new_path)
+    old_ir = ast_to_ir(parse_source(old_source))
+    new_ir = ast_to_ir(parse_source(new_source))
+    result = compute_intent_diff(old_ir, new_ir)
+    if report == "json":
+        print(render_intent_diff_json(result))
+    else:
+        print(render_intent_diff_human(result, show_unchanged=show_unchanged, summary_only=summary_only))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -495,6 +515,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     ip = sub.add_parser("inspect-proof", help="Inspect a preservation proof artifact")
     ip.add_argument("path", type=Path)
+
+    df = sub.add_parser("diff", help="Semantic diff between two .vibe intent specs")
+    df.add_argument("old_path", type=Path)
+    df.add_argument("new_path", type=Path)
+    df.add_argument("--report", choices=["human", "json"], default="human")
+    df.add_argument("--show-unchanged", action="store_true", help="Show unchanged summary row if there are no semantic changes")
+    df.add_argument("--summary-only", action="store_true", help="Show summary only")
 
     return parser
 
@@ -548,6 +575,14 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "inspect-proof":
         return _inspect_proof(args.path)
+    if args.command == "diff":
+        return _diff(
+            args.old_path,
+            args.new_path,
+            args.report,
+            show_unchanged=args.show_unchanged,
+            summary_only=args.summary_only,
+        )
 
     parser.error("unknown command")
     return 2

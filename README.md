@@ -324,6 +324,23 @@ Reports and proof artifacts now include refinement metadata:
 - `refinement_failure_summary`
 - `winning_iteration`
 
+## Semantic intent diff (Phase 3.4)
+
+Vibe now supports semantic diffing between two `.vibe` intent specs:
+
+- `vibec diff old.vibe new.vibe`
+- optional: `--report json`, `--show-unchanged`, `--summary-only`
+
+This compares normalized semantic structures (IR-level intent surfaces), not emitted code.
+It reports:
+
+- semantic changes for goal/inputs/outputs/preserve/constraints/bridge/emit
+- Tesla Victory Layer, Agentora, and AgentCeption deltas
+- declaration deltas (`module`, `type`, `enum`, `interface`, `import`, `vibe_version`)
+- deterministic change classifications and semantic polarity hints (`broadened`, `narrowed`, `unknown`)
+
+Intent diff is a foundation for future semantic versioning; it does not replace bridge verification.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -379,6 +396,8 @@ vibec compile vibe/examples/payment_router.vibe --refine --max-iters 5
 vibec verify-proof vibe/examples/payment_router.vibe
 vibec inspect-proof vibe/examples/payment_router.vibe.proof.json
 vibec compile vibe/examples/edge_contract_ts.vibe --with-tests
+vibec diff vibe/examples/payment_router.vibe vibe/examples/edge_contract_ts.vibe
+vibec diff vibe/examples/payment_router.vibe vibe/examples/edge_contract_ts.vibe --report json
 ```
 
 ## Bridge report output

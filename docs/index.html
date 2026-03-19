@@ -185,6 +185,11 @@ emit python</code></pre>
           failed rounds feed structured counterexample signals into the next synthesis round, and
           only a passing refined candidate may emit.
         </p>
+        <p>
+          Phase 3.4 adds semantic intent diff (<code>vibec diff old.vibe new.vibe</code>) over normalized
+          intent structures, so Vibe reports how programmer intent changed (goal/inputs/outputs/preserve/constraints/
+          bridge/emit/Tesla/Agentora/AgentCeption), distinct from emitted-code drift.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300
