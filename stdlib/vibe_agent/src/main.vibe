@@ -1,0 +1,21 @@
+intent AgentDelegationContract:
+  goal: "Provide reusable agent orchestration and delegation contracts with boundary preservation"
+  inputs:
+    task_spec: string
+    agent_graph_spec: string
+    boundary_contracts: string
+  outputs:
+    execution_plan: string
+    boundary_report: string
+    fallback_trace: string
+
+preserve:
+  bridge_threshold_propagation >= 1
+  deterministic_fallback_policy >= 1
+  delegation_stop_conditions >= 1
+
+constraint:
+  deterministic outputs
+  explicit fallback route
+
+emit python

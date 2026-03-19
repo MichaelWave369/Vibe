@@ -1,0 +1,17 @@
+[package]
+name = "vibe_payment"
+version = "0.1.0"
+description = "Vibe standard library payment routing and fallback contracts"
+
+[bridge]
+measurement_safe_ratio = 0.9
+epsilon_floor = 0.02
+
+[emit]
+default_target = "python"
+
+[dependencies]
+
+[metadata]
+domain = "general"
+tags = ["stdlib", "payment", "fallback", "phase-8.4"]

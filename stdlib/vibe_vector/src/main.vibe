@@ -1,0 +1,20 @@
+intent VectorRetrievalContract:
+  goal: "Provide reusable embedding/retrieval contract with deterministic retrieval options"
+  inputs:
+    query_embedding: string
+    index_snapshot: string
+    top_k: number
+  outputs:
+    retrieved_ids: string
+    retrieved_scores: string
+    retrieval_metadata: string
+
+preserve:
+  retrieval_reproducibility >= 1
+  bounded_retrieval_cost <= 1000
+
+constraint:
+  deterministic outputs
+  deterministic top-k ordering
+
+emit python

@@ -142,3 +142,4 @@ class Program:
     agents: list[AgentGraphAgent] = field(default_factory=list)
     orchestrations: list[OrchestrateBlock] = field(default_factory=list)
     delegations: list[DelegationDecl] = field(default_factory=list)
+    domain_profile: str | None = None

@@ -26,7 +26,21 @@ from .ast import (
 from .grammar import GRAMMAR
 
 COMPARISON_OPS = ("<=", ">=", "<", ">", "=")
-PRELUDE_PREFIXES = ("vibe_version ", "import ", "module ", "type ", "enum ", "interface ")
+PRELUDE_PREFIXES = ("vibe_version ", "domain ", "import ", "module ", "type ", "enum ", "interface ")
+BARE_PRESERVE_RULES = {
+    "conservation of energy",
+    "conservation of mass",
+    "stable_time_step",
+    "monotonic entropy",
+    "gdpr compliance",
+    "auditability",
+    "data minimization",
+    "right_to_erasure",
+    "reproducibility of differential expression results",
+    "reproducible workflow",
+    "provenance retained",
+    "stable normalization method",
+}
 
 
 class ParseError(ValueError):
@@ -116,6 +130,8 @@ def _parse_rule(line: str, line_no: int) -> PreserveRule:
             key, value = [x.strip() for x in line.split(op, 1)]
             if key and value:
                 return PreserveRule(key=key, op=op, value=value)
+    if line.strip().lower() in BARE_PRESERVE_RULES:
+        return PreserveRule(key=line.strip(), op="", value="")
     raise ParseError(f"Invalid preserve rule `{line}`. Expected `<key> <op> <value>`", line_no, 1)
 
 
@@ -236,6 +252,7 @@ def parse_source(source: str) -> Program:
 
     i = 0
     vibe_version: str | None = None
+    domain_profile: str | None = None
     imports: list[str] = []
     modules: list[str] = []
     types: list[str] = []
@@ -248,6 +265,8 @@ def parse_source(source: str) -> Program:
             raise ParseError("Top-level declarations cannot be indented", tk.line, tk.indent + 1)
         if tk.text.startswith("vibe_version "):
             vibe_version = tk.text.split(maxsplit=1)[1].strip()
+        elif tk.text.startswith("domain "):
+            domain_profile = tk.text.split(maxsplit=1)[1].strip()
         elif tk.text.startswith("import "):
             imports.append(tk.text.split(maxsplit=1)[1].strip())
         elif tk.text.startswith("module "):
@@ -451,6 +470,7 @@ def parse_source(source: str) -> Program:
         agents=agents,
         orchestrations=orchestrations,
         delegations=delegations,
+        domain_profile=domain_profile,
     )
 
     if tesla_raw is not None:
