@@ -18,7 +18,7 @@ jobs:
       - name: Install Vibe
         run: python -m pip install -e .
 
-      - name: Bridge check (future public identity: vibe-lang/bridge-check@v1)
+      - name: "Bridge check (future public identity: vibe-lang/bridge-check@v1)"
         uses: ./
         with:
           files: '**/*.vibe'
