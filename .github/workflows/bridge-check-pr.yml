@@ -1,0 +1,38 @@
+name: vibe-bridge-check-pr
+
+on:
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  bridge-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Vibe
+        run: python -m pip install -e .
+
+      - name: Bridge check (future public identity: vibe-lang/bridge-check@v1)
+        uses: ./
+        with:
+          files: '**/*.vibe'
+          fail-on: 'ENTROPY_NOISE'
+          report-json-path: '.vibe_ci/pr_bridge_report.json'
+          with-proofs: 'true'
+
+      - name: Upload bridge artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibe-bridge-pr-artifacts
+          path: |
+            .vibe_ci/pr_bridge_report.json
+            .vibe_ci/pr_bridge_report.summary.md
+            **/*.vibe.proof.json
+          if-no-files-found: warn

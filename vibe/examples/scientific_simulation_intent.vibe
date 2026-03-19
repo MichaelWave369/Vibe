@@ -1,0 +1,18 @@
+domain scientific_simulation
+
+intent FluidSimulation:
+  goal: "Preserve stable convergence for timestep integration"
+  inputs:
+    dt: number
+  outputs:
+    residual: number
+
+preserve:
+  stability_margin > 0.2
+  convergence_steps < 500
+
+constraint:
+  units_si_only
+  deterministic_seed_required
+
+emit julia
