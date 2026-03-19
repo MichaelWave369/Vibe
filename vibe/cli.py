@@ -18,6 +18,7 @@ from .calibration import (
     load_calibration_corpus,
     save_calibration_model,
 )
+from .ci import CICheckConfig, run_ci_check
 from .diff import compute_intent_diff, render_intent_diff_human, render_intent_diff_json
 from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
@@ -794,6 +795,39 @@ def _lsp(check: bool = False) -> int:
     return run_stdio_server()
 
 
+def _ci_check(
+    files: str,
+    fail_on: str,
+    report_json_path: str,
+    backend: str,
+    fallback_backend: str | None,
+    with_proofs: bool,
+    with_tests: bool,
+    report: ReportMode,
+) -> int:
+    payload, code = run_ci_check(
+        CICheckConfig(
+            files_glob=files,
+            fail_on=fail_on,
+            report_json_path=report_json_path,
+            backend=backend,
+            fallback_backend=fallback_backend,
+            with_proofs=with_proofs,
+            with_tests=with_tests,
+        )
+    )
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe CI Bridge Check ===")
+        print(f"files_checked: {payload['files_checked']}")
+        print(f"files_failed: {payload['files_failed']}")
+        print(f"worst_bridge_score: {payload['worst_bridge_score']}")
+        print(f"report_json_path: {payload['report_json_path']}")
+        print(f"summary_markdown_path: {payload['summary_markdown_path']}")
+    return code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -906,6 +940,16 @@ def build_parser() -> argparse.ArgumentParser:
     lsp = sub.add_parser("lsp", help="Run Vibe Language Server Protocol (LSP) server over stdio")
     lsp.add_argument("--check", action="store_true", help="Validate launch path and exit")
 
+    cic = sub.add_parser("ci-check", help="Run deterministic CI-style bridge checks for .vibe files")
+    cic.add_argument("--files", default="**/*.vibe", help="Glob pattern for .vibe files")
+    cic.add_argument("--fail-on", default="", help="Comma-separated fail conditions (e.g. ENTROPY_NOISE,bridge_score_below_threshold:0.9)")
+    cic.add_argument("--report-json-path", default=".vibe_ci/bridge_report.json")
+    cic.add_argument("--backend", default="heuristic", help=f"Verification backend ({', '.join(available_backends())})")
+    cic.add_argument("--fallback-backend", default=None, help="Optional fallback backend for unknown obligations")
+    cic.add_argument("--with-proofs", action="store_true", help="Write proof artifacts for checked files")
+    cic.add_argument("--with-tests", action="store_true", help="Generate intent-guided tests during check")
+    cic.add_argument("--report", choices=["human", "json"], default="human")
+
     return parser
 
 
@@ -993,6 +1037,17 @@ def main(argv: list[str] | None = None) -> int:
         return _compat(args.package_ref_a, args.package_ref_b, args.report, registry_root=args.registry_root)
     if args.command == "lsp":
         return _lsp(check=args.check)
+    if args.command == "ci-check":
+        return _ci_check(
+            files=args.files,
+            fail_on=args.fail_on,
+            report_json_path=args.report_json_path,
+            backend=args.backend,
+            fallback_backend=args.fallback_backend,
+            with_proofs=args.with_proofs,
+            with_tests=args.with_tests,
+            report=args.report,
+        )
 
     parser.error("unknown command")
     return 2

@@ -318,6 +318,27 @@ Truthfulness boundaries:
 - deeper checks are save-oriented, not full heavy verification on each keystroke
 - LSP hints do not replace compile-time preservation proof surfaces
 
+## GitHub Actions native bridge check (Phase 6.4)
+
+Vibe now includes an in-repo GitHub Action implementation for deterministic CI bridge gating.
+
+Implemented action surfaces:
+- root `action.yml` + local dogfood action at `.github/actions/bridge-check/action.yml`
+- Python entrypoint: `.github/actions/bridge-check/run_bridge_check.py`
+- local reproducible CLI helper: `vibec ci-check`
+
+Core behavior:
+- discovers `.vibe` files via configurable glob
+- runs real Vibe verification per file
+- writes deterministic JSON report + markdown summary
+- appends markdown into `GITHUB_STEP_SUMMARY` when available
+- supports merge-blocking fail-on gating (`verdict` rules and `bridge_score_below_threshold:<n>`)
+
+Important truthfulness boundaries:
+- this phase is native CI integration, not a hosted Vibe platform
+- action is in-repo and publication as `vibe-lang/bridge-check@v1` is a future split/release step
+- fail-on gating is implemented now; baseline-regression comparison remains optional future work
+
 ## Multi-candidate synthesis (Phase 3.1)
 
 Compile/verify can now generate and evaluate multiple deterministic candidate implementations from the same IR.

@@ -240,6 +240,11 @@ emit python</code></pre>
           definition lookup, document symbols, semantic tokens, and lightweight intent lenses. Editor feedback is
           fast/local by default, while heavier preservation verification remains compile/save oriented.
         </p>
+        <p>
+          Phase 6.4 adds native GitHub Actions bridge checking via deterministic CI reports and PR/job summaries.
+          Repositories can gate merges on Vibe preservation outcomes using configurable <code>fail-on</code> conditions
+          (including verdicts and bridge-score thresholds) without requiring a hosted Vibe service.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300
