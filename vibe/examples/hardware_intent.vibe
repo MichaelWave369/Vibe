@@ -1,0 +1,19 @@
+domain hardware
+
+intent ClockController:
+  goal: "Maintain deterministic clock gating under thermal constraints"
+  inputs:
+    temp_c: number
+  outputs:
+    gate_enable: boolean
+
+preserve:
+  timing < 10ns
+  latency_cycles <= 3
+
+constraint:
+  no combinational loops
+  synchronous
+  deterministic
+
+emit vhdl

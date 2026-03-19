@@ -1,0 +1,17 @@
+[package]
+name = "vibe_agent"
+version = "0.1.0"
+description = "Vibe standard library agent delegation and boundary-preservation contracts"
+
+[bridge]
+measurement_safe_ratio = 0.85
+epsilon_floor = 0.02
+
+[emit]
+default_target = "python"
+
+[dependencies]
+
+[metadata]
+domain = "general"
+tags = ["stdlib", "agent", "delegation", "phase-8.4"]

@@ -6,13 +6,13 @@
     <title>Vibe — Intent-first programming. Preservation-verified compilation.</title>
     <meta
       name="description"
-      content="Vibe is an intent-first programming language and compiler prototype where intention becomes source code and compilation succeeds only when meaning survives the bridge."
+      content="Vibe is an intent-first language and compiler. Intention is source code; preservation is compilation truth."
     />
 
     <meta property="og:title" content="Vibe — Intent-first programming" />
     <meta
       property="og:description"
-      content="Language/compiler evolution beyond Nevora: .vibe source -> parse -> AST/IR -> verify -> emit -> report."
+      content=".vibe intent -> parse -> typed IR -> verify -> proof/report -> emit (only when preservation passes)."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://michaelwave369.github.io/Vibe/" />
@@ -22,7 +22,7 @@
     <meta name="twitter:title" content="Vibe — Intent-first programming" />
     <meta
       name="twitter:description"
-      content="Compilation succeeds only when implementation preserves meaning above the bridge threshold."
+      content="Compilation succeeds only when implementation preserves intent above the bridge threshold."
     />
 
     <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
@@ -33,9 +33,9 @@
       <nav class="nav container">
         <a class="brand" href="#top">Vibe</a>
         <div class="nav-links">
-          <a href="#founding-law">Founding Law</a>
-          <a href="#spec-modules">Spec / Modules</a>
-          <a href="#flow">Compiler Flow</a>
+          <a href="#what-is-vibe">What is Vibe</a>
+          <a href="#quickstart">Quickstart</a>
+          <a href="#standard-library">Standard Library</a>
           <a href="#roadmap">Roadmap</a>
           <a class="cta-link" href="https://github.com/MichaelWave369/Vibe" target="_blank" rel="noreferrer">GitHub</a>
         </div>
@@ -43,14 +43,14 @@
       <section id="top" class="container hero-content">
         <p class="eyebrow">Intent-first language + compiler prototype</p>
         <h1>Vibe</h1>
-        <h2>Intent-first programming. Preservation-verified compilation.</h2>
+        <h2>Intention is source code. Preservation is compilation truth.</h2>
         <p>
-          Vibe is a language and compiler prototype where intention becomes source code and
-          compilation succeeds only when meaning survives the bridge.
+          Vibe is a local-first compiler toolchain where code emission is gated by machine-checkable
+          preservation results.
         </p>
         <div class="hero-actions">
           <a class="btn primary" href="https://github.com/MichaelWave369/Vibe" target="_blank" rel="noreferrer">Open Repository</a>
-          <a class="btn" href="https://github.com/MichaelWave369/Vibe/blob/main/README.md" target="_blank" rel="noreferrer">Read Docs</a>
+          <a class="btn" href="https://github.com/MichaelWave369/Vibe/blob/main/README.md" target="_blank" rel="noreferrer">Read README</a>
         </div>
       </section>
     </header>
@@ -59,209 +59,89 @@
       <section class="container section" id="what-is-vibe">
         <h3>What is Vibe?</h3>
         <p>
-          <strong>Vibe is an intent-first programming language and compiler prototype.</strong>
-          It treats intent as first-class source material and verifies preservation before code emission.
+          Vibe is an intent-first language and compiler. Pipeline:
+          <code>.vibe -> parse -> typed IR -> verify -> proof/report -> emit</code>.
         </p>
         <div class="principles">
-          <div class="card"><p>Intention is source code.</p></div>
-          <div class="card"><p>Preservation is compilation truth.</p></div>
+          <div class="card"><p>Compile fails when preservation gates fail.</p></div>
+          <div class="card"><p>Reports/proofs are deterministic and inspectable.</p></div>
+          <div class="card"><p>Local-first workflows: package manager, registry, LSP, CI bridge checks.</p></div>
         </div>
       </section>
 
-      
-      <section class="container section" id="spec-modules">
-        <h3>Spec / Modules</h3>
-        <div class="principles">
-          <div class="card">
-            <h4>Stable Core Blocks</h4>
-            <p><code>intent</code>, <code>preserve</code>, <code>constraint</code>, <code>bridge</code>, <code>emit</code></p>
-          </div>
-          <div class="card">
-            <h4>Experimental Tesla Victory Layer</h4>
-            <p><code>experimental.tesla.victory.layer</code> with arc tower, life ray, and breath cycle semantics.</p>
-          </div>
-          <div class="card">
-            <h4>Agentora</h4>
-            <p>Native multi-agent orchestration declarations (roles, tools, memory, intention, constraints).</p>
-          </div>
-          <div class="card">
-            <h4>AgentCeption</h4>
-            <p>Recursive delegation controls with bridge inheritance and merge-preservation checks.</p>
-          </div>
-        </div>
+      <section class="container section" id="quickstart">
+        <h3>Quickstart</h3>
+        <pre><code>python -m pip install -e .
+vibec verify vibe/examples/payment_router.vibe
+vibec compile vibe/examples/payment_router.vibe
+vibec verify-proof vibe/examples/payment_router.vibe
+python -m pytest -q</code></pre>
       </section>
 
-      <section class="container section" id="founding-law">
-        <h3>Founding Law</h3>
-        <p>Vibe compiles only when implementation preserves meaning above the bridge threshold.</p>
-        <p>Current emit targets: <code>python</code>, <code>typescript</code>.</p>
-        <pre><code>epsilon_floor = 0.02
-measurement_safe_ratio = 0.85
-
-compile fails if epsilon_post &lt;= epsilon_floor
-compile fails if measurement_ratio &lt; measurement_safe_ratio
-
-measurement_ratio = epsilon_post / max(epsilon_pre, epsilon_floor)</code></pre>
+      <section class="container section" id="status">
+        <h3>Current status</h3>
+        <p>
+          Implemented slices include parser/IR foundations, verification + proof artifacts, local package manager,
+          local registry, LSP, CI bridge-check integration, cross-domain profiles (hardware/scientific/legal/genomics),
+          and Phase 8.x meta slices for bounded self-hosting, semantic versioning from intent diff,
+          intent negotiation, and an initial standard library.
+        </p>
       </section>
 
-      <section class="container section" id="example-program">
-        <h3>Example <code>.vibe</code> Program</h3>
-        <pre><code>intent PaymentRouter:
-  goal: "Route payments to the cheapest valid processor."
-  inputs:
-    amount: number
-    country: string
-    card_brand: string
-  outputs:
-    processor: string
-    total_fee: number
-
-preserve:
-  latency &lt; 200ms
-  failure_rate &lt; 0.01
-  compliance = strict
-
-constraint:
-  no hardcoded secrets
-  deterministic fee selection
-  graceful fallback on provider outage
-
-bridge:
-  epsilon_floor = 0.02
-  measurement_safe_ratio = 0.85
-  mode = strict
-
-emit python</code></pre>
+      <section class="container section" id="standard-library">
+        <h3>Ecosystem: Initial Standard Library</h3>
+        <p>
+          Vibe now includes an initial bounded standard library of reusable intent-contract packages:
+          <code>vibe_http</code>, <code>vibe_payment</code>, <code>vibe_vector</code>, and <code>vibe_agent</code>.
+        </p>
+        <p>
+          These packages are real local packages (<code>vibe.toml</code> + modules) that flow through
+          <code>manifest-check</code>, <code>build</code>, <code>verify-proof</code>, and local registry
+          <code>publish/search/inspect</code> operations.
+        </p>
+        <p>
+          Scope note: this is an initial package set, not complete standard-library coverage.
+        </p>
       </section>
 
-      <section class="container section" id="flow">
-        <h3>Compiler Flow</h3>
-        <ol class="flow">
-          <li><code>.vibe source</code></li>
-          <li>parse</li>
-          <li>AST/IR normalization</li>
-          <li>validate + incremental cache compare</li>
-          <li>generate + normalize obligations</li>
-          <li>evaluate obligations via verification backend</li>
-          <li>emit code (only on pass)</li>
-          <li>report metrics + verdict</li>
-        </ol>
+      <section class="container section" id="interchange">
+        <h3>Phase 8.4: Intent as Universal Intermediate Language</h3>
+        <p>
+          Vibe now treats <code>.vibe</code> as an interchange layer between natural-language requirements,
+          verifiable intent contracts, and proof consumers.
+        </p>
+        <p>
+          Bounded interchange commands:
+          <code>interchange-from-text</code> (deterministic NL scaffold),
+          <code>intent-brief</code> (machine-readable intent summary),
+          and <code>proof-brief</code> (machine-readable proof consumer summary).
+        </p>
+        <p>
+          Scope is intentionally honest: no hosted LLM integration and no claim of perfect natural-language understanding.
+        </p>
       </section>
 
-      <section class="container section" id="bridge-verification">
-        <h3>Bridge Verification</h3>
+      <section class="container section" id="proofs">
+        <h3>Verification and proof scope</h3>
         <p>
-          Verifier outputs qixel metrics, alignment terms, bridge score, obligation summaries,
-          backend metadata, and a preservation verdict.
-        </p>
-        <p>
-          Default backend: <code>heuristic</code>. Architecture includes placeholder
-          <code>symbolic</code> plus a first real <code>smt</code> subset backend for
-          founding-law bridge checks and simple scalar/boolean predicates.
-        </p>
-        <p>
-          Vibe also reports structural intent/emission correspondence with drift categories:
-          matched, partial, missing, extra, and unknown (structural layer only; not full behavioral equivalence).
-        </p>
-        <p>
-          Epsilon estimation can be empirically calibrated from a local corpus via
-          <code>vibec calibrate</code>, while preserving founding-law safety gates.
-        </p>
-        <p>
-          Verification can also emit deterministic preservation proof artifacts
-          (<code>.vibe.proof.json</code>) for transportable inspection via <code>inspect-proof</code>.
-        </p>
-        <p>
-          Compile/verify can synthesize multiple deterministic candidates and emit only the highest-ranked
-          passing candidate under bridge-gated verification.
-        </p>
-        <p>
-          Optional intent-guided test generation is available with <code>--with-tests</code>:
-          compile emits deterministic test files next to emitted code, while report/proof surfaces
-          preserve-rule and constraint coverage metadata with explicit uncovered/partial honesty.
-        </p>
-        <p>
-          Phase 3.3 adds deterministic bridge-gated refinement (<code>--refine</code>, <code>--max-iters</code>):
-          failed rounds feed structured counterexample signals into the next synthesis round, and
-          only a passing refined candidate may emit.
-        </p>
-        <p>
-          Phase 3.4 adds semantic intent diff (<code>vibec diff old.vibe new.vibe</code>) over normalized
-          intent structures, so Vibe reports how programmer intent changed (goal/inputs/outputs/preserve/constraints/
-          bridge/emit/Tesla/Agentora/AgentCeption), distinct from emitted-code drift.
-        </p>
-        <p>
-          Phase 4.1 adds semantic types: intent values now carry meaning qualifiers (e.g. deterministic,
-          secret-sensitive, bridge-critical) derived from preserve/constraint/bridge semantics and surfaced in IR/report
-          diagnostics without replacing preservation obligations.
-        </p>
-        <p>
-          Phase 4.2 adds effect types: Vibe now tracks inferred behavioral effects (pure/io/stateful/
-          nondeterministic/network/fallback/bridge-critical) and reports effect mismatches as compile-time
-          obligations while keeping unknown effects visible.
-        </p>
-        <p>
-          Phase 4.3 adds resource types: Vibe reports inferred resource profiles (memory/cpu/latency/allocation/
-          iteration hints) and surfaces resource mismatches as preservation obligations.
-        </p>
-        <p>
-          Phase 4.4 adds intent-seeded type inference: declared intent IO + preserve/constraint/bridge/declaration
-          surfaces seed deterministic inferred bindings, unresolved points, and inference-derived obligations.
-          Inference remains partial and explicit; preservation law still governs emission truth.
-        </p>
-        <p>
-          Phase 5.1 adds first-class agent graphs: native <code>agent</code> and <code>orchestrate</code> syntax with
-          typed receives/emits boundaries, per-agent contracts, edge/fallback validation, and graph-derived obligations
-          surfaced in IR/report/proof while runtime orchestration semantics remain intentionally partial.
-        </p>
-        <p>
-          Phase 5.2 adds bridge propagation across agent boundaries: every orchestration edge now receives
-          deterministic compatibility checks + an edge bridge score, with a propagated pipeline score
-          (<code>product(edge_scores)</code>) and boundary-critical failures that can block compile.
-        </p>
-        <p>
-          Phase 5.3 adds AgentCeption delegation analysis: native <code>delegate Parent -&gt; Child</code> declarations,
-          static proof inheritance for preserve/constraint/bridge contracts, contract-weakening detection,
-          and recursion risk surfacing when delegation chains lack explicit depth/stop reasoning.
-        </p>
-        <p>
-          Phase 5.4 adds runtime monitor metadata + event evaluation: emitted monitor configs track agents/edges/
-          thresholds, and offline runtime events are scored for drift/alerts/fallback pressure relative to compiled
-          contracts (observational only; compile-time proof remains authoritative).
-        </p>
-        <pre><code>=== Vibe Bridge Report ===
-eps_pre: 0.9000
-eps_post: 0.9300
-M_eps: 1.0333
-q_alignment: 1.0000
-petra_alignment: 1.0000
-multimodal_resonance: 1.0000
-bridge_score: 1.0000
-verdict: MULTIMODAL_BRIDGE_STABLE
-pass: True</code></pre>
-      </section>
-
-      <section class="container section" id="lineage">
-        <h3>Nevora → Vibe Lineage</h3>
-        <p>
-          Nevora was the earlier translator lineage. Vibe is the language/compiler evolution:
-          not a rename, but a shift to compiler-law semantics where preservation gates emission.
+          Vibe emits machine-checkable proof metadata in deterministic <code>.vibe.proof.json</code> artifacts.
+          This is a real verification pipeline, but not a claim of complete formal verification for all program behavior.
         </p>
       </section>
 
       <section class="container section" id="roadmap">
         <h3>Roadmap</h3>
         <ul>
-          <li>v0.2: richer grammar and diagnostics</li>
-          <li>v0.2: stronger verifier calibrations and rule mapping</li>
-          <li>v0.3: additional emit targets after compiler spine hardening</li>
-          <li>future: hosted workflows built on top of preservation law</li>
+          <li>Expand standard-library package coverage and inter-package contracts.</li>
+          <li>Deepen semver and compatibility rule coverage.</li>
+          <li>Extend intent negotiation for richer multi-party contracts.</li>
+          <li>Expand bounded self-hosting slices toward fuller compiler coverage.</li>
         </ul>
       </section>
 
       <section class="container section cta" id="get-started">
         <h3>Get Started</h3>
-        <p>Clone the repo, run examples, and help shape intent-first compilation.</p>
+        <p>Clone the repo, run the quickstart, and help evolve intent-first compilation.</p>
         <a class="btn primary" href="https://github.com/MichaelWave369/Vibe" target="_blank" rel="noreferrer">Go to GitHub Repository</a>
       </section>
     </main>

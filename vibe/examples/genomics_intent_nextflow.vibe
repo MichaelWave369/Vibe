@@ -1,0 +1,20 @@
+domain genomics
+
+intent PrivacyAwareRNASeq:
+  goal: "Prevent patient-identifiable metadata leakage in workflow outputs"
+  inputs:
+    patient_metadata: string
+    expression_matrix: string
+  outputs:
+    public_results: string
+
+preserve:
+  reproducible workflow
+  provenance retained
+
+constraint:
+  no patient-identifiable metadata in outputs
+  deidentify sample metadata
+  fixed reference version
+
+emit nextflow

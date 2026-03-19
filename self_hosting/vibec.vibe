@@ -1,0 +1,18 @@
+intent VibecBootstrapPath:
+  goal: "Provide a bounded bootstrap path where vibec can compile its own compiler intent specification"
+  inputs:
+    compiler_core_contract: string
+  outputs:
+    compiler_self_compile_manifest: string
+
+preserve:
+  compiler_intent_explicit_source >= 1
+  deterministic_bootstrap_compile_path >= 1
+  bridge_score_release_signal >= 1
+
+constraint:
+  bounded self-hosting scope only
+  regressions surfaced explicitly
+  deterministic outputs
+
+emit python
