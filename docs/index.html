@@ -229,6 +229,17 @@ emit python</code></pre>
           thresholds, and offline runtime events are scored for drift/alerts/fallback pressure relative to compiled
           contracts (observational only; compile-time proof remains authoritative).
         </p>
+        <p>
+          Phase 6.2 adds a local-first intent registry: <code>publish</code>, <code>search</code>,
+          <code>registry-inspect</code>, and <code>compat</code> now index reusable package intent contracts with
+          proof/build metadata in deterministic local JSON entries. This is local publication only; a hosted registry
+          remains a future roadmap phase.
+        </p>
+        <p>
+          Phase 6.3 adds a real LSP server (<code>vibec lsp</code>) with diagnostics, hover, completion,
+          definition lookup, document symbols, semantic tokens, and lightweight intent lenses. Editor feedback is
+          fast/local by default, while heavier preservation verification remains compile/save oriented.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300
