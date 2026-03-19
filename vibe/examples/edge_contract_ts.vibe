@@ -1,0 +1,23 @@
+intent EdgeContractRouter:
+  goal: "Select edge policy contracts with deterministic ranking for browser runtimes."
+  inputs:
+    region: string
+    latency_budget_ms: number
+  outputs:
+    contract_id: string
+    estimated_fee: number
+
+preserve:
+  readability = high
+  testability = high
+
+constraint:
+  deterministic contract ordering
+  no hardcoded secrets
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+emit typescript
