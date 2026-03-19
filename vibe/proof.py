@@ -40,6 +40,11 @@ REQUIRED_FIELDS = {
     "delegation",
     "runtime_monitor",
     "package_context",
+    "domain",
+    "hardware",
+    "scientific_simulation",
+    "legal_compliance",
+    "genomics",
     "notes",
 }
 
@@ -181,6 +186,41 @@ def build_proof_artifact(
         },
         "runtime_monitor": dict(result.runtime_monitor_summary),
         "package_context": dict(result.package_context),
+        "domain": {
+            "profile": result.domain_profile,
+            "summary": result.domain_summary,
+            "issues": result.domain_issues,
+            "obligations": result.domain_obligations,
+            "target_metadata": result.domain_target_metadata,
+        },
+        "hardware": {
+            "summary": result.hardware_summary,
+            "issues": result.hardware_issues,
+            "obligations": result.hardware_obligations,
+            "target_metadata": result.hardware_target_metadata,
+        },
+        "scientific_simulation": {
+            "summary": result.scientific_simulation_summary,
+            "issues": result.scientific_simulation_issues,
+            "obligations": result.scientific_simulation_obligations,
+            "target_metadata": result.scientific_target_metadata,
+        },
+        "legal_compliance": {
+            "summary": result.legal_compliance_summary,
+            "issues": result.legal_compliance_issues,
+            "obligations": result.legal_compliance_obligations,
+            "target_metadata": result.compliance_target_metadata,
+            "pii_taint_summary": result.pii_taint_summary,
+            "audit_trail_metadata": result.audit_trail_metadata,
+        },
+        "genomics": {
+            "summary": result.genomics_summary,
+            "issues": result.genomics_issues,
+            "obligations": result.genomics_obligations,
+            "target_metadata": result.genomics_target_metadata,
+            "metadata_privacy_summary": result.metadata_privacy_summary,
+            "workflow_provenance_metadata": result.workflow_provenance_metadata,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -225,6 +265,11 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     delegation_meta = payload["delegation"]
     monitor_meta = payload["runtime_monitor"]
     package_meta = payload["package_context"]
+    domain_meta = payload["domain"]
+    hardware_meta = payload["hardware"]
+    simulation_meta = payload["scientific_simulation"]
+    legal_meta = payload["legal_compliance"]
+    genomics_meta = payload["genomics"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -254,5 +299,10 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"delegation_issue_count: {len(delegation_meta['issues'])}",
             f"monitor_bridge_threshold: {monitor_meta.get('bridge_threshold')}",
             f"package: {package_meta.get('package_name', '<none>')}@{package_meta.get('package_version', '<none>')}",
+            f"domain_profile: {domain_meta.get('profile', 'general')}",
+            f"hardware_issue_count: {len(hardware_meta.get('issues', []))}",
+            f"scientific_simulation_issue_count: {len(simulation_meta.get('issues', []))}",
+            f"legal_compliance_issue_count: {len(legal_meta.get('issues', []))}",
+            f"genomics_issue_count: {len(genomics_meta.get('issues', []))}",
         ]
     )
