@@ -282,6 +282,24 @@ Reports and proof artifacts record:
 - ranking basis
 - rejected candidate summaries
 
+## Intent-guided test generation (Phase 3.2)
+
+Compile and verify can now surface deterministic intent-guided test metadata, and compile can emit generated tests when requested.
+
+- enable on compile: `--with-tests` (emits tests alongside generated code)
+- enable on verify: `--with-tests` (reports projected deterministic test coverage without emitting files)
+- deterministic output names:
+  - Python: `test_<module>_intent.py`
+  - TypeScript: `<module>.intent.test.ts`
+- reports/proof artifacts include:
+  - `test_generation_enabled`
+  - `generated_test_files`
+  - `preserve_rule_coverage`
+  - `constraint_coverage`
+  - `uncovered_items`
+  - `partial_coverage_items`
+  - `test_generation_notes`
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -322,6 +340,7 @@ vibec verify vibe/examples/payment_router.vibe --backend smt
 vibec verify vibe/examples/payment_router.vibe --backend smt --fallback-backend heuristic
 vibec verify vibe/examples/payment_router.vibe --show-equivalence
 vibec verify vibe/examples/payment_router.vibe --no-calibration
+vibec verify vibe/examples/payment_router.vibe --with-tests --report json
 vibec compile vibe/examples/payment_router.vibe
 vibec compile vibe/examples/payment_router.vibe --report json
 vibec compile vibe/examples/payment_router.vibe --backend heuristic
@@ -330,9 +349,10 @@ vibec compile vibe/examples/payment_router.vibe --show-equivalence
 vibec compile vibe/examples/payment_router.vibe --no-calibration
 vibec compile vibe/examples/payment_router.vibe --write-proof
 vibec compile vibe/examples/payment_router.vibe --candidates 5
+vibec compile vibe/examples/payment_router.vibe --with-tests
 vibec verify-proof vibe/examples/payment_router.vibe
 vibec inspect-proof vibe/examples/payment_router.vibe.proof.json
-vibec compile vibe/examples/edge_contract_ts.vibe
+vibec compile vibe/examples/edge_contract_ts.vibe --with-tests
 ```
 
 ## Bridge report output

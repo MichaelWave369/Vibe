@@ -102,6 +102,18 @@ def render_report(
             f"  drift_score: {result.drift_score:.4f}",
         ]
     )
+    lines.extend(
+        [
+            "intent-guided tests:",
+            f"  test_generation_enabled: {result.test_generation_enabled}",
+            f"  generated_test_files: {result.generated_test_files}",
+            f"  preserve_rule_coverage: {result.preserve_rule_coverage}",
+            f"  constraint_coverage: {result.constraint_coverage}",
+            f"  uncovered_items: {result.uncovered_items}",
+            f"  partial_coverage_items: {result.partial_coverage_items}",
+            f"  test_generation_notes: {result.test_generation_notes}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

@@ -29,6 +29,7 @@ REQUIRED_FIELDS = {
     "epsilon_metrics",
     "result",
     "candidates",
+    "intent_guided_tests",
     "notes",
 }
 
@@ -111,6 +112,15 @@ def build_proof_artifact(
             "ranking_basis": result.ranking_basis,
             "candidate_summaries": result.candidate_summaries,
         },
+        "intent_guided_tests": {
+            "test_generation_enabled": result.test_generation_enabled,
+            "generated_test_files": result.generated_test_files,
+            "preserve_rule_coverage": result.preserve_rule_coverage,
+            "constraint_coverage": result.constraint_coverage,
+            "uncovered_items": result.uncovered_items,
+            "partial_coverage_items": result.partial_coverage_items,
+            "test_generation_notes": result.test_generation_notes,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -144,6 +154,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     bridge = payload["bridge_metrics"]
     eq = payload["equivalence"]
     candidate_meta = payload["candidates"]
+    test_meta = payload["intent_guided_tests"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -159,5 +170,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"candidate_count: {candidate_meta['candidate_count']}",
             f"winning_candidate: {candidate_meta['winning_candidate_id']}",
             f"obligation_counts: {payload['obligation_summary']}",
+            f"test_generation_enabled: {test_meta['test_generation_enabled']}",
+            f"generated_test_files: {test_meta['generated_test_files']}",
         ]
     )

@@ -35,6 +35,7 @@ from .synthesis import (
     rank_candidates,
     ranking_formula_description,
 )
+from .testgen import generate_intent_guided_tests
 from .verifier import available_backends, verify
 
 
@@ -71,6 +72,7 @@ def _compile(
     use_calibration: bool = True,
     write_proof: bool = False,
     candidate_count: int = 3,
+    with_tests: bool = False,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
@@ -85,7 +87,7 @@ def _compile(
     if clean_cache:
         clear_cache(path)
 
-    if not no_cache:
+    if not no_cache and not with_tests:
         decision = load_cache_record(path)
         if decision.status == "cache_corrupt":
             print("cache: corrupt record detected, revalidating")
@@ -141,6 +143,22 @@ def _compile(
         }
         for e in ranked
     ]
+    winning_candidate = next(c for c in candidates if c.candidate_id == result.winning_candidate_id)
+    generated_suite = None
+    if with_tests:
+        generated_suite = generate_intent_guided_tests(
+            ir=ir,
+            output_path=out_path,
+            emitted_code=winning_candidate.code,
+            candidate_id=winner.candidate_id,
+        )
+        result.test_generation_enabled = True
+        result.generated_test_files = sorted(generated_suite.generated_files.keys())
+        result.preserve_rule_coverage = list(generated_suite.preserve_rule_coverage)
+        result.constraint_coverage = list(generated_suite.constraint_coverage)
+        result.uncovered_items = list(generated_suite.uncovered_items)
+        result.partial_coverage_items = list(generated_suite.partial_coverage_items)
+        result.test_generation_notes = list(generated_suite.notes)
     _print_report(
         result,
         report,
@@ -181,9 +199,13 @@ def _compile(
             )
         return 1
 
-    winning_candidate = next(c for c in candidates if c.candidate_id == result.winning_candidate_id)
     out_path.write_text(winning_candidate.code, encoding="utf-8")
     print(f"emitted: {out_path}")
+    if generated_suite is not None:
+        for test_path, test_content in generated_suite.generated_files.items():
+            tpath = Path(test_path)
+            tpath.write_text(test_content, encoding="utf-8")
+            print(f"emitted test: {tpath}")
 
     if not no_cache:
         save_cache_record(
@@ -228,6 +250,7 @@ def _verify(
     use_calibration: bool = True,
     write_proof: bool = False,
     candidate_count: int = 3,
+    with_tests: bool = False,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
@@ -267,6 +290,22 @@ def _verify(
         }
         for e in ranked
     ]
+    if with_tests:
+        emitted_code, backend = emit_code(ir)
+        projected_path = output_path_for(path, backend)
+        generated_suite = generate_intent_guided_tests(
+            ir=ir,
+            output_path=projected_path,
+            emitted_code=emitted_code,
+            candidate_id=winner.candidate_id,
+        )
+        result.test_generation_enabled = True
+        result.generated_test_files = sorted(generated_suite.generated_files.keys())
+        result.preserve_rule_coverage = list(generated_suite.preserve_rule_coverage)
+        result.constraint_coverage = list(generated_suite.constraint_coverage)
+        result.uncovered_items = list(generated_suite.uncovered_items)
+        result.partial_coverage_items = list(generated_suite.partial_coverage_items)
+        result.test_generation_notes = list(generated_suite.notes)
     _print_report(
         result,
         report,
@@ -350,6 +389,7 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
     cp.add_argument("--write-proof", action="store_true", help="Write deterministic preservation proof artifact")
     cp.add_argument("--candidates", type=int, default=3, help="Number of deterministic synthesis candidates")
+    cp.add_argument("--with-tests", action="store_true", help="Emit intent-guided tests alongside compiled output")
 
     ex = sub.add_parser("explain", help="Explain AST and IR")
     ex.add_argument("path", type=Path)
@@ -364,6 +404,7 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("--no-calibration", action="store_true", help="Disable empirical epsilon calibration")
     vf.add_argument("--write-proof", action="store_true", help="Write deterministic preservation proof artifact")
     vf.add_argument("--candidates", type=int, default=3, help="Number of deterministic synthesis candidates")
+    vf.add_argument("--with-tests", action="store_true", help="Include intent-guided test metadata in verification report")
 
     cal = sub.add_parser("calibrate", help="Fit/update empirical epsilon calibration model")
     cal.add_argument("corpus_path", type=Path)
@@ -399,6 +440,7 @@ def main(argv: list[str] | None = None) -> int:
             use_calibration=not args.no_calibration,
             write_proof=args.write_proof,
             candidate_count=args.candidates,
+            with_tests=args.with_tests,
         )
     if args.command == "explain":
         return _explain(args.path)
@@ -413,6 +455,7 @@ def main(argv: list[str] | None = None) -> int:
             use_calibration=not args.no_calibration,
             write_proof=args.write_proof,
             candidate_count=args.candidates,
+            with_tests=args.with_tests,
         )
     if args.command == "calibrate":
         return _calibrate(args.corpus_path)

@@ -142,6 +142,13 @@ class VerificationResult:
     synthesized_winner: bool = False
     ranking_basis: str = ""
     candidate_summaries: list[dict[str, object]] = field(default_factory=list)
+    test_generation_enabled: bool = False
+    generated_test_files: list[str] = field(default_factory=list)
+    preserve_rule_coverage: list[dict[str, str]] = field(default_factory=list)
+    constraint_coverage: list[dict[str, str]] = field(default_factory=list)
+    uncovered_items: list[str] = field(default_factory=list)
+    partial_coverage_items: list[str] = field(default_factory=list)
+    test_generation_notes: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

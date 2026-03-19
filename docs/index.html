@@ -175,6 +175,11 @@ emit python</code></pre>
           Compile/verify can synthesize multiple deterministic candidates and emit only the highest-ranked
           passing candidate under bridge-gated verification.
         </p>
+        <p>
+          Optional intent-guided test generation is available with <code>--with-tests</code>:
+          compile emits deterministic test files next to emitted code, while report/proof surfaces
+          preserve-rule and constraint coverage metadata with explicit uncovered/partial honesty.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300
