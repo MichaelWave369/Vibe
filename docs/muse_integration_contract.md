@@ -36,6 +36,7 @@ Top-level contract fields:
 - `old_spec`, `new_spec`
 - `drift_score`
 - `ops`
+- `verification_context`
 
 Each `ops[]` row includes:
 
@@ -46,6 +47,33 @@ Each `ops[]` row includes:
 - `severity`
 
 Legacy `summary` + `changes` are retained for compatibility.
+
+### Whole-spec `verification_context` (Phase 1C)
+
+`verification_context` is **top-level old/new verification metadata**. It is not op-local causality.
+
+Current shape:
+
+- `available` (boolean)
+- `reason` (`null` when available, explanatory string when unavailable)
+- `old`/`new` summaries (`null` when unavailable)
+- `bridge_score_delta` (`new.bridge_score - old.bridge_score`, or `null` when unavailable)
+
+`old` and `new` summaries include:
+
+- `bridge_score`
+- `epsilon_post`
+- `measurement_ratio`
+- `epsilon_floor`
+- `measurement_safe_ratio`
+- `obligations_total`
+- `obligations_satisfied`
+
+Availability behavior:
+
+- `vibec diff --report json --with-verification-context` => context attempted; if successful, `available = true`
+- default (`vibec diff --report json` without flag) => `available = false` with explicit disabled reason
+- internal verification failures are surfaced as `available = false` with an explanatory reason
 
 ### `bridge_impact` semantics (Phase 1B)
 

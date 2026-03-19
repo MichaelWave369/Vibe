@@ -3,8 +3,10 @@ from pathlib import Path
 
 from vibe.cli import main
 from vibe.diff import compute_intent_diff, render_intent_diff_json
+from vibe.emitter import emit_code
 from vibe.ir import ast_to_ir
 from vibe.parser import parse_source
+from vibe.verifier import verify
 
 
 def _ir(src: str):
@@ -313,3 +315,60 @@ emit python
     payload = json.loads(render_intent_diff_json(compute_intent_diff(old, new)))
     goal_op = next(op for op in payload["ops"] if op["field"] == "goal")
     assert goal_op["bridge_impact"] is None
+
+
+def test_cli_diff_json_verification_context_available(tmp_path, capsys) -> None:
+    old_src = Path("vibe/examples/payment_router.vibe")
+    new_src = Path("vibe/examples/edge_contract_ts.vibe")
+    old_case = tmp_path / "old.vibe"
+    new_case = tmp_path / "new.vibe"
+    old_case.write_text(old_src.read_text(encoding="utf-8"), encoding="utf-8")
+    new_case.write_text(new_src.read_text(encoding="utf-8"), encoding="utf-8")
+
+    assert main(["diff", str(old_case), str(new_case), "--report", "json", "--with-verification-context"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    vc = payload["verification_context"]
+    assert vc["available"] is True
+    assert vc["old"] is not None
+    assert vc["new"] is not None
+    for key in [
+        "bridge_score",
+        "epsilon_post",
+        "measurement_ratio",
+        "epsilon_floor",
+        "measurement_safe_ratio",
+        "obligations_total",
+        "obligations_satisfied",
+    ]:
+        assert key in vc["old"]
+        assert key in vc["new"]
+
+    old_ir = _ir(old_case.read_text(encoding="utf-8"))
+    new_ir = _ir(new_case.read_text(encoding="utf-8"))
+    old_code, _ = emit_code(old_ir)
+    new_code, _ = emit_code(new_ir)
+    old_result = verify(old_ir, old_code, use_calibration=False)
+    new_result = verify(new_ir, new_code, use_calibration=False)
+    assert vc["old"]["bridge_score"] == old_result.bridge_score
+    assert vc["new"]["bridge_score"] == new_result.bridge_score
+    assert vc["bridge_score_delta"] == round(new_result.bridge_score - old_result.bridge_score, 6)
+
+    op = payload["ops"][0]
+    assert "bridge_impact" in op
+    assert "semantic_polarity" in op
+
+
+def test_cli_diff_json_verification_context_unavailable_when_not_requested(tmp_path, capsys) -> None:
+    old_case = tmp_path / "old.vibe"
+    new_case = tmp_path / "new.vibe"
+    old_case.write_text(Path("vibe/examples/payment_router.vibe").read_text(encoding="utf-8"), encoding="utf-8")
+    new_case.write_text(Path("vibe/examples/edge_contract_ts.vibe").read_text(encoding="utf-8"), encoding="utf-8")
+
+    assert main(["diff", str(old_case), str(new_case), "--report", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    vc = payload["verification_context"]
+    assert vc["available"] is False
+    assert vc["old"] is None
+    assert vc["new"] is None
+    assert vc["bridge_score_delta"] is None
+    assert "disabled" in vc["reason"]

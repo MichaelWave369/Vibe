@@ -629,6 +629,7 @@ def render_intent_diff_json(
     *,
     old_spec: str = "<unknown>",
     new_spec: str = "<unknown>",
+    verification_context: dict[str, object] | None = None,
 ) -> str:
     ops = []
     for c in result.changes:
@@ -656,5 +657,14 @@ def render_intent_diff_json(
         "ops": ops,
         "summary": result.summary,
         "changes": [asdict(c) for c in result.changes],
+        "verification_context": verification_context
+        if verification_context is not None
+        else {
+            "available": False,
+            "reason": "disabled (pass --with-verification-context to vibec diff)",
+            "old": None,
+            "new": None,
+            "bridge_score_delta": None,
+        },
     }
     return json.dumps(payload, indent=2, sort_keys=True)

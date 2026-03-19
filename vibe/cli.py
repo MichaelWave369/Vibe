@@ -708,14 +708,62 @@ def _diff(
     report: ReportMode,
     show_unchanged: bool = False,
     summary_only: bool = False,
+    with_verification_context: bool = False,
 ) -> int:
     old_source = old_path.read_text(encoding="utf-8")
     new_source = new_path.read_text(encoding="utf-8")
     old_ir = ast_to_ir(parse_source(old_source))
     new_ir = ast_to_ir(parse_source(new_source))
     result = compute_intent_diff(old_ir, new_ir)
+    verification_context: dict[str, object] | None = None
+    if with_verification_context:
+        try:
+            old_code, _ = emit_code(old_ir)
+            new_code, _ = emit_code(new_ir)
+            old_verify = verify(old_ir, old_code, use_calibration=False)
+            new_verify = verify(new_ir, new_code, use_calibration=False)
+            old_summary = {
+                "bridge_score": old_verify.bridge_score,
+                "epsilon_post": old_verify.epsilon_post,
+                "measurement_ratio": old_verify.measurement_ratio,
+                "epsilon_floor": old_verify.epsilon_floor,
+                "measurement_safe_ratio": old_verify.measurement_safe_ratio,
+                "obligations_total": len(old_verify.obligations),
+                "obligations_satisfied": sum(1 for o in old_verify.obligations if o.status == "satisfied"),
+            }
+            new_summary = {
+                "bridge_score": new_verify.bridge_score,
+                "epsilon_post": new_verify.epsilon_post,
+                "measurement_ratio": new_verify.measurement_ratio,
+                "epsilon_floor": new_verify.epsilon_floor,
+                "measurement_safe_ratio": new_verify.measurement_safe_ratio,
+                "obligations_total": len(new_verify.obligations),
+                "obligations_satisfied": sum(1 for o in new_verify.obligations if o.status == "satisfied"),
+            }
+            verification_context = {
+                "available": True,
+                "reason": None,
+                "old": old_summary,
+                "new": new_summary,
+                "bridge_score_delta": round(new_verify.bridge_score - old_verify.bridge_score, 6),
+            }
+        except Exception as exc:
+            verification_context = {
+                "available": False,
+                "reason": f"verification_context_unavailable: {exc}",
+                "old": None,
+                "new": None,
+                "bridge_score_delta": None,
+            }
     if report == "json":
-        print(render_intent_diff_json(result, old_spec=str(old_path), new_spec=str(new_path)))
+        print(
+            render_intent_diff_json(
+                result,
+                old_spec=str(old_path),
+                new_spec=str(new_path),
+                verification_context=verification_context,
+            )
+        )
     else:
         print(render_intent_diff_human(result, show_unchanged=show_unchanged, summary_only=summary_only))
     return 0
@@ -1184,6 +1232,11 @@ def build_parser() -> argparse.ArgumentParser:
     df.add_argument("--report", choices=["human", "json"], default="human")
     df.add_argument("--show-unchanged", action="store_true", help="Show unchanged summary row if there are no semantic changes")
     df.add_argument("--summary-only", action="store_true", help="Show summary only")
+    df.add_argument(
+        "--with-verification-context",
+        action="store_true",
+        help="Include whole-spec old/new verification summaries in JSON diff output",
+    )
 
     pub = sub.add_parser("publish", help="Publish a package into the local filesystem intent registry")
     pub.add_argument("project_dir", type=Path, nargs="?", default=Path("."))
@@ -1366,6 +1419,7 @@ def main(argv: list[str] | None = None) -> int:
             args.report,
             show_unchanged=args.show_unchanged,
             summary_only=args.summary_only,
+            with_verification_context=args.with_verification_context,
         )
     if args.command == "publish":
         return _publish(args.project_dir, args.report, registry_root=args.registry_root)
