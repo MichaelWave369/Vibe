@@ -92,6 +92,29 @@ class AgentceptionBlock:
 
 
 @dataclass(slots=True)
+class AgentGraphAgent:
+    name: str
+    role: str
+    receives: str
+    emits: str
+    preserve: list[str] = field(default_factory=list)
+    constraints: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class OrchestrationEdge:
+    source: str
+    target: str
+
+
+@dataclass(slots=True)
+class OrchestrateBlock:
+    name: str
+    edges: list[OrchestrationEdge] = field(default_factory=list)
+    on_error: str | None = None
+
+
+@dataclass(slots=True)
 class Program:
     intent: IntentBlock
     preserve: list[PreserveRule] = field(default_factory=list)
@@ -107,3 +130,5 @@ class Program:
     types: list[str] = field(default_factory=list)
     enums: list[str] = field(default_factory=list)
     interfaces: list[str] = field(default_factory=list)
+    agents: list[AgentGraphAgent] = field(default_factory=list)
+    orchestrations: list[OrchestrateBlock] = field(default_factory=list)

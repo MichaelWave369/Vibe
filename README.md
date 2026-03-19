@@ -411,6 +411,24 @@ Inference failures are preservation-surface diagnostics (intent violations), not
 internal compiler errors. This pass is intentionally partial and does not claim full
 polymorphic/global theorem proving.
 
+## Agent graphs as first-class syntax (Phase 5.1)
+
+Vibe now supports first-class agent/orchestration syntax:
+
+- `agent <Name>:` declarations with `role`, `receives`, `emits`, and per-agent `preserve`/`constraint`
+- `orchestrate <Name>:` declarations with explicit graph edges and `on_error` fallback routing
+
+This phase adds deterministic static graph modeling and checks:
+
+- missing agent references and invalid edge targets
+- boundary contract mismatch (`emits` vs downstream `receives`)
+- fallback target validation (`fallback(TargetAgent)`)
+- disconnected nodes and cycle detection (reported as unresolved runtime semantics in this phase)
+- graph-derived obligations surfaced alongside existing preservation obligations
+
+Agent orchestration is represented as inspectable compile-time metadata (IR/report/proof/diff/emitter),
+not a full runtime autonomy implementation. This is the first formal Agentora/AgentCeption realization layer.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:

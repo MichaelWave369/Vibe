@@ -70,6 +70,7 @@ def annotate_type_inference(ir: IR) -> InferenceResult:
         else:
             declared[b.name] = b.vtype
     interface_hints = _interface_hints(ir)
+    agent_defs = list(ir.agent_graph.get("agents", []))
     semantic = ir.module.semantic_summary.get("binding_qualifiers", {})
     effect_hints = ir.module.effect_summary.get("value_effects", {})
     resource_hints = ir.module.resource_summary.get("value_resources", {})
@@ -170,6 +171,14 @@ def annotate_type_inference(ir: IR) -> InferenceResult:
     )
     summary_payload = asdict(summary)
     summary_payload["helper_profiles"] = _helper_profiles(ir)
+    summary_payload["agent_boundary_hints"] = [
+        {
+            "agent": str(a.get("name", "")),
+            "receives": str(a.get("receives", "")),
+            "emits": str(a.get("emits", "")),
+        }
+        for a in agent_defs
+    ]
     ir.module.inference_summary = summary_payload
     return InferenceResult(summary=summary, issues=issues)
 
@@ -244,6 +253,7 @@ def inference_summary_payload(ir: IR) -> dict[str, object]:
         "declared_types": dict(ir.module.inference_summary.get("declared_types", {})),
         "inferred_bindings": dict(ir.module.inference_summary.get("inferred_bindings", {})),
         "helper_profiles": list(ir.module.inference_summary.get("helper_profiles", [])),
+        "agent_boundary_hints": list(ir.module.inference_summary.get("agent_boundary_hints", [])),
         "unresolved_points": list(ir.module.inference_summary.get("unresolved_points", [])),
         "contradiction_count": int(ir.module.inference_summary.get("contradiction_count", 0)),
         "unresolved_count": int(ir.module.inference_summary.get("unresolved_count", 0)),

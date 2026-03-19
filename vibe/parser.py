@@ -6,11 +6,14 @@ import re
 from dataclasses import dataclass
 
 from .ast import (
+    AgentGraphAgent,
     AgentDefinition,
     AgentceptionBlock,
     AgentoraBlock,
     BridgeSetting,
     Field,
+    OrchestrateBlock,
+    OrchestrationEdge,
     IntentBlock,
     PreserveRule,
     Program,
@@ -260,6 +263,8 @@ def parse_source(source: str) -> Program:
     preserve: list[PreserveRule] = []
     constraints: list[str] = []
     bridge: list[BridgeSetting] = []
+    agents: list[AgentGraphAgent] = []
+    orchestrations: list[OrchestrateBlock] = []
     emit_target = "python"
 
     while i < len(tokens):
@@ -328,6 +333,68 @@ def parse_source(source: str) -> Program:
                 i += 1
             continue
 
+        if tk.text.startswith("agent ") and tk.text.endswith(":"):
+            agent_name = tk.text[len("agent ") : -1].strip()
+            i += 1
+            role = ""
+            receives = ""
+            emits = ""
+            agent_preserve: list[str] = []
+            agent_constraints: list[str] = []
+            while i < len(tokens) and tokens[i].indent > 0:
+                cur = tokens[i]
+                if cur.indent != 2:
+                    raise ParseError("Malformed agent block indentation", cur.line, cur.indent + 1)
+                if cur.text.startswith("role:"):
+                    role = cur.text.split(":", 1)[1].strip().strip('"')
+                elif cur.text.startswith("receives:"):
+                    receives = cur.text.split(":", 1)[1].strip()
+                elif cur.text.startswith("emits:"):
+                    emits = cur.text.split(":", 1)[1].strip()
+                elif cur.text.startswith("preserve:"):
+                    agent_preserve.append(cur.text.split(":", 1)[1].strip())
+                elif cur.text.startswith("constraint:"):
+                    agent_constraints.append(cur.text.split(":", 1)[1].strip())
+                else:
+                    raise ParseError("Malformed agent block item", cur.line, cur.indent + 1)
+                i += 1
+            if not role or not receives or not emits:
+                raise ParseError("agent block requires role/receives/emits", tk.line, 1)
+            agents.append(
+                AgentGraphAgent(
+                    name=agent_name,
+                    role=role,
+                    receives=receives,
+                    emits=emits,
+                    preserve=agent_preserve,
+                    constraints=agent_constraints,
+                )
+            )
+            continue
+
+        if tk.text.startswith("orchestrate ") and tk.text.endswith(":"):
+            orch_name = tk.text[len("orchestrate ") : -1].strip()
+            i += 1
+            edges: list[OrchestrationEdge] = []
+            on_error: str | None = None
+            while i < len(tokens) and tokens[i].indent > 0:
+                cur = tokens[i]
+                if cur.indent != 2:
+                    raise ParseError("Malformed orchestrate block indentation", cur.line, cur.indent + 1)
+                if cur.text.startswith("on_error:"):
+                    on_error = cur.text.split(":", 1)[1].strip()
+                    i += 1
+                    continue
+                if "->" not in cur.text:
+                    raise ParseError("Malformed orchestrate edge; expected `AgentA -> AgentB`", cur.line, cur.indent + 1)
+                src, dst = [x.strip() for x in cur.text.split("->", 1)]
+                if not src or not dst:
+                    raise ParseError("Malformed orchestrate edge; both source and target required", cur.line, cur.indent + 1)
+                edges.append(OrchestrationEdge(source=src, target=dst))
+                i += 1
+            orchestrations.append(OrchestrateBlock(name=orch_name, edges=edges, on_error=on_error))
+            continue
+
         if tk.text.startswith("emit "):
             emit_target = tk.text.split(maxsplit=1)[1].strip()
             i += 1
@@ -350,6 +417,8 @@ def parse_source(source: str) -> Program:
         types=types,
         enums=enums,
         interfaces=interfaces,
+        agents=agents,
+        orchestrations=orchestrations,
     )
 
     if tesla_raw is not None:

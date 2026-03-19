@@ -274,6 +274,32 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
                 "inference type summary changed",
             ),
         )
+    if old_ir.module.agent_graph != new_ir.module.agent_graph:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "agent_graph",
+                "declared_graph",
+                "modified",
+                "unknown",
+                old_ir.module.agent_graph,
+                new_ir.module.agent_graph,
+                "agent graph declaration changed",
+            ),
+        )
+    if old_ir.module.agent_graph_summary != new_ir.module.agent_graph_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "agent_graph",
+                "graph_summary",
+                "modified",
+                "unknown",
+                old_ir.module.agent_graph_summary,
+                new_ir.module.agent_graph_summary,
+                "agent graph summary changed",
+            ),
+        )
 
     summary = {
         "total_changes": len(entries),

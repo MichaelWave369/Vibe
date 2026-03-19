@@ -51,6 +51,8 @@ def generate_typescript(ir: IR) -> str:
         "// EFFECT_PROFILE: " + repr(ir.module.effect_summary).replace("'", '"'),
         "// RESOURCE_PROFILE: " + repr(ir.module.resource_summary).replace("'", '"'),
         "// INFERENCE_PROFILE: " + repr(ir.module.inference_summary).replace("'", '"'),
+        "// AGENT_GRAPH: " + repr(ir.module.agent_graph_summary).replace("'", '"'),
+        "export const AGENT_GRAPH_CONFIG = " + repr(ir.module.agent_graph).replace("'", '"') + ";",
         "",
         f"/** {ir.goal} */",
         f"export function {fn_name}({params}): {ret} {{",

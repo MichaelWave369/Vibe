@@ -306,6 +306,7 @@ def _explain(
     show_effects: bool = False,
     show_resources: bool = False,
     show_inference: bool = False,
+    show_agents: bool = False,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
@@ -334,6 +335,10 @@ def _explain(
         print("\nInference types:")
         print(f"summary: {ir.module.inference_summary}")
         print(f"issues: {ir.module.inference_issues}")
+    if show_agents:
+        print("\nAgent graph:")
+        print(f"summary: {ir.module.agent_graph_summary}")
+        print(f"issues: {ir.module.agent_graph_issues}")
     return 0
 
 
@@ -515,6 +520,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--show-effects", action="store_true", help="Show effect type summary and issues")
     ex.add_argument("--show-resources", action="store_true", help="Show resource type summary and issues")
     ex.add_argument("--show-inference", action="store_true", help="Show inference type summary and issues")
+    ex.add_argument("--show-agents", action="store_true", help="Show agent graph summary and issues")
 
     vf = sub.add_parser("verify", help="Run verifier without emission")
     vf.add_argument("path", type=Path)
@@ -580,6 +586,7 @@ def main(argv: list[str] | None = None) -> int:
             show_effects=args.show_effects,
             show_resources=args.show_resources,
             show_inference=args.show_inference,
+            show_agents=args.show_agents,
         )
     if args.command == "verify":
         return _verify(

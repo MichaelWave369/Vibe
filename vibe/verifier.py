@@ -12,6 +12,12 @@ from .calibration import (
     extract_calibration_features,
     load_calibration_model,
 )
+from .agents import (
+    agent_graph_issues_to_obligation_rows,
+    agent_graph_summary_payload,
+    check_agent_graph_issues,
+    issues_as_dicts as agent_graph_issues_as_dicts,
+)
 from .equivalence import CorrespondenceEntry, analyze_intent_equivalence
 from .effects import (
     check_effect_issues,
@@ -192,6 +198,9 @@ class VerificationResult:
     inference_type_summary: dict[str, object] = field(default_factory=dict)
     inference_type_issues: list[dict[str, object]] = field(default_factory=list)
     inference_type_obligations: list[dict[str, object]] = field(default_factory=list)
+    agent_graph_summary: dict[str, object] = field(default_factory=dict)
+    agent_graph_issues: list[dict[str, object]] = field(default_factory=list)
+    agent_graph_obligations: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -910,8 +919,28 @@ def _build_result(
         )
         for row in inference_rows
     ]
+    graph_issues = check_agent_graph_issues(ir)
+    ir.module.agent_graph_issues = agent_graph_issues_as_dicts(graph_issues)
+    graph_rows = agent_graph_issues_to_obligation_rows(graph_issues)
+    graph_obligations = [
+        VerificationObligation(
+            obligation_id=str(row["obligation_id"]),
+            category=str(row["category"]),
+            description=str(row["description"]),
+            source_location=str(row["source_location"]) if row.get("source_location") is not None else None,
+            status=str(row["status"]),
+            evidence=str(row["evidence"]) if row.get("evidence") is not None else None,
+            critical=bool(row["critical"]),
+        )
+        for row in graph_rows
+    ]
     all_obligations = (
-        list(obligations) + semantic_obligations + effect_obligations + resource_obligations + inference_obligations
+        list(obligations)
+        + semantic_obligations
+        + effect_obligations
+        + resource_obligations
+        + inference_obligations
+        + graph_obligations
     )
 
     counts = _compute_obligation_counts(all_obligations)
@@ -991,6 +1020,9 @@ def _build_result(
         inference_type_summary=inference_summary_payload(ir),
         inference_type_issues=inference_issues_as_dicts(inference_issues),
         inference_type_obligations=inference_rows,
+        agent_graph_summary=agent_graph_summary_payload(ir),
+        agent_graph_issues=agent_graph_issues_as_dicts(graph_issues),
+        agent_graph_obligations=graph_rows,
     )
 
 

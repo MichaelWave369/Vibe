@@ -104,6 +104,7 @@ def test_invalid_proof_version_handled(tmp_path, capsys) -> None:
                 "effect_types": {},
                 "resource_types": {},
                 "inference_types": {},
+                "agent_graph": {},
                 "notes": [],
             }
         ),
@@ -156,5 +157,6 @@ def test_proof_schema_fields_present(tmp_path) -> None:
         "effect_types",
         "resource_types",
         "inference_types",
+        "agent_graph",
     ]:
         assert key in payload

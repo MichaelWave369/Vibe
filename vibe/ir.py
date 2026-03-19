@@ -133,6 +133,9 @@ class IRModule:
     resource_issues: list[dict[str, object]] = field(default_factory=list)
     inference_summary: dict[str, object] = field(default_factory=dict)
     inference_issues: list[dict[str, object]] = field(default_factory=list)
+    agent_graph: dict[str, object] = field(default_factory=dict)
+    agent_graph_summary: dict[str, object] = field(default_factory=dict)
+    agent_graph_issues: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -311,6 +314,10 @@ class IR:
     def interfaces(self) -> list[str]:
         return [str(self._value(r).data) for r in self.module.interfaces_refs]
 
+    @property
+    def agent_graph(self) -> dict[str, object]:
+        return dict(self.module.agent_graph)
+
     def _value(self, ref: str) -> SSAValue:
         return self.module.values[ref]
 
@@ -457,6 +464,27 @@ def ast_to_ir(program: Program) -> IR:
         tesla_layer=tesla_layer,
         agentora=agentora,
         agentception=agentception,
+        agent_graph={
+            "agents": [
+                {
+                    "name": a.name,
+                    "role": a.role,
+                    "receives": a.receives,
+                    "emits": a.emits,
+                    "preserve": list(a.preserve),
+                    "constraints": list(a.constraints),
+                }
+                for a in program.agents
+            ],
+            "orchestrations": [
+                {
+                    "name": o.name,
+                    "edges": [{"source": e.source, "target": e.target} for e in o.edges],
+                    "on_error": o.on_error,
+                }
+                for o in program.orchestrations
+            ],
+        },
     )
     ir = IR(module=module)
     from .semantic_types import annotate_semantic_types
@@ -494,10 +522,24 @@ def ast_to_ir(program: Program) -> IR:
         "declared_types": inference.summary.declared_types,
         "inferred_bindings": inference.summary.inferred_bindings,
         "helper_profiles": ir.module.inference_summary.get("helper_profiles", []),
+        "agent_boundary_hints": ir.module.inference_summary.get("agent_boundary_hints", []),
         "unresolved_points": inference.summary.unresolved_points,
         "contradiction_count": inference.summary.contradiction_count,
         "unresolved_count": inference.summary.unresolved_count,
         "propagation_notes": inference.summary.propagation_notes,
+    }
+    from .agents import annotate_agent_graph
+
+    agent_graph = annotate_agent_graph(ir)
+    ir.module.agent_graph_summary = {
+        "graph_name": agent_graph.summary.graph_name,
+        "agent_count": agent_graph.summary.agent_count,
+        "edge_count": agent_graph.summary.edge_count,
+        "agents": agent_graph.summary.agents,
+        "edges": agent_graph.summary.edges,
+        "fallback_routes": agent_graph.summary.fallback_routes,
+        "disconnected_agents": agent_graph.summary.disconnected_agents,
+        "propagation_notes": agent_graph.summary.propagation_notes,
     }
     validate_ir(ir)
     return ir
@@ -584,5 +626,8 @@ def serialize_ir(ir: IR) -> str:
         "resource_issues": list(ir.module.resource_issues),
         "inference_summary": dict(ir.module.inference_summary),
         "inference_issues": list(ir.module.inference_issues),
+        "agent_graph": dict(ir.module.agent_graph),
+        "agent_graph_summary": dict(ir.module.agent_graph_summary),
+        "agent_graph_issues": list(ir.module.agent_graph_issues),
     }
     return json.dumps(payload, indent=2, sort_keys=True)

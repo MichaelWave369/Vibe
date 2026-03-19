@@ -35,6 +35,7 @@ REQUIRED_FIELDS = {
     "effect_types",
     "resource_types",
     "inference_types",
+    "agent_graph",
     "notes",
 }
 
@@ -159,6 +160,11 @@ def build_proof_artifact(
             "issues": result.inference_type_issues,
             "derived_obligations": result.inference_type_obligations,
         },
+        "agent_graph": {
+            "summary": result.agent_graph_summary,
+            "issues": result.agent_graph_issues,
+            "derived_obligations": result.agent_graph_obligations,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -198,6 +204,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     effect_meta = payload["effect_types"]
     resource_meta = payload["resource_types"]
     inference_meta = payload["inference_types"]
+    agent_graph_meta = payload["agent_graph"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -222,5 +229,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"effect_issue_count: {len(effect_meta['issues'])}",
             f"resource_issue_count: {len(resource_meta['issues'])}",
             f"inference_issue_count: {len(inference_meta['issues'])}",
+            f"agent_graph_issue_count: {len(agent_graph_meta['issues'])}",
         ]
     )

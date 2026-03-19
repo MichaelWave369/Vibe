@@ -158,6 +158,14 @@ def render_report(
             f"  inference_type_obligations: {result.inference_type_obligations}",
         ]
     )
+    lines.extend(
+        [
+            "agent graph:",
+            f"  agent_graph_summary: {result.agent_graph_summary}",
+            f"  agent_graph_issues: {result.agent_graph_issues}",
+            f"  agent_graph_obligations: {result.agent_graph_obligations}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:
