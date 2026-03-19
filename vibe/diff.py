@@ -7,6 +7,73 @@ import json
 
 from .ir import IR
 
+DIFF_REPORT_SCHEMA_VERSION = "v1"
+
+
+def _to_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _constraint_is_sovereignty_related(item: str) -> bool:
+    lowered = item.lower()
+    return any(token in lowered for token in ["sovereign", "sovereignty", "custody", "ownership", "private_key"])
+
+
+def derive_bridge_impact(change: IntentDiffEntry) -> tuple[float | None, str | None]:
+    """Return deterministic bridge-impact delta and source label.
+
+    Positive means stronger bridge guarantees; negative means weakened guarantees.
+    None means current Vibe diff cannot honestly infer impact.
+    """
+
+    if change.category == "bridge" and change.change_type == "modified":
+        old_value = _to_float(change.old_value)
+        new_value = _to_float(change.new_value)
+        if old_value is None or new_value is None:
+            return None, None
+        if change.item == "epsilon_floor":
+            # Higher epsilon floor strengthens founding-law strictness.
+            return round(new_value - old_value, 6), "bridge.threshold.delta"
+        if change.item == "measurement_safe_ratio":
+            # Higher safe ratio strengthens measurement acceptance threshold.
+            return round(new_value - old_value, 6), "bridge.threshold.delta"
+
+    if change.category == "preserve":
+        if change.change_type == "added":
+            return 0.2, "semantic.preserve.added"
+        if change.change_type == "removed":
+            return -0.2, "semantic.preserve.removed"
+        if change.change_type == "modified":
+            if change.semantic_effect == "narrowed":
+                return 0.15, "semantic.preserve.modified"
+            if change.semantic_effect == "broadened":
+                return -0.15, "semantic.preserve.modified"
+
+    if change.category == "constraint":
+        if change.change_type == "added":
+            return 0.2, "semantic.constraint.added"
+        if change.change_type == "removed":
+            if _constraint_is_sovereignty_related(change.item):
+                return -0.5, "semantic.constraint.removed.sovereignty"
+            return -0.2, "semantic.constraint.removed"
+
+    return None, None
+
+
+def derive_op_severity(change: IntentDiffEntry, bridge_impact: float | None) -> str:
+    if bridge_impact is None:
+        return "warning" if change.semantic_effect == "broadened" else "info"
+    if bridge_impact <= -0.5:
+        return "high"
+    if bridge_impact < 0:
+        return "warning"
+    return "info"
+
 
 @dataclass(slots=True)
 class IntentDiffEntry:
@@ -557,9 +624,48 @@ def render_intent_diff_human(result: IntentDiffResult, *, show_unchanged: bool =
     return "\n".join(lines)
 
 
-def render_intent_diff_json(result: IntentDiffResult) -> str:
+def render_intent_diff_json(
+    result: IntentDiffResult,
+    *,
+    old_spec: str = "<unknown>",
+    new_spec: str = "<unknown>",
+    verification_context: dict[str, object] | None = None,
+) -> str:
+    ops = []
+    for c in result.changes:
+        bridge_impact, impact_source = derive_bridge_impact(c)
+        ops.append(
+            {
+                "op": c.change_type,
+                "address": c.source_location or c.item,
+                "field": c.category,
+                "old_value": c.old_value,
+                "new_value": c.new_value,
+                "semantic_polarity": c.semantic_effect,
+                "bridge_impact": bridge_impact,
+                "bridge_impact_source": impact_source,
+                "severity": derive_op_severity(c, bridge_impact),
+                "message": c.explanation,
+            }
+        )
     payload = {
+        "schema_version": DIFF_REPORT_SCHEMA_VERSION,
+        "report_type": "diff",
+        "old_spec": old_spec,
+        "new_spec": new_spec,
+        "drift_score": float(result.summary.get("broadened", 0)) / max(1, result.summary.get("total_changes", 1)),
+        "ops": ops,
         "summary": result.summary,
         "changes": [asdict(c) for c in result.changes],
+        "verification_context": verification_context
+        if verification_context is not None
+        else {
+            "verification_requested": False,
+            "available": False,
+            "reason": "disabled (pass --with-verification-context to vibec diff)",
+            "old": None,
+            "new": None,
+            "bridge_score_delta": None,
+        },
     }
     return json.dumps(payload, indent=2, sort_keys=True)
