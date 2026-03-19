@@ -13,6 +13,12 @@ from .calibration import (
     load_calibration_model,
 )
 from .equivalence import CorrespondenceEntry, analyze_intent_equivalence
+from .effects import (
+    check_effect_issues,
+    effect_issues_to_obligation_rows,
+    effect_summary_payload,
+    issues_as_dicts as effect_issues_as_dicts,
+)
 from .ir import DEFAULT_EPSILON_FLOOR, DEFAULT_MEASUREMENT_SAFE_RATIO, IR
 from .semantic_types import (
     check_semantic_type_issues,
@@ -165,6 +171,9 @@ class VerificationResult:
     semantic_type_summary: dict[str, object] = field(default_factory=dict)
     semantic_type_issues: list[dict[str, object]] = field(default_factory=list)
     semantic_type_obligations: list[dict[str, object]] = field(default_factory=list)
+    effect_type_summary: dict[str, object] = field(default_factory=dict)
+    effect_type_issues: list[dict[str, object]] = field(default_factory=list)
+    effect_type_obligations: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -838,7 +847,22 @@ def _build_result(
         )
         for row in semantic_rows
     ]
-    all_obligations = list(obligations) + semantic_obligations
+    effect_issues = check_effect_issues(ir, generated_code)
+    ir.module.effect_issues = effect_issues_as_dicts(effect_issues)
+    effect_rows = effect_issues_to_obligation_rows(effect_issues)
+    effect_obligations = [
+        VerificationObligation(
+            obligation_id=str(row["obligation_id"]),
+            category=str(row["category"]),
+            description=str(row["description"]),
+            source_location=str(row["source_location"]) if row.get("source_location") is not None else None,
+            status=str(row["status"]),
+            evidence=str(row["evidence"]) if row.get("evidence") is not None else None,
+            critical=bool(row["critical"]),
+        )
+        for row in effect_rows
+    ]
+    all_obligations = list(obligations) + semantic_obligations + effect_obligations
 
     counts = _compute_obligation_counts(all_obligations)
     critical_unknown = any(o.status == "unknown" and o.critical for o in all_obligations)
@@ -908,6 +932,9 @@ def _build_result(
         semantic_type_summary=semantic_summary_payload(ir),
         semantic_type_issues=issues_as_dicts(semantic_issues),
         semantic_type_obligations=semantic_rows,
+        effect_type_summary=effect_summary_payload(ir),
+        effect_type_issues=effect_issues_as_dicts(effect_issues),
+        effect_type_obligations=effect_rows,
     )
 
 

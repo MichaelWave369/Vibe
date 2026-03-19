@@ -235,6 +235,19 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
                 "semantic type summary changed",
             ),
         )
+    if old_ir.module.effect_summary != new_ir.module.effect_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "effect_types",
+                "effect_summary",
+                "modified",
+                "unknown",
+                old_ir.module.effect_summary,
+                new_ir.module.effect_summary,
+                "effect type summary changed",
+            ),
+        )
 
     summary = {
         "total_changes": len(entries),

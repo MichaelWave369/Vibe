@@ -360,6 +360,26 @@ Vibe now includes a first-pass semantic type layer in addition to structural/bas
 
 This is an intent-type foundation layer (not full theorem-proving or dependent typing).
 
+## Effect types (Phase 4.2)
+
+Vibe now adds first-pass effect types as a compile-time preservation surface.
+
+- effect vocabulary includes:
+  - `pure`
+  - `io`
+  - `stateful`
+  - `nondeterministic`
+  - `network`
+  - `secret_exposing`
+  - `fallback_path`
+  - `bridge_critical_effect`
+  - `unknown_effect`
+- effects are inferred from preserve/constraints/bridge settings, semantic qualifiers, and orchestration surfaces
+- effect mismatches (e.g. purity/stateless/determinism conflicts) produce explicit effect-type obligations
+- effect summaries and issues are visible in IR, report, proof, and explain output
+
+This is a deterministic compile-time effect profile, not full runtime behavioral proof.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -418,6 +438,7 @@ vibec compile vibe/examples/edge_contract_ts.vibe --with-tests
 vibec diff vibe/examples/payment_router.vibe vibe/examples/edge_contract_ts.vibe
 vibec diff vibe/examples/payment_router.vibe vibe/examples/edge_contract_ts.vibe --report json
 vibec explain vibe/examples/payment_router.vibe --show-types
+vibec explain vibe/examples/payment_router.vibe --show-effects
 ```
 
 ## Bridge report output

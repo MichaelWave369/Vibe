@@ -195,6 +195,11 @@ emit python</code></pre>
           secret-sensitive, bridge-critical) derived from preserve/constraint/bridge semantics and surfaced in IR/report
           diagnostics without replacing preservation obligations.
         </p>
+        <p>
+          Phase 4.2 adds effect types: Vibe now tracks inferred behavioral effects (pure/io/stateful/
+          nondeterministic/network/fallback/bridge-critical) and reports effect mismatches as compile-time
+          obligations while keeping unknown effects visible.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

@@ -34,6 +34,7 @@ class SSAValue:
     data: str | float | bool | list[str] | dict[str, str]
     uses: list[str] = field(default_factory=list)
     semantic_qualifiers: list[str] = field(default_factory=list)
+    effect_tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -125,6 +126,8 @@ class IRModule:
     agentception: IRAgentception | None
     semantic_summary: dict[str, object] = field(default_factory=dict)
     semantic_issues: list[dict[str, object]] = field(default_factory=list)
+    effect_summary: dict[str, object] = field(default_factory=dict)
+    effect_issues: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -459,6 +462,16 @@ def ast_to_ir(program: Program) -> IR:
         "binding_qualifiers": typing.summary.binding_qualifiers,
         "propagation_notes": typing.summary.propagation_notes,
     }
+    from .effects import annotate_effects
+
+    effects = annotate_effects(ir)
+    ir.module.effect_summary = {
+        "inferred_effects": effects.summary.inferred_effects,
+        "required_effects": effects.summary.required_effects,
+        "forbidden_effects": effects.summary.forbidden_effects,
+        "value_effects": effects.summary.value_effects,
+        "propagation_notes": effects.summary.propagation_notes,
+    }
     validate_ir(ir)
     return ir
 
@@ -538,5 +551,7 @@ def serialize_ir(ir: IR) -> str:
         "agentception": _obj_dict(ir.module.agentception) if ir.module.agentception else None,
         "semantic_summary": dict(ir.module.semantic_summary),
         "semantic_issues": list(ir.module.semantic_issues),
+        "effect_summary": dict(ir.module.effect_summary),
+        "effect_issues": list(ir.module.effect_issues),
     }
     return json.dumps(payload, indent=2, sort_keys=True)

@@ -134,6 +134,14 @@ def render_report(
             f"  semantic_type_obligations: {result.semantic_type_obligations}",
         ]
     )
+    lines.extend(
+        [
+            "effect types:",
+            f"  effect_type_summary: {result.effect_type_summary}",
+            f"  effect_type_issues: {result.effect_type_issues}",
+            f"  effect_type_obligations: {result.effect_type_obligations}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:
