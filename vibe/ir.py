@@ -33,6 +33,7 @@ class SSAValue:
     kind: str
     data: str | float | bool | list[str] | dict[str, str]
     uses: list[str] = field(default_factory=list)
+    semantic_qualifiers: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -122,6 +123,8 @@ class IRModule:
     tesla_layer: IRTeslaLayer | None
     agentora: IRAgentora | None
     agentception: IRAgentception | None
+    semantic_summary: dict[str, object] = field(default_factory=dict)
+    semantic_issues: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -448,6 +451,14 @@ def ast_to_ir(program: Program) -> IR:
         agentception=agentception,
     )
     ir = IR(module=module)
+    from .semantic_types import annotate_semantic_types
+
+    typing = annotate_semantic_types(ir)
+    ir.module.semantic_summary = {
+        "qualifier_counts": typing.summary.qualifier_counts,
+        "binding_qualifiers": typing.summary.binding_qualifiers,
+        "propagation_notes": typing.summary.propagation_notes,
+    }
     validate_ir(ir)
     return ir
 
@@ -525,5 +536,7 @@ def serialize_ir(ir: IR) -> str:
             {"agents": [_obj_dict(a) for a in ir.module.agentora.agents]} if ir.module.agentora else None
         ),
         "agentception": _obj_dict(ir.module.agentception) if ir.module.agentception else None,
+        "semantic_summary": dict(ir.module.semantic_summary),
+        "semantic_issues": list(ir.module.semantic_issues),
     }
     return json.dumps(payload, indent=2, sort_keys=True)

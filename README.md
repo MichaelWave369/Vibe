@@ -341,6 +341,25 @@ It reports:
 
 Intent diff is a foundation for future semantic versioning; it does not replace bridge verification.
 
+## Semantic types (Phase 4.1)
+
+Vibe now includes a first-pass semantic type layer in addition to structural/base types.
+
+- semantic qualifiers currently include:
+  - `deterministic`
+  - `secret_sensitive`
+  - `latency_bounded`
+  - `fallback_required`
+  - `coherence_preserving`
+  - `sovereignty_preserving`
+  - `bridge_critical`
+  - `intent_derived`
+- qualifiers are derived from preserve/constraint/bridge/Tesla/Agentora/AgentCeption and intent IO roles
+- qualifiers are serialized in IR and visible in verify/compile report surfaces
+- qualifier-derived issues produce explicit semantic-type obligations; they do not replace bridge obligations
+
+This is an intent-type foundation layer (not full theorem-proving or dependent typing).
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -398,6 +417,7 @@ vibec inspect-proof vibe/examples/payment_router.vibe.proof.json
 vibec compile vibe/examples/edge_contract_ts.vibe --with-tests
 vibec diff vibe/examples/payment_router.vibe vibe/examples/edge_contract_ts.vibe
 vibec diff vibe/examples/payment_router.vibe vibe/examples/edge_contract_ts.vibe --report json
+vibec explain vibe/examples/payment_router.vibe --show-types
 ```
 
 ## Bridge report output

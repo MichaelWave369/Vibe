@@ -31,6 +31,7 @@ REQUIRED_FIELDS = {
     "candidates",
     "intent_guided_tests",
     "refinement",
+    "semantic_types",
     "notes",
 }
 
@@ -135,6 +136,11 @@ def build_proof_artifact(
             and (not result.refinement_success)
             and (result.refinement_iterations_run >= result.refinement_max_iterations),
         },
+        "semantic_types": {
+            "summary": result.semantic_type_summary,
+            "issues": result.semantic_type_issues,
+            "derived_obligations": result.semantic_type_obligations,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -170,6 +176,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     candidate_meta = payload["candidates"]
     test_meta = payload["intent_guided_tests"]
     refinement_meta = payload["refinement"]
+    semantic_meta = payload["semantic_types"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -190,5 +197,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"refinement_enabled: {refinement_meta['refinement_enabled']}",
             f"refinement_iterations_run: {refinement_meta['refinement_iterations_run']}",
             f"refinement_success: {refinement_meta['refinement_success']}",
+            f"semantic_issue_count: {len(semantic_meta['issues'])}",
         ]
     )

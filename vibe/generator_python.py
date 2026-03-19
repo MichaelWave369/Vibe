@@ -47,6 +47,7 @@ def generate_python(ir: IR) -> str:
         "",
         "from __future__ import annotations",
         "",
+        f"# SEMANTIC_QUALIFIERS: {ir.module.semantic_summary.get('binding_qualifiers', {})}",
         f"def {fn_name}({params}) -> {returns}:",
         f'    """{ir.goal}"""',
         "    # TODO(v0.2): refine implementation using richer planning semantics.",

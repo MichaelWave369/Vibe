@@ -300,7 +300,7 @@ def _compile(
     return 0
 
 
-def _explain(path: Path) -> int:
+def _explain(path: Path, show_types: bool = False) -> int:
     source = _load(path)
     ast = parse_source(source)
     ir = ast_to_ir(ast)
@@ -312,6 +312,10 @@ def _explain(path: Path) -> int:
     print(serialize_ir(ir))
     print("\nPreservation reasoning:")
     print(render_report(result, show_obligations=True, show_equivalence=True))
+    if show_types:
+        print("\nSemantic types:")
+        print(f"summary: {ir.module.semantic_summary}")
+        print(f"issues: {ir.module.semantic_issues}")
     return 0
 
 
@@ -489,6 +493,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     ex = sub.add_parser("explain", help="Explain AST and IR")
     ex.add_argument("path", type=Path)
+    ex.add_argument("--show-types", action="store_true", help="Show semantic type summary and issues")
 
     vf = sub.add_parser("verify", help="Run verifier without emission")
     vf.add_argument("path", type=Path)
@@ -548,7 +553,7 @@ def main(argv: list[str] | None = None) -> int:
             max_iters=args.max_iters,
         )
     if args.command == "explain":
-        return _explain(args.path)
+        return _explain(args.path, show_types=args.show_types)
     if args.command == "verify":
         return _verify(
             args.path,

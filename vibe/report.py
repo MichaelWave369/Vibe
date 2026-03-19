@@ -126,6 +126,14 @@ def render_report(
             f"  refinement_history: {result.refinement_history}",
         ]
     )
+    lines.extend(
+        [
+            "semantic types:",
+            f"  semantic_type_summary: {result.semantic_type_summary}",
+            f"  semantic_type_issues: {result.semantic_type_issues}",
+            f"  semantic_type_obligations: {result.semantic_type_obligations}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

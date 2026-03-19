@@ -14,6 +14,12 @@ from .calibration import (
 )
 from .equivalence import CorrespondenceEntry, analyze_intent_equivalence
 from .ir import DEFAULT_EPSILON_FLOOR, DEFAULT_MEASUREMENT_SAFE_RATIO, IR
+from .semantic_types import (
+    check_semantic_type_issues,
+    issues_as_dicts,
+    issues_to_obligation_rows,
+    semantic_summary_payload,
+)
 
 ObligationStatus = str
 
@@ -156,6 +162,9 @@ class VerificationResult:
     refinement_history: list[dict[str, object]] = field(default_factory=list)
     refinement_failure_summary: list[str] = field(default_factory=list)
     winning_iteration: int = 1
+    semantic_type_summary: dict[str, object] = field(default_factory=dict)
+    semantic_type_issues: list[dict[str, object]] = field(default_factory=list)
+    semantic_type_obligations: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -814,9 +823,26 @@ def _build_result(
     backend_error: str | None,
     calibration_meta: dict[str, object] | None = None,
 ) -> VerificationResult:
-    counts = _compute_obligation_counts(obligations)
-    critical_unknown = any(o.status == "unknown" and o.critical for o in obligations)
-    critical_violation = any(o.status == "violated" and o.critical for o in obligations)
+    semantic_issues = check_semantic_type_issues(ir, generated_code)
+    ir.module.semantic_issues = issues_as_dicts(semantic_issues)
+    semantic_rows = issues_to_obligation_rows(semantic_issues)
+    semantic_obligations = [
+        VerificationObligation(
+            obligation_id=str(row["obligation_id"]),
+            category=str(row["category"]),
+            description=str(row["description"]),
+            source_location=str(row["source_location"]) if row.get("source_location") is not None else None,
+            status=str(row["status"]),
+            evidence=str(row["evidence"]) if row.get("evidence") is not None else None,
+            critical=bool(row["critical"]),
+        )
+        for row in semantic_rows
+    ]
+    all_obligations = list(obligations) + semantic_obligations
+
+    counts = _compute_obligation_counts(all_obligations)
+    critical_unknown = any(o.status == "unknown" and o.critical for o in all_obligations)
+    critical_violation = any(o.status == "violated" and o.critical for o in all_obligations)
 
     passed = (
         metrics.epsilon_post > metrics.epsilon_floor
@@ -856,7 +882,7 @@ def _build_result(
         delegation_integrity=metrics.delegation_integrity,
         merge_preservation=metrics.merge_preservation,
         agent_bridge_score=metrics.agent_bridge_score,
-        obligations=obligations,
+        obligations=all_obligations,
         obligation_counts=counts,
         verification_backend=metadata.name,
         backend_version=metadata.version,
@@ -879,6 +905,9 @@ def _build_result(
         calibration_artifact_path=(calibration_meta or {}).get("artifact_path"),
         calibration_confidence=(calibration_meta or {}).get("confidence"),
         calibration_notes=str((calibration_meta or {}).get("notes", "")),
+        semantic_type_summary=semantic_summary_payload(ir),
+        semantic_type_issues=issues_as_dicts(semantic_issues),
+        semantic_type_obligations=semantic_rows,
     )
 
 

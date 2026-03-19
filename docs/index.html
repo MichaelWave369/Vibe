@@ -190,6 +190,11 @@ emit python</code></pre>
           intent structures, so Vibe reports how programmer intent changed (goal/inputs/outputs/preserve/constraints/
           bridge/emit/Tesla/Agentora/AgentCeption), distinct from emitted-code drift.
         </p>
+        <p>
+          Phase 4.1 adds semantic types: intent values now carry meaning qualifiers (e.g. deterministic,
+          secret-sensitive, bridge-critical) derived from preserve/constraint/bridge semantics and surfaced in IR/report
+          diagnostics without replacing preservation obligations.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

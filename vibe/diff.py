@@ -222,6 +222,19 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
     _diff_tesla(entries, old_ir, new_ir)
     _diff_agentora(entries, old_ir, new_ir)
     _diff_agentception(entries, old_ir, new_ir)
+    if old_ir.module.semantic_summary != new_ir.module.semantic_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "semantic_types",
+                "qualifier_summary",
+                "modified",
+                "unknown",
+                old_ir.module.semantic_summary,
+                new_ir.module.semantic_summary,
+                "semantic type summary changed",
+            ),
+        )
 
     summary = {
         "total_changes": len(entries),
