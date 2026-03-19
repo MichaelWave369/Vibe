@@ -28,8 +28,8 @@ _TARGETS: dict[str, TargetPlugin] = {
         "legal_compliance",
         "phase-7.3 deterministic compliance report emitter",
     ),
-    "snakemake": TargetPlugin("snakemake", ".smk", False, "genomics", "phase-7 scaffold emitter"),
-    "nextflow": TargetPlugin("nextflow", ".nf", False, "genomics", "phase-7 scaffold emitter"),
+    "snakemake": TargetPlugin("snakemake", ".smk", True, "genomics", "phase-7.4 deterministic genomics workflow emitter"),
+    "nextflow": TargetPlugin("nextflow", ".nf", True, "genomics", "phase-7.4 deterministic genomics workflow emitter"),
 }
 
 

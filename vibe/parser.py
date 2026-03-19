@@ -36,6 +36,10 @@ BARE_PRESERVE_RULES = {
     "auditability",
     "data minimization",
     "right_to_erasure",
+    "reproducibility of differential expression results",
+    "reproducible workflow",
+    "provenance retained",
+    "stable normalization method",
 }
 
 

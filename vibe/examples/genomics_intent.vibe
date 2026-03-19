@@ -1,18 +1,22 @@
 domain genomics
 
-intent VariantPipeline:
-  goal: "Preserve variant-calling lineage and quality thresholds"
+intent DifferentialExpressionWorkflow:
+  goal: "Preserve reproducible differential expression outcomes"
   inputs:
-    sample_id: string
+    sample_metadata: string
+    counts_matrix: string
   outputs:
-    variant_set: string
+    diffexpr_table: string
 
 preserve:
-  coverage_depth > 30
-  quality_score > 0.95
+  reproducibility of differential expression results
+  reproducible workflow
+  provenance retained
 
 constraint:
-  reference_build_grch38
-  pipeline_stage_traceable
+  no patient-identifiable metadata in outputs
+  deidentify sample metadata
+  deterministic sample ordering
+  fixed reference version
 
-emit nextflow
+emit snakemake

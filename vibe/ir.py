@@ -161,6 +161,12 @@ class IRModule:
     compliance_target_metadata: dict[str, object] = field(default_factory=dict)
     pii_taint_summary: dict[str, object] = field(default_factory=dict)
     audit_trail_metadata: dict[str, object] = field(default_factory=dict)
+    genomics_summary: dict[str, object] = field(default_factory=dict)
+    genomics_issues: list[dict[str, object]] = field(default_factory=list)
+    genomics_obligations: list[dict[str, object]] = field(default_factory=list)
+    genomics_target_metadata: dict[str, object] = field(default_factory=dict)
+    metadata_privacy_summary: dict[str, object] = field(default_factory=dict)
+    workflow_provenance_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)

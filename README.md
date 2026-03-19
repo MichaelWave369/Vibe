@@ -357,8 +357,6 @@ New architecture surfaces:
 Planned target scaffolds are now wired (truthfully marked as scaffold-level in this pass):
 - `emit vhdl`
 - `emit systemverilog`
-- `emit snakemake`
-- `emit nextflow`
 
 This pass establishes the shared foundation for parallel domain work; it does **not** claim full emitter/proof completeness for all domain targets yet.
 
@@ -440,6 +438,35 @@ Implemented in this phase:
 Truthfulness:
 - generated compliance reports are deterministic machine-checkable structures for policy review workflows
 - this is **not** legal certification and does not claim final legal sufficiency
+
+## Genomics intent (Phase 7.4)
+
+Vibe now includes the fourth concrete cross-domain implementation slice for genomics/bioinformatics intent.
+
+Implemented in this phase:
+- dedicated genomics subsystem: `vibe/genomics.py`
+- practical genomics preserve/constraint surfaces:
+  - `preserve: reproducibility of differential expression results`
+  - `preserve: reproducible workflow`
+  - `preserve: provenance retained`
+  - `constraint: no patient-identifiable metadata in outputs`
+  - `constraint: deidentify sample metadata`
+  - `constraint: deterministic sample ordering`
+  - `constraint: fixed reference version`
+- genomics metadata in verifier/report/proof:
+  - `genomics_summary`
+  - `genomics_issues`
+  - `genomics_obligations`
+  - `genomics_target_metadata`
+  - `metadata_privacy_summary`
+  - `workflow_provenance_metadata`
+- first real deterministic workflow emitters:
+  - `emit snakemake`
+  - `emit nextflow`
+
+Truthfulness:
+- generated workflow outputs are deterministic, inspectable workflow-native scaffolds for reproducibility/privacy/provenance preservation
+- this is **not** biological/clinical correctness proof or clinical certification
 
 ## Multi-candidate synthesis (Phase 3.1)
 

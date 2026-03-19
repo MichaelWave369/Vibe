@@ -321,6 +321,48 @@ def _diff_legal_compliance(entries: list[IntentDiffEntry], old: IR, new: IR) -> 
         )
 
 
+def _diff_genomics(entries: list[IntentDiffEntry], old: IR, new: IR) -> None:
+    if old.module.genomics_summary != new.module.genomics_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "genomics",
+                "genomics_summary",
+                "modified",
+                "unknown",
+                old.module.genomics_summary,
+                new.module.genomics_summary,
+                "genomics summary changed",
+            ),
+        )
+    if old.module.genomics_target_metadata != new.module.genomics_target_metadata:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "genomics",
+                "genomics_target_metadata",
+                "modified",
+                "unknown",
+                old.module.genomics_target_metadata,
+                new.module.genomics_target_metadata,
+                "genomics target metadata changed",
+            ),
+        )
+    if old.module.genomics_issues != new.module.genomics_issues:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "genomics",
+                "genomics_issues",
+                "modified",
+                "unknown",
+                old.module.genomics_issues,
+                new.module.genomics_issues,
+                "genomics issues changed",
+            ),
+        )
+
+
 def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
     entries: list[IntentDiffEntry] = []
 
@@ -351,6 +393,7 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
     _diff_hardware(entries, old_ir, new_ir)
     _diff_scientific_simulation(entries, old_ir, new_ir)
     _diff_legal_compliance(entries, old_ir, new_ir)
+    _diff_genomics(entries, old_ir, new_ir)
     if old_ir.module.semantic_summary != new_ir.module.semantic_summary:
         _append(
             entries,

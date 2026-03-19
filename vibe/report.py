@@ -231,6 +231,17 @@ def render_report(
             f"  audit_trail_metadata: {result.audit_trail_metadata}",
         ]
     )
+    lines.extend(
+        [
+            "genomics:",
+            f"  genomics_summary: {result.genomics_summary}",
+            f"  genomics_issues: {result.genomics_issues}",
+            f"  genomics_obligations: {result.genomics_obligations}",
+            f"  genomics_target_metadata: {result.genomics_target_metadata}",
+            f"  metadata_privacy_summary: {result.metadata_privacy_summary}",
+            f"  workflow_provenance_metadata: {result.workflow_provenance_metadata}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

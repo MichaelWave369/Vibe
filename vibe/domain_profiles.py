@@ -92,13 +92,33 @@ DOMAIN_PROFILES: dict[str, DomainProfile] = {
     ),
     "genomics": DomainProfile(
         name="genomics",
-        preserve_families=["coverage", "specificity", "sensitivity", "quality", "lineage"],
-        constraint_families=["reference", "variant", "reproducibility", "pipeline"],
+        preserve_families=[
+            "reproducibility of differential expression results",
+            "reproducible workflow",
+            "provenance retained",
+            "stable normalization method",
+        ],
+        constraint_families=[
+            "no patient-identifiable metadata in outputs",
+            "deidentify sample metadata",
+            "deterministic sample ordering",
+            "fixed reference version",
+            "no uncontrolled batch-effect metadata leakage",
+        ],
         supported_emit_targets=["snakemake", "nextflow", "python"],
         proof_extensions={"sample_provenance": "tracked", "reference_build": "declared"},
         report_extensions={"domain_track": "7.4 genomics intent"},
         compatibility_hooks=["reference_build", "pipeline_stage_alignment"],
-        obligation_factory=_prefix_obligations("genomics", ["coverage", "specificity", "sensitivity", "quality", "lineage"], family="preserve"),
+        obligation_factory=_prefix_obligations(
+            "genomics",
+            [
+                "reproducibility of differential expression results",
+                "reproducible workflow",
+                "provenance retained",
+                "stable normalization method",
+            ],
+            family="preserve",
+        ),
     ),
 }
 
@@ -166,6 +186,12 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.compliance_target_metadata = {}
         ir.module.pii_taint_summary = {}
         ir.module.audit_trail_metadata = {}
+        ir.module.genomics_summary = {}
+        ir.module.genomics_issues = []
+        ir.module.genomics_obligations = []
+        ir.module.genomics_target_metadata = {}
+        ir.module.metadata_privacy_summary = {}
+        ir.module.workflow_provenance_metadata = {}
         return
 
     if profile.obligation_factory is not None:
@@ -192,7 +218,7 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
     ir.module.domain_target_metadata = {
         "planned_target": ir.emit_target,
         "target_supported_by_profile": ir.emit_target in set(profile.supported_emit_targets),
-        "scaffold_only": ir.emit_target in {"snakemake", "nextflow"},
+        "scaffold_only": False,
     }
     if profile.name == "hardware":
         from .hardware import derive_hardware_metadata
@@ -215,6 +241,12 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.compliance_target_metadata = {}
         ir.module.pii_taint_summary = {}
         ir.module.audit_trail_metadata = {}
+        ir.module.genomics_summary = {}
+        ir.module.genomics_issues = []
+        ir.module.genomics_obligations = []
+        ir.module.genomics_target_metadata = {}
+        ir.module.metadata_privacy_summary = {}
+        ir.module.workflow_provenance_metadata = {}
     elif profile.name == "scientific_simulation":
         from .scientific_simulation import derive_scientific_simulation_metadata
 
@@ -239,6 +271,12 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.compliance_target_metadata = {}
         ir.module.pii_taint_summary = {}
         ir.module.audit_trail_metadata = {}
+        ir.module.genomics_summary = {}
+        ir.module.genomics_issues = []
+        ir.module.genomics_obligations = []
+        ir.module.genomics_target_metadata = {}
+        ir.module.metadata_privacy_summary = {}
+        ir.module.workflow_provenance_metadata = {}
     elif profile.name == "legal_compliance":
         from .legal_compliance import derive_legal_compliance_metadata
 
@@ -267,6 +305,46 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.scientific_simulation_issues = []
         ir.module.scientific_simulation_obligations = []
         ir.module.scientific_target_metadata = {}
+        ir.module.genomics_summary = {}
+        ir.module.genomics_issues = []
+        ir.module.genomics_obligations = []
+        ir.module.genomics_target_metadata = {}
+        ir.module.metadata_privacy_summary = {}
+        ir.module.workflow_provenance_metadata = {}
+    elif profile.name == "genomics":
+        from .genomics import derive_genomics_metadata
+
+        (
+            g_summary,
+            g_issues,
+            g_obligations,
+            g_target_meta,
+            metadata_privacy_summary,
+            workflow_provenance_metadata,
+        ) = derive_genomics_metadata(ir)
+        ir.module.genomics_summary = g_summary
+        ir.module.genomics_issues = g_issues
+        ir.module.genomics_obligations = g_obligations
+        ir.module.genomics_target_metadata = g_target_meta
+        ir.module.metadata_privacy_summary = metadata_privacy_summary
+        ir.module.workflow_provenance_metadata = workflow_provenance_metadata
+        ir.module.domain_summary["genomics_summary"] = g_summary
+        ir.module.domain_issues = sorted(ir.module.domain_issues + g_issues, key=lambda x: str(x.get("issue_id", "")))
+        ir.module.domain_obligations = sorted(ir.module.domain_obligations + g_obligations, key=lambda x: str(x.get("obligation_id", "")))
+        ir.module.hardware_summary = {}
+        ir.module.hardware_issues = []
+        ir.module.hardware_obligations = []
+        ir.module.hardware_target_metadata = {}
+        ir.module.scientific_simulation_summary = {}
+        ir.module.scientific_simulation_issues = []
+        ir.module.scientific_simulation_obligations = []
+        ir.module.scientific_target_metadata = {}
+        ir.module.legal_compliance_summary = {}
+        ir.module.legal_compliance_issues = []
+        ir.module.legal_compliance_obligations = []
+        ir.module.compliance_target_metadata = {}
+        ir.module.pii_taint_summary = {}
+        ir.module.audit_trail_metadata = {}
     else:
         ir.module.hardware_summary = {}
         ir.module.hardware_issues = []
@@ -282,3 +360,9 @@ def apply_domain_profile(ir: IR, domain_name: str | None) -> None:
         ir.module.compliance_target_metadata = {}
         ir.module.pii_taint_summary = {}
         ir.module.audit_trail_metadata = {}
+        ir.module.genomics_summary = {}
+        ir.module.genomics_issues = []
+        ir.module.genomics_obligations = []
+        ir.module.genomics_target_metadata = {}
+        ir.module.metadata_privacy_summary = {}
+        ir.module.workflow_provenance_metadata = {}

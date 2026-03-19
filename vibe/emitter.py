@@ -7,7 +7,9 @@ from pathlib import Path
 
 from .generator_compliance_report import generate_compliance_report
 from .generator_julia import generate_julia
+from .generator_nextflow import generate_nextflow
 from .generator_python import generate_python
+from .generator_snakemake import generate_snakemake
 from .generator_systemverilog import generate_systemverilog
 from .generator_typescript import generate_typescript
 from .generator_vhdl import generate_vhdl
@@ -56,6 +58,22 @@ class ComplianceReportEmitter(EmitterBackend):
         return generate_compliance_report(ir)
 
 
+class SnakemakeEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="snakemake", extension=".smk")
+
+    def emit(self, ir: IR) -> str:
+        return generate_snakemake(ir)
+
+
+class NextflowEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="nextflow", extension=".nf")
+
+    def emit(self, ir: IR) -> str:
+        return generate_nextflow(ir)
+
+
 class VHDLEmitter(EmitterBackend):
     def __init__(self) -> None:
         super().__init__(target="vhdl", extension=".vhd")
@@ -95,6 +113,8 @@ _BACKENDS = {
     "typescript": TypeScriptEmitter(),
     "julia": JuliaEmitter(),
     "compliance_report": ComplianceReportEmitter(),
+    "snakemake": SnakemakeEmitter(),
+    "nextflow": NextflowEmitter(),
     "vhdl": VHDLEmitter(),
     "systemverilog": SystemVerilogEmitter(),
 }

@@ -91,6 +91,7 @@ def test_domain_examples_compile_through_architecture_layer() -> None:
         Path("vibe/examples/legal_compliance_intent.vibe"),
         Path("vibe/examples/legal_compliance_no_pii_logs.vibe"),
         Path("vibe/examples/genomics_intent.vibe"),
+        Path("vibe/examples/genomics_intent_nextflow.vibe"),
     ]
     for ex in examples:
         program = parse_source(ex.read_text(encoding="utf-8"))
@@ -105,6 +106,8 @@ def test_domain_examples_compile_through_architecture_layer() -> None:
             "vhdl",
             "systemverilog",
             "compliance_report",
+            "snakemake",
+            "nextflow",
         }
 
 

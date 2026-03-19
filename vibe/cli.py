@@ -346,6 +346,7 @@ def _explain(
     show_hardware: bool = False,
     show_simulation: bool = False,
     show_compliance: bool = False,
+    show_genomics: bool = False,
 ) -> int:
     source = _load(path)
     pkg_ctx = package_context_for_path(path)
@@ -425,6 +426,14 @@ def _explain(
         print(f"target_metadata: {ir.module.compliance_target_metadata}")
         print(f"pii_taint_summary: {ir.module.pii_taint_summary}")
         print(f"audit_trail_metadata: {ir.module.audit_trail_metadata}")
+    if show_genomics:
+        print("\nGenomics:")
+        print(f"summary: {ir.module.genomics_summary}")
+        print(f"issues: {ir.module.genomics_issues}")
+        print(f"obligations: {ir.module.genomics_obligations}")
+        print(f"target_metadata: {ir.module.genomics_target_metadata}")
+        print(f"metadata_privacy_summary: {ir.module.metadata_privacy_summary}")
+        print(f"workflow_provenance_metadata: {ir.module.workflow_provenance_metadata}")
     return 0
 
 
@@ -901,6 +910,7 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--show-hardware", action="store_true", help="Show hardware domain summary/issues/obligations")
     ex.add_argument("--show-simulation", action="store_true", help="Show scientific simulation summary/issues/obligations")
     ex.add_argument("--show-compliance", action="store_true", help="Show legal compliance summary/issues/obligations")
+    ex.add_argument("--show-genomics", action="store_true", help="Show genomics summary/issues/obligations")
 
     vf = sub.add_parser("verify", help="Run verifier without emission")
     vf.add_argument("path", type=Path)
@@ -1035,6 +1045,7 @@ def main(argv: list[str] | None = None) -> int:
             show_hardware=args.show_hardware,
             show_simulation=args.show_simulation,
             show_compliance=args.show_compliance,
+            show_genomics=args.show_genomics,
         )
     if args.command == "verify":
         return _verify(

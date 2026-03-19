@@ -240,6 +240,12 @@ class VerificationResult:
     compliance_target_metadata: dict[str, object] = field(default_factory=dict)
     pii_taint_summary: dict[str, object] = field(default_factory=dict)
     audit_trail_metadata: dict[str, object] = field(default_factory=dict)
+    genomics_summary: dict[str, object] = field(default_factory=dict)
+    genomics_issues: list[dict[str, object]] = field(default_factory=list)
+    genomics_obligations: list[dict[str, object]] = field(default_factory=list)
+    genomics_target_metadata: dict[str, object] = field(default_factory=dict)
+    metadata_privacy_summary: dict[str, object] = field(default_factory=dict)
+    workflow_provenance_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -1025,6 +1031,8 @@ def _build_result(
     simulation_codegen_obligations: list[dict[str, object]] = []
     legal_codegen_issues: list[dict[str, object]] = []
     legal_codegen_obligations: list[dict[str, object]] = []
+    genomics_codegen_issues: list[dict[str, object]] = []
+    genomics_codegen_obligations: list[dict[str, object]] = []
     if ir.domain_profile == "hardware":
         from .hardware import evaluate_hardware_generated_code
 
@@ -1037,6 +1045,10 @@ def _build_result(
         from .legal_compliance import evaluate_legal_generated_artifact
 
         legal_codegen_issues, legal_codegen_obligations = evaluate_legal_generated_artifact(ir, generated_code)
+    elif ir.domain_profile == "genomics":
+        from .genomics import evaluate_genomics_generated_code
+
+        genomics_codegen_issues, genomics_codegen_obligations = evaluate_genomics_generated_code(ir, generated_code)
 
     hardware_issues_all = sorted(
         list(ir.module.hardware_issues) + list(hardware_codegen_issues),
@@ -1062,15 +1074,28 @@ def _build_result(
         list(ir.module.legal_compliance_obligations) + list(legal_codegen_obligations),
         key=lambda r: str(r.get("obligation_id", "")),
     )
+    genomics_issues_all = sorted(
+        list(ir.module.genomics_issues) + list(genomics_codegen_issues),
+        key=lambda r: str(r.get("issue_id", "")),
+    )
+    genomics_obligations_all = sorted(
+        list(ir.module.genomics_obligations) + list(genomics_codegen_obligations),
+        key=lambda r: str(r.get("obligation_id", "")),
+    )
     domain_issues_all = sorted(
-        list(ir.module.domain_issues) + list(hardware_codegen_issues) + list(simulation_codegen_issues) + list(legal_codegen_issues),
+        list(ir.module.domain_issues)
+        + list(hardware_codegen_issues)
+        + list(simulation_codegen_issues)
+        + list(legal_codegen_issues)
+        + list(genomics_codegen_issues),
         key=lambda r: str(r.get("issue_id", "")),
     )
     domain_obligation_rows = sorted(
         list(ir.module.domain_obligations)
         + list(hardware_codegen_obligations)
         + list(simulation_codegen_obligations)
-        + list(legal_codegen_obligations),
+        + list(legal_codegen_obligations)
+        + list(genomics_codegen_obligations),
         key=lambda r: str(r.get("obligation_id", "")),
     )
     domain_obligations = [
@@ -1203,6 +1228,12 @@ def _build_result(
         compliance_target_metadata=dict(ir.module.compliance_target_metadata),
         pii_taint_summary=dict(ir.module.pii_taint_summary),
         audit_trail_metadata=dict(ir.module.audit_trail_metadata),
+        genomics_summary=dict(ir.module.genomics_summary),
+        genomics_issues=genomics_issues_all,
+        genomics_obligations=genomics_obligations_all,
+        genomics_target_metadata=dict(ir.module.genomics_target_metadata),
+        metadata_privacy_summary=dict(ir.module.metadata_privacy_summary),
+        workflow_provenance_metadata=dict(ir.module.workflow_provenance_metadata),
     )
 
 
