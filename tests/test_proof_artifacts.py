@@ -99,6 +99,7 @@ def test_invalid_proof_version_handled(tmp_path, capsys) -> None:
                 "result": {"passed": False, "emission_blocked": True},
                 "candidates": {},
                 "intent_guided_tests": {},
+                "refinement": {},
                 "notes": [],
             }
         ),
@@ -146,5 +147,6 @@ def test_proof_schema_fields_present(tmp_path) -> None:
         "result",
         "candidates",
         "intent_guided_tests",
+        "refinement",
     ]:
         assert key in payload

@@ -149,6 +149,13 @@ class VerificationResult:
     uncovered_items: list[str] = field(default_factory=list)
     partial_coverage_items: list[str] = field(default_factory=list)
     test_generation_notes: list[str] = field(default_factory=list)
+    refinement_enabled: bool = False
+    refinement_iterations_run: int = 1
+    refinement_max_iterations: int = 1
+    refinement_success: bool = False
+    refinement_history: list[dict[str, object]] = field(default_factory=list)
+    refinement_failure_summary: list[str] = field(default_factory=list)
+    winning_iteration: int = 1
 
 
 @dataclass(slots=True)

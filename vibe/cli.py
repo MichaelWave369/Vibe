@@ -28,6 +28,13 @@ from .proof import (
     render_proof_summary,
     write_proof_artifact,
 )
+from .refinement import (
+    RefinementIterationSummary,
+    extract_counterexample,
+    refine_candidates,
+    strategy_adjustments,
+    to_history_row,
+)
 from .report import render_report, render_report_json
 from .synthesis import (
     generate_candidates,
@@ -73,6 +80,8 @@ def _compile(
     write_proof: bool = False,
     candidate_count: int = 3,
     with_tests: bool = False,
+    refine: bool = False,
+    max_iters: int = 3,
 ) -> int:
     source = _load(path)
     ast = parse_source(source)
@@ -109,49 +118,104 @@ def _compile(
             print("cache: miss")
 
     candidates = generate_candidates(ir, candidate_count)
-    evaluations = [
-        rank_candidate(
-            c.candidate_id,
-            c.strategy,
-            verify(
-                ir,
-                c.code,
-                backend=verification_backend,
-                fallback_backend=fallback_backend,
-                use_calibration=use_calibration,
-            ),
+    max_iterations = max(1, max_iters if refine else 1)
+    refinement_history: list[RefinementIterationSummary] = []
+    refinement_failure_summary: list[str] = []
+    selected_eval = None
+    selected_candidate = None
+    generated_suite = None
+
+    for iteration in range(1, max_iterations + 1):
+        evaluations = [
+            rank_candidate(
+                c.candidate_id,
+                c.strategy,
+                verify(
+                    ir,
+                    c.code,
+                    backend=verification_backend,
+                    fallback_backend=fallback_backend,
+                    use_calibration=use_calibration,
+                ),
+            )
+            for c in candidates
+        ]
+        ranked = rank_candidates(evaluations)
+        passing = [e for e in ranked if e.result.passed]
+        chosen = passing[0] if passing else ranked[0]
+        chosen_candidate = next(c for c in candidates if c.candidate_id == chosen.candidate_id)
+
+        suite_for_iteration = None
+        if with_tests:
+            suite_for_iteration = generate_intent_guided_tests(
+                ir=ir,
+                output_path=out_path,
+                emitted_code=chosen_candidate.code,
+                candidate_id=chosen.candidate_id,
+            )
+
+        counterexample = extract_counterexample(
+            chosen.result,
+            test_suite=suite_for_iteration,
+            candidate_notes=[f"strategy={chosen.strategy}", f"rank_score={round(chosen.rank_score, 6)}"],
         )
-        for c in candidates
-    ]
-    ranked = rank_candidates(evaluations)
-    winner = ranked[0]
-    result = winner.result
-    result.candidate_count = len(candidates)
-    result.winning_candidate_id = winner.candidate_id
-    result.synthesized_winner = len(candidates) > 1
+        adjustments = strategy_adjustments(counterexample)
+        refinement_history.append(
+            RefinementIterationSummary(
+                iteration=iteration,
+                candidate_ids=[e.candidate_id for e in ranked],
+                passing_candidates=[e.candidate_id for e in passing],
+                selected_candidate_id=chosen.candidate_id,
+                selected_strategy=chosen.strategy,
+                selected_passed=chosen.result.passed,
+                failure_reasons=list(counterexample.shortfall_reasons),
+                guidance={
+                    "failed_obligation_ids": counterexample.failed_obligation_ids,
+                    "unknown_critical_obligation_ids": counterexample.unknown_critical_obligation_ids,
+                    "unsupported_mappings": counterexample.unsupported_mappings,
+                    "uncovered_items": counterexample.uncovered_items,
+                    "partial_coverage_items": counterexample.partial_coverage_items,
+                    "backend_error": counterexample.backend_error,
+                },
+                strategy_adjustments=adjustments,
+            )
+        )
+        if chosen.result.passed:
+            selected_eval = chosen
+            selected_candidate = chosen_candidate
+            generated_suite = suite_for_iteration
+            break
+
+        refinement_failure_summary.extend(counterexample.shortfall_reasons)
+        selected_eval = chosen
+        selected_candidate = chosen_candidate
+        generated_suite = suite_for_iteration
+        if not refine or iteration >= max_iterations:
+            break
+        candidates = refine_candidates(candidates, iteration=iteration + 1, counterexample=counterexample)
+
+    assert selected_eval is not None
+    assert selected_candidate is not None
+    result = selected_eval.result
+    result.candidate_count = candidate_count
+    result.winning_candidate_id = selected_eval.candidate_id
+    result.synthesized_winner = candidate_count > 1
     result.ranking_basis = ranking_formula_description()
     result.candidate_summaries = [
         {
-            "candidate_id": e.candidate_id,
-            "strategy": e.strategy,
-            "passed": e.result.passed,
-            "rank_score": round(e.rank_score, 6),
-            "bridge_score": round(float(e.result.bridge_score), 6),
-            "measurement_ratio": round(float(e.result.measurement_ratio), 6),
-            "equivalence_score": round(float(e.result.intent_equivalence_score), 6),
-            "drift_score": round(float(e.result.drift_score), 6),
+            "candidate_id": row.selected_candidate_id,
+            "strategy": row.selected_strategy,
+            "passed": row.selected_passed,
+            "rank_score": None,
+            "bridge_score": None,
+            "measurement_ratio": None,
+            "equivalence_score": None,
+            "drift_score": None,
+            "iteration": row.iteration,
         }
-        for e in ranked
+        for row in refinement_history
     ]
-    winning_candidate = next(c for c in candidates if c.candidate_id == result.winning_candidate_id)
-    generated_suite = None
-    if with_tests:
-        generated_suite = generate_intent_guided_tests(
-            ir=ir,
-            output_path=out_path,
-            emitted_code=winning_candidate.code,
-            candidate_id=winner.candidate_id,
-        )
+    if with_tests and generated_suite is not None:
         result.test_generation_enabled = True
         result.generated_test_files = sorted(generated_suite.generated_files.keys())
         result.preserve_rule_coverage = list(generated_suite.preserve_rule_coverage)
@@ -159,6 +223,16 @@ def _compile(
         result.uncovered_items = list(generated_suite.uncovered_items)
         result.partial_coverage_items = list(generated_suite.partial_coverage_items)
         result.test_generation_notes = list(generated_suite.notes)
+    result.refinement_enabled = refine
+    result.refinement_iterations_run = len(refinement_history)
+    result.refinement_max_iterations = max_iterations
+    result.refinement_success = result.passed
+    result.winning_iteration = next(
+        (h.iteration for h in refinement_history if h.selected_candidate_id == result.winning_candidate_id),
+        len(refinement_history),
+    )
+    result.refinement_failure_summary = sorted(set(refinement_failure_summary))
+    result.refinement_history = [to_history_row(h) for h in refinement_history]
     _print_report(
         result,
         report,
@@ -199,7 +273,7 @@ def _compile(
             )
         return 1
 
-    out_path.write_text(winning_candidate.code, encoding="utf-8")
+    out_path.write_text(selected_candidate.code, encoding="utf-8")
     print(f"emitted: {out_path}")
     if generated_suite is not None:
         for test_path, test_content in generated_suite.generated_files.items():
@@ -390,6 +464,8 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--write-proof", action="store_true", help="Write deterministic preservation proof artifact")
     cp.add_argument("--candidates", type=int, default=3, help="Number of deterministic synthesis candidates")
     cp.add_argument("--with-tests", action="store_true", help="Emit intent-guided tests alongside compiled output")
+    cp.add_argument("--refine", action="store_true", help="Enable deterministic bridge-gated refinement loop")
+    cp.add_argument("--max-iters", type=int, default=3, help="Maximum refinement iterations when --refine is enabled")
 
     ex = sub.add_parser("explain", help="Explain AST and IR")
     ex.add_argument("path", type=Path)
@@ -441,6 +517,8 @@ def main(argv: list[str] | None = None) -> int:
             write_proof=args.write_proof,
             candidate_count=args.candidates,
             with_tests=args.with_tests,
+            refine=args.refine,
+            max_iters=args.max_iters,
         )
     if args.command == "explain":
         return _explain(args.path)

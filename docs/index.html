@@ -180,6 +180,11 @@ emit python</code></pre>
           compile emits deterministic test files next to emitted code, while report/proof surfaces
           preserve-rule and constraint coverage metadata with explicit uncovered/partial honesty.
         </p>
+        <p>
+          Phase 3.3 adds deterministic bridge-gated refinement (<code>--refine</code>, <code>--max-iters</code>):
+          failed rounds feed structured counterexample signals into the next synthesis round, and
+          only a passing refined candidate may emit.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

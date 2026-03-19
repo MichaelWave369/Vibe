@@ -300,6 +300,30 @@ Compile and verify can now surface deterministic intent-guided test metadata, an
   - `partial_coverage_items`
   - `test_generation_notes`
 
+## Bridge-gated refinement protocol (Phase 3.3)
+
+Vibe compile now supports deterministic refinement rounds when initial synthesis fails preservation checks.
+
+- enable with `--refine`
+- bound rounds with `--max-iters N` (default `3`)
+- refinement derives negative guidance from verifier/test surfaces:
+  - violated or unknown-critical obligations
+  - equivalence/drift misses
+  - bridge/measurement shortfalls
+  - uncovered/partial test-generation surfaces
+  - backend error signals
+- only passing refined candidates may emit
+- when max iterations are exhausted without a pass, compile fails honestly and emits nothing
+
+Reports and proof artifacts now include refinement metadata:
+- `refinement_enabled`
+- `refinement_iterations_run`
+- `refinement_max_iterations`
+- `refinement_success`
+- `refinement_history`
+- `refinement_failure_summary`
+- `winning_iteration`
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:
@@ -350,6 +374,8 @@ vibec compile vibe/examples/payment_router.vibe --no-calibration
 vibec compile vibe/examples/payment_router.vibe --write-proof
 vibec compile vibe/examples/payment_router.vibe --candidates 5
 vibec compile vibe/examples/payment_router.vibe --with-tests
+vibec compile vibe/examples/payment_router.vibe --refine
+vibec compile vibe/examples/payment_router.vibe --refine --max-iters 5
 vibec verify-proof vibe/examples/payment_router.vibe
 vibec inspect-proof vibe/examples/payment_router.vibe.proof.json
 vibec compile vibe/examples/edge_contract_ts.vibe --with-tests

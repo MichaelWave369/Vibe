@@ -114,6 +114,18 @@ def render_report(
             f"  test_generation_notes: {result.test_generation_notes}",
         ]
     )
+    lines.extend(
+        [
+            "refinement:",
+            f"  refinement_enabled: {result.refinement_enabled}",
+            f"  refinement_iterations_run: {result.refinement_iterations_run}",
+            f"  refinement_max_iterations: {result.refinement_max_iterations}",
+            f"  refinement_success: {result.refinement_success}",
+            f"  winning_iteration: {result.winning_iteration}",
+            f"  refinement_failure_summary: {result.refinement_failure_summary}",
+            f"  refinement_history: {result.refinement_history}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

@@ -30,6 +30,7 @@ REQUIRED_FIELDS = {
     "result",
     "candidates",
     "intent_guided_tests",
+    "refinement",
     "notes",
 }
 
@@ -121,6 +122,19 @@ def build_proof_artifact(
             "partial_coverage_items": result.partial_coverage_items,
             "test_generation_notes": result.test_generation_notes,
         },
+        "refinement": {
+            "refinement_enabled": result.refinement_enabled,
+            "refinement_iterations_run": result.refinement_iterations_run,
+            "refinement_max_iterations": result.refinement_max_iterations,
+            "refinement_success": result.refinement_success,
+            "winning_iteration": result.winning_iteration,
+            "winning_candidate_id": result.winning_candidate_id,
+            "refinement_failure_summary": result.refinement_failure_summary,
+            "refinement_history": result.refinement_history,
+            "hit_max_iterations": result.refinement_enabled
+            and (not result.refinement_success)
+            and (result.refinement_iterations_run >= result.refinement_max_iterations),
+        },
         "notes": notes or [],
     }
     return artifact
@@ -155,6 +169,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     eq = payload["equivalence"]
     candidate_meta = payload["candidates"]
     test_meta = payload["intent_guided_tests"]
+    refinement_meta = payload["refinement"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -172,5 +187,8 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"obligation_counts: {payload['obligation_summary']}",
             f"test_generation_enabled: {test_meta['test_generation_enabled']}",
             f"generated_test_files: {test_meta['generated_test_files']}",
+            f"refinement_enabled: {refinement_meta['refinement_enabled']}",
+            f"refinement_iterations_run: {refinement_meta['refinement_iterations_run']}",
+            f"refinement_success: {refinement_meta['refinement_success']}",
         ]
     )
