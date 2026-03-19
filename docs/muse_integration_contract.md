@@ -246,6 +246,17 @@ Provider shape:
 Contract behavior:
 
 - external obligations flow through existing obligation surfaces (`verify` JSON `obligations[]`, proof artifact `obligations[]`, rollups),
+- provider execution diagnostics are exposed in `external_obligation_providers` with:
+  - `category`
+  - `provider_name`
+  - `provider_version`
+  - `order_index`
+  - `ran`
+  - `emitted_obligations`
+  - `status_counts`
+  - `had_error`
+  - `error_type`
+  - `error_message`
 - schema versions remain unchanged (`v1`) because this is additive and uses existing obligation row shape,
 - registration is explicit and deterministic (category-keyed, duplicate rejection unless `override=True`),
 - no auto-discovery, no remote plugin loading, no plugin marketplace semantics in this phase.
@@ -253,5 +264,6 @@ Contract behavior:
 Current scoring scope:
 
 - external obligations contribute to obligation rows and status counts,
+- provider failures are represented as provider-level diagnostics (`had_error=true`) and a synthetic non-critical unknown obligation row (`external.<category>.provider_error`),
 - they only affect pass/fail where the existing verifier model already applies (`critical` violated/unknown obligations block pass),
 - no additional bridge-score math is introduced for external obligations in this phase.

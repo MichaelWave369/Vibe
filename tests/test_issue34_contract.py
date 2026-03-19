@@ -21,6 +21,7 @@ def test_verify_report_json_contract_fields(tmp_path: Path, capsys) -> None:
     assert isinstance(payload["epsilon_floor"], float)
     assert isinstance(payload["measurement_safe_ratio"], float)
     assert payload["obligations_total"] >= payload["obligations_satisfied"]
+    assert isinstance(payload["external_obligation_providers"], list)
     assert payload["proof_artifact_path"].endswith(".vibe.proof.json")
     assert payload["proof_sha256"]
     assert payload["obligations"]

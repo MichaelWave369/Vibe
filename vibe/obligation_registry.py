@@ -36,7 +36,37 @@ ExternalObligationProvider = Callable[[ExternalObligationContext], list[External
 
 
 _CATEGORY_RE = re.compile(r"^[a-z0-9][a-z0-9_.-]*$")
-_PROVIDERS: dict[str, ExternalObligationProvider] = {}
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalObligationProviderRegistration:
+    category: str
+    provider: ExternalObligationProvider
+    provider_name: str
+    provider_version: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalObligationProviderExecution:
+    category: str
+    provider_name: str
+    provider_version: str | None
+    order_index: int
+    ran: bool
+    emitted_obligations: int
+    status_counts: dict[str, int]
+    had_error: bool
+    error_type: str | None
+    error_message: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class ExternalObligationEvaluationResult:
+    obligations: list[ExternalObligation]
+    executions: list[ExternalObligationProviderExecution]
+
+
+_PROVIDERS: dict[str, ExternalObligationProviderRegistration] = {}
 
 
 def register_external_obligation_provider(
@@ -44,6 +74,8 @@ def register_external_obligation_provider(
     provider: ExternalObligationProvider,
     *,
     override: bool = False,
+    provider_name: str | None = None,
+    provider_version: str | None = None,
 ) -> None:
     cat = category.strip().lower()
     if not _CATEGORY_RE.fullmatch(cat):
@@ -52,7 +84,12 @@ def register_external_obligation_provider(
         )
     if cat in _PROVIDERS and not override:
         raise ValueError(f"external obligation provider already registered for category `{cat}`")
-    _PROVIDERS[cat] = provider
+    _PROVIDERS[cat] = ExternalObligationProviderRegistration(
+        category=cat,
+        provider=provider,
+        provider_name=provider_name or getattr(provider, "__name__", "external_provider"),
+        provider_version=provider_version,
+    )
 
 
 def unregister_external_obligation_provider(category: str) -> bool:
@@ -67,18 +104,64 @@ def list_external_obligation_categories() -> list[str]:
     return sorted(_PROVIDERS.keys())
 
 
-def evaluate_external_obligations(context: ExternalObligationContext) -> list[ExternalObligation]:
+def evaluate_external_obligations(context: ExternalObligationContext) -> ExternalObligationEvaluationResult:
     rows: list[ExternalObligation] = []
-    for category in list_external_obligation_categories():
-        provider = _PROVIDERS[category]
-        provided = provider(context)
-        for row in provided:
-            if row.category != category:
-                raise ValueError(
-                    f"external obligation category mismatch for `{category}`: provider emitted `{row.category}`"
+    executions: list[ExternalObligationProviderExecution] = []
+    for order_index, category in enumerate(list_external_obligation_categories(), start=1):
+        registration = _PROVIDERS[category]
+        try:
+            provided = registration.provider(context)
+            status_counts: dict[str, int] = {}
+            valid_rows: list[ExternalObligation] = []
+            for row in provided:
+                if row.category != category:
+                    raise ValueError(
+                        f"external obligation category mismatch for `{category}`: provider emitted `{row.category}`"
+                    )
+                status_counts[row.status] = status_counts.get(row.status, 0) + 1
+                valid_rows.append(row)
+            rows.extend(valid_rows)
+            executions.append(
+                ExternalObligationProviderExecution(
+                    category=category,
+                    provider_name=registration.provider_name,
+                    provider_version=registration.provider_version,
+                    order_index=order_index,
+                    ran=True,
+                    emitted_obligations=len(valid_rows),
+                    status_counts=status_counts,
+                    had_error=False,
+                    error_type=None,
+                    error_message=None,
                 )
-            rows.append(row)
-    return rows
+            )
+        except Exception as exc:
+            executions.append(
+                ExternalObligationProviderExecution(
+                    category=category,
+                    provider_name=registration.provider_name,
+                    provider_version=registration.provider_version,
+                    order_index=order_index,
+                    ran=True,
+                    emitted_obligations=0,
+                    status_counts={},
+                    had_error=True,
+                    error_type=exc.__class__.__name__,
+                    error_message=str(exc),
+                )
+            )
+            rows.append(
+                ExternalObligation(
+                    obligation_id=f"external.{category}.provider_error",
+                    category=category,
+                    description="External obligation provider execution failed",
+                    status="unknown",
+                    source_location=None,
+                    evidence=f"{exc.__class__.__name__}: {exc}",
+                    critical=False,
+                )
+            )
+    return ExternalObligationEvaluationResult(obligations=rows, executions=executions)
 
 
 @contextmanager

@@ -163,6 +163,7 @@ What it does today:
 - lets Python code register deterministic external obligation providers by category name,
 - executes registered providers during `verify`,
 - surfaces resulting obligations through normal machine-readable outputs (`verify --report json`, `.vibe.proof.json`).
+- emits provider execution diagnostics (`external_obligation_providers`) with stable provider identity, emitted count, status summary, and error fields.
 
 What it does **not** do yet:
 

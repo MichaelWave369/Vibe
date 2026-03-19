@@ -9,6 +9,8 @@ from ..obligation_registry import (
 )
 
 DEMO_OBLIGATION_CATEGORY = "demo.audit"
+DEMO_PROVIDER_NAME = "demo_audit_obligation_provider"
+DEMO_PROVIDER_VERSION = "v1"
 
 
 def _requires_audit_log(ir_constraints: list[str]) -> bool:
@@ -38,4 +40,6 @@ def register_demo_obligation_provider(*, override: bool = False) -> None:
         DEMO_OBLIGATION_CATEGORY,
         demo_audit_obligation_provider,
         override=override,
+        provider_name=DEMO_PROVIDER_NAME,
+        provider_version=DEMO_PROVIDER_VERSION,
     )

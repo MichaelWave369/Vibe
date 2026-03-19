@@ -84,6 +84,7 @@ def verify_contract_payload(
         "artifact_path": proof_artifact_path,
         "sha256": proof_sha256,
     }
+    payload["external_obligation_providers"] = list(getattr(result, "external_obligation_providers", []))
     payload["legacy_report"] = legacy
     return payload
 

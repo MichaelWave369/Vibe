@@ -249,6 +249,7 @@ def build_proof_artifact(
             "snapshot_id": snapshot_id,
             "snapshot_store": snapshot_store,
         },
+        "external_obligation_providers": list(result.external_obligation_providers),
         "notes": notes or [],
     }
     return artifact
