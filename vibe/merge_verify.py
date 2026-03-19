@@ -518,84 +518,12 @@ def _build_regression_evidence(
     }
 
 
-def _build_policy_evaluation(
-    *,
-    merge_status: str,
-    verification: dict[str, object] | None,
-    intent_conflicts: list[dict[str, object]] | None,
-    require_merged_bridge: float | None = None,
-    fail_on_intent_conflicts: bool = False,
-) -> dict[str, object]:
-    checks: list[dict[str, object]] = []
-    if require_merged_bridge is not None:
-        if merge_status == "merged" and verification is not None and verification.get("bridge_score") is not None:
-            merged_bridge = float(verification["bridge_score"])
-            passed = merged_bridge >= float(require_merged_bridge)
-            checks.append(
-                {
-                    "policy_name": "require_merged_bridge",
-                    "requested_value": float(require_merged_bridge),
-                    "effective_value": merged_bridge,
-                    "available": True,
-                    "passed": passed,
-                    "reason": "threshold_met" if passed else "threshold_not_met",
-                }
-            )
-        else:
-            checks.append(
-                {
-                    "policy_name": "require_merged_bridge",
-                    "requested_value": float(require_merged_bridge),
-                    "effective_value": None,
-                    "available": False,
-                    "passed": False,
-                    "reason": "merged_verification_not_available",
-                }
-            )
-    if fail_on_intent_conflicts:
-        if merge_status == "merged":
-            conflict_count = len(intent_conflicts or [])
-            passed = conflict_count == 0
-            checks.append(
-                {
-                    "policy_name": "fail_on_intent_conflicts",
-                    "requested_value": True,
-                    "effective_value": conflict_count,
-                    "available": True,
-                    "passed": passed,
-                    "reason": "no_intent_conflicts" if passed else "intent_conflicts_present",
-                }
-            )
-        else:
-            checks.append(
-                {
-                    "policy_name": "fail_on_intent_conflicts",
-                    "requested_value": True,
-                    "effective_value": None,
-                    "available": False,
-                    "passed": False,
-                    "reason": "merged_result_not_available",
-                }
-            )
-    requested = bool(checks)
-    available = True if not requested else all(bool(c.get("available")) for c in checks)
-    passed = True if not requested else all(bool(c.get("passed")) for c in checks)
-    return {
-        "requested": requested,
-        "available": available,
-        "passed": passed,
-        "checks": checks,
-    }
-
-
 def merge_verify(
     base_text: str,
     left_text: str,
     right_text: str,
     regression_top_n: int | None = None,
     regression_include_evidence: bool = False,
-    require_merged_bridge: float | None = None,
-    fail_on_intent_conflicts: bool = False,
 ) -> MergeVerifyResult:
     try:
         base_summary, base_ir, _ = _verification_summary(base_text)
@@ -887,13 +815,6 @@ def merge_verify(
             merged_result=merged_result,
             requested_top_n=regression_top_n,
             include_evidence=regression_include_evidence,
-        ),
-        policy_evaluation=_build_policy_evaluation(
-            merge_status="merged",
-            verification=merged_summary,
-            intent_conflicts=intent_conflicts,
-            require_merged_bridge=require_merged_bridge,
-            fail_on_intent_conflicts=fail_on_intent_conflicts,
         ),
     )
 
