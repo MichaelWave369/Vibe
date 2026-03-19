@@ -1,0 +1,16 @@
+{
+  "input_mode": "snapshot",
+  "passed": true,
+  "provenance": {
+    "input_mode": "snapshot",
+    "snapshot_id": "43fb6e69161b114818229306e4306185f6399da337cfa9c0da8a8c7da0a830f6",
+    "snapshot_store": "<SNAPSHOT_STORE>",
+    "spec_path": null
+  },
+  "report_type": "verify",
+  "schema_version": "v1",
+  "snapshot_id": "43fb6e69161b114818229306e4306185f6399da337cfa9c0da8a8c7da0a830f6",
+  "snapshot_store": "<SNAPSHOT_STORE>",
+  "spec_path": null,
+  "verdict": "MULTIMODAL_BRIDGE_STABLE"
+}
