@@ -1,0 +1,21 @@
+intent PaymentRoutingContract:
+  goal: "Provide deterministic payment route selection with graceful fallback and compliance-aware outputs"
+  inputs:
+    payment_request: string
+    risk_score: number
+    gateway_health: string
+  outputs:
+    selected_route: string
+    authorization_result: string
+    audit_event: string
+
+preserve:
+  deterministic_route_selection >= 1
+  fallback_path_coverage >= 1
+  auditability >= 1
+
+constraint:
+  deterministic outputs
+  explicit fallback reason
+
+emit python

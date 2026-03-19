@@ -1027,6 +1027,23 @@ def _negotiate(
     return 0
 
 
+def _stdlib_list(report: ReportMode, root: Path = Path("stdlib")) -> int:
+    packages: list[dict[str, object]] = []
+    if root.exists():
+        for pkg_dir in sorted([p for p in root.iterdir() if p.is_dir()]):
+            manifest = pkg_dir / "vibe.toml"
+            if manifest.exists():
+                packages.append({"name": pkg_dir.name, "path": str(pkg_dir), "manifest": str(manifest)})
+    payload = {"stdlib_root": str(root), "packages": packages, "count": len(packages)}
+    if report == "json":
+        print(package_summary_json(payload))
+    else:
+        print("=== Vibe Standard Library Packages ===")
+        for row in packages:
+            print(f"- {row['name']} ({row['path']})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1200,6 +1217,9 @@ def build_parser() -> argparse.ArgumentParser:
     ng.add_argument("--show-conflicts", action="store_true", help="Show conflicts and ambiguous clauses in human output")
     ng.add_argument("--show-strengthening", action="store_true", help="Show strengthened clauses in human output")
 
+    sl = sub.add_parser("stdlib-list", help="List built-in standard library packages")
+    sl.add_argument("--report", choices=["human", "json"], default="human")
+
     return parser
 
 
@@ -1338,6 +1358,8 @@ def main(argv: list[str] | None = None) -> int:
             show_conflicts=args.show_conflicts,
             show_strengthening=args.show_strengthening,
         )
+    if args.command == "stdlib-list":
+        return _stdlib_list(args.report)
 
     parser.error("unknown command")
     return 2
