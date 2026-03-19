@@ -1,0 +1,22 @@
+domain hardware
+
+intent PacketArbiter:
+  goal: "Preserve bounded arbitration latency in synchronous logic"
+  inputs:
+    req_a: boolean
+    req_b: boolean
+  outputs:
+    grant_a: boolean
+    grant_b: boolean
+
+preserve:
+  timing < 8ns
+  latency_cycles <= 2
+
+constraint:
+  no combinational loops
+  synchronous
+  deterministic
+  bounded fanout
+
+emit systemverilog

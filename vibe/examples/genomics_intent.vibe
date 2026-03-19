@@ -1,0 +1,22 @@
+domain genomics
+
+intent DifferentialExpressionWorkflow:
+  goal: "Preserve reproducible differential expression outcomes"
+  inputs:
+    sample_metadata: string
+    counts_matrix: string
+  outputs:
+    diffexpr_table: string
+
+preserve:
+  reproducibility of differential expression results
+  reproducible workflow
+  provenance retained
+
+constraint:
+  no patient-identifiable metadata in outputs
+  deidentify sample metadata
+  deterministic sample ordering
+  fixed reference version
+
+emit snakemake
