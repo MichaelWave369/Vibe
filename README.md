@@ -500,6 +500,41 @@ Truthfulness:
 - this is a bounded self-spec verification slice, not full compiler rewrite/bootstrapping
 - regression signals are real and inspectable, but release policy wiring remains incremental
 
+## Intent-diff semantic versioning (Phase 8.2)
+
+Vibe now derives semantic version bump recommendations from intent-level semantic diff:
+
+- new CLI: `vibec semver old.vibe new.vibe`
+- deterministic bump classes: `major | minor | patch | none`
+- rationale rows are attached to specific semantic changes
+- ambiguous changes remain explicit with conservative interpretation notes
+
+Implemented rule examples:
+- added output field -> `minor`
+- removed output field -> `major`
+- added preserve rule -> `minor`
+- weakened preserve rule -> `major`
+- strengthened preserve rule -> `minor`
+- added constraint -> `minor`
+- removed constraint -> `major`
+- bridge default weakening -> `major`
+- bridge default strengthening -> `minor`
+- emit target change -> surfaced as conservative `major`
+
+Optional manifest integration (explicit write only):
+
+```bash
+# preview
+vibec semver old.vibe new.vibe --manifest-path vibe.toml --report json
+
+# apply recommended next version
+vibec semver old.vibe new.vibe --apply-manifest vibe.toml
+```
+
+Truthfulness:
+- semver is deterministic rule-based interpretation over semantic diff; it is not universal perfect certainty
+- ambiguous changes are called out and handled conservatively
+
 ## Multi-candidate synthesis (Phase 3.1)
 
 Compile/verify can now generate and evaluate multiple deterministic candidate implementations from the same IR.

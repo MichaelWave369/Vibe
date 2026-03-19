@@ -279,6 +279,11 @@ emit python</code></pre>
           and surface baseline/regression status via <code>vibec self-check</code>. This is intentionally not a full
           compiler rewrite/bootstrap claim yet.
         </p>
+        <p>
+          Phase 8.2 adds semantic versioning from intent diff via <code>vibec semver old.vibe new.vibe</code>:
+          recommended bumps are derived from semantic contract changes (for example, removed constraints -> major,
+          added outputs/preserves -> minor), with conservative ambiguity notes when change strength is unclear.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300
@@ -306,6 +311,7 @@ pass: True</code></pre>
           <li>v0.2: stronger verifier calibrations and rule mapping</li>
           <li>v0.3: additional emit targets after compiler spine hardening</li>
           <li>v0.3+: expand bounded self-hosting slice toward fuller compiler bootstrapping</li>
+          <li>v0.3+: expand semver rule coverage for additional domain-specific contract surfaces</li>
           <li>future: hosted workflows built on top of preservation law</li>
         </ul>
       </section>

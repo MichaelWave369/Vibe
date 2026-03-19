@@ -48,6 +48,13 @@ from .registry import (
     search_local_registry,
 )
 from .self_hosting import SelfCheckConfig, run_self_check
+from .semver import (
+    current_version_from_manifest,
+    derive_semver_from_diff,
+    render_semver_human,
+    render_semver_json,
+    write_manifest_version,
+)
 from .runtime_monitor import evaluate_runtime_events, load_runtime_events
 from .refinement import (
     RefinementIterationSummary,
@@ -928,6 +935,49 @@ def _self_check(
     return checked.exit_code
 
 
+def _semver(
+    old_path: Path,
+    new_path: Path,
+    report: ReportMode,
+    current_version: str | None,
+    manifest_path: Path | None,
+    apply_manifest: Path | None,
+    show_rules: bool,
+) -> int:
+    old_source = _load(old_path)
+    new_source = _load(new_path)
+    old_ir = ast_to_ir(parse_source(old_source))
+    new_ir = ast_to_ir(parse_source(new_source))
+
+    effective_manifest = apply_manifest or manifest_path
+    effective_version = current_version
+    if effective_version is None and effective_manifest is not None:
+        effective_version = current_version_from_manifest(effective_manifest)
+
+    decision = derive_semver_from_diff(
+        old_ir,
+        new_ir,
+        old_path=str(old_path),
+        new_path=str(new_path),
+        current_version=effective_version,
+        manifest_path=str(effective_manifest) if effective_manifest is not None else None,
+    )
+
+    if apply_manifest is not None:
+        if decision.recommended_next_version is None:
+            print("semver failed: unable to derive next version for manifest write")
+            return 1
+        write_manifest_version(apply_manifest, decision.recommended_next_version)
+
+    if report == "json":
+        print(render_semver_json(decision))
+    else:
+        print(render_semver_human(decision, show_rules=show_rules))
+        if apply_manifest is not None:
+            print(f"manifest updated: {apply_manifest} -> {decision.recommended_next_version}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="vibec", description="Vibe compiler prototype")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1078,6 +1128,20 @@ def build_parser() -> argparse.ArgumentParser:
     sh.add_argument("--no-proof", action="store_true", help="Do not write proof artifact for self-check")
     sh.add_argument("--report", choices=["human", "json"], default="human")
 
+    sv = sub.add_parser("semver", help="Derive semver bump from semantic intent diff")
+    sv.add_argument("old_path", type=Path)
+    sv.add_argument("new_path", type=Path)
+    sv.add_argument("--report", choices=["human", "json"], default="human")
+    sv.add_argument("--current-version", default=None, help="Current semantic version (MAJOR.MINOR.PATCH)")
+    sv.add_argument("--manifest-path", type=Path, default=None, help="Optional vibe.toml path for version read")
+    sv.add_argument(
+        "--apply-manifest",
+        type=Path,
+        default=None,
+        help="Explicitly write recommended next version into manifest package.version",
+    )
+    sv.add_argument("--show-rules", action="store_true", help="Show semver classification rule IDs and conservative flags")
+
     return parser
 
 
@@ -1195,6 +1259,16 @@ def main(argv: list[str] | None = None) -> int:
             use_calibration=not args.no_calibration,
             write_proof=not args.no_proof,
             report=args.report,
+        )
+    if args.command == "semver":
+        return _semver(
+            old_path=args.old_path,
+            new_path=args.new_path,
+            report=args.report,
+            current_version=args.current_version,
+            manifest_path=args.manifest_path,
+            apply_manifest=args.apply_manifest,
+            show_rules=args.show_rules,
         )
 
     parser.error("unknown command")
