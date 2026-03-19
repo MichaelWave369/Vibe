@@ -1,0 +1,14 @@
+{
+  "category": "demo.audit",
+  "emitted_obligations": 1,
+  "error_message": null,
+  "error_type": null,
+  "had_error": false,
+  "order_index": 1,
+  "provider_name": "demo_audit_obligation_provider",
+  "provider_version": "v1",
+  "ran": true,
+  "status_counts": {
+    "violated": 1
+  }
+}

@@ -23,7 +23,7 @@ from .diff import compute_intent_diff, render_intent_diff_human, render_intent_d
 from .domain_profiles import domain_summary_json
 from .emitter import emit_code, output_path_for
 from .ir import ast_to_ir, serialize_ir
-from .parser import parse_source
+from .parser import ParseError, parse_source
 from .package_manager import (
     apply_package_defaults_to_source,
     build_project,
@@ -77,6 +77,16 @@ from .refinement import (
     to_history_row,
 )
 from .report import render_report, render_report_json
+from .verification_flow import prepare_verification_input
+from .snapshot_store import SnapshotResolutionError, default_snapshot_store, resolve_snapshot, snapshot_put
+from .merge_verify import (
+    merge_verify_payload,
+    merge_verify,
+    maybe_write_merged,
+    render_merge_verify_human,
+    render_merge_verify_json,
+    write_merge_report,
+)
 from .synthesis import (
     generate_candidates,
     rank_candidate,
@@ -90,20 +100,28 @@ from .verifier import available_backends, verify
 ReportMode = str
 
 
-def _load(path: Path) -> str:
-    if not path.exists():
-        raise FileNotFoundError(f"Input file not found: {path}")
-    return path.read_text(encoding="utf-8")
-
-
 def _print_report(
     result,
     report: ReportMode,
     show_obligations: bool = True,
     show_equivalence: bool = False,
+    spec_path: str | None = "<unknown>",
+    proof_artifact_path: str | None = None,
+    input_mode: str = "path",
+    snapshot_id: str | None = None,
+    snapshot_store: str | None = None,
 ) -> None:
     if report == "json":
-        print(render_report_json(result))
+        print(
+            render_report_json(
+                result,
+                spec_path=spec_path,
+                proof_artifact_path=proof_artifact_path,
+                input_mode=input_mode,
+                snapshot_id=snapshot_id,
+                snapshot_store=snapshot_store,
+            )
+        )
     else:
         print(render_report(result, show_obligations=show_obligations, show_equivalence=show_equivalence))
 
@@ -124,22 +142,10 @@ def _compile(
     refine: bool = False,
     max_iters: int = 3,
 ) -> int:
-    source = _load(path)
-    pkg_ctx = package_context_for_path(path)
-    if pkg_ctx:
-        source = apply_package_defaults_to_source(
-            source,
-            VibeManifest(
-                package_name=str(pkg_ctx.get("package_name", "")),
-                package_version=str(pkg_ctx.get("package_version", "")),
-                description="",
-                dependencies=dict(pkg_ctx.get("dependencies", {})),
-                bridge_defaults=dict(pkg_ctx.get("bridge_defaults", {})),
-                emit_defaults=dict(pkg_ctx.get("emit_defaults", {})),
-            ),
-        )
-    ast = parse_source(source)
-    ir = ast_to_ir(ast)
+    prepared = prepare_verification_input(path=path)
+    source = prepared.source_text
+    ir = prepared.ir
+    pkg_ctx = prepared.package_context
     ir_ser = serialize_ir(ir)
     source_hash = sha256_text(source)
     ir_hash = sha256_text(ir_ser)
@@ -288,13 +294,6 @@ def _compile(
     )
     result.refinement_failure_summary = sorted(set(refinement_failure_summary))
     result.refinement_history = [to_history_row(h) for h in refinement_history]
-    _print_report(
-        result,
-        report,
-        show_obligations=show_obligations,
-        show_equivalence=show_equivalence,
-    )
-
     proof_path = default_proof_path(path)
     if write_proof:
         proof = build_proof_artifact(
@@ -306,6 +305,16 @@ def _compile(
             notes=["compile flow proof artifact"],
         )
         write_proof_artifact(proof_path, proof)
+
+    _print_report(
+        result,
+        report,
+        show_obligations=show_obligations,
+        show_equivalence=show_equivalence,
+        spec_path=str(path),
+        proof_artifact_path=str(proof_path) if write_proof else None,
+    )
+    if write_proof:
         print(f"proof: {proof_path}")
 
     if not result.passed:
@@ -369,22 +378,11 @@ def _explain(
     show_compliance: bool = False,
     show_genomics: bool = False,
 ) -> int:
-    source = _load(path)
-    pkg_ctx = package_context_for_path(path)
-    if pkg_ctx:
-        source = apply_package_defaults_to_source(
-            source,
-            VibeManifest(
-                package_name=str(pkg_ctx.get("package_name", "")),
-                package_version=str(pkg_ctx.get("package_version", "")),
-                description="",
-                dependencies=dict(pkg_ctx.get("dependencies", {})),
-                bridge_defaults=dict(pkg_ctx.get("bridge_defaults", {})),
-                emit_defaults=dict(pkg_ctx.get("emit_defaults", {})),
-            ),
-        )
+    prepared = prepare_verification_input(path=path)
+    source = prepared.source_text
+    ir = prepared.ir
+    pkg_ctx = prepared.package_context
     ast = parse_source(source)
-    ir = ast_to_ir(ast)
     emitted_code, _ = emit_code(ir)
     result = verify(ir, emitted_code)
     print("AST:")
@@ -459,7 +457,7 @@ def _explain(
 
 
 def _verify(
-    path: Path,
+    path: Path | None,
     report: ReportMode,
     show_obligations: bool = True,
     show_equivalence: bool = False,
@@ -469,23 +467,87 @@ def _verify(
     write_proof: bool = False,
     candidate_count: int = 3,
     with_tests: bool = False,
+    snapshot: str | None = None,
+    snapshot_store: Path | None = None,
 ) -> int:
-    source = _load(path)
-    pkg_ctx = package_context_for_path(path)
-    if pkg_ctx:
-        source = apply_package_defaults_to_source(
-            source,
-            VibeManifest(
-                package_name=str(pkg_ctx.get("package_name", "")),
-                package_version=str(pkg_ctx.get("package_version", "")),
-                description="",
-                dependencies=dict(pkg_ctx.get("dependencies", {})),
-                bridge_defaults=dict(pkg_ctx.get("bridge_defaults", {})),
-                emit_defaults=dict(pkg_ctx.get("emit_defaults", {})),
-            ),
-        )
-    ast = parse_source(source)
-    ir = ast_to_ir(ast)
+    if path is not None and snapshot is not None:
+        err = {
+            "schema_version": "v1",
+            "report_type": "verify",
+            "error_type": "invalid_arguments",
+            "error": "cannot use positional path and --snapshot together",
+        }
+        if report == "json":
+            import json
+
+            print(json.dumps(err, indent=2, sort_keys=True))
+        else:
+            print("verify failed: cannot use positional path and --snapshot together")
+        return 1
+    input_mode = "path"
+    snapshot_id = None
+    snapshot_store_str = None
+    try:
+        if snapshot is not None:
+            resolved = resolve_snapshot(snapshot, snapshot_store)
+            prepared = prepare_verification_input(
+                source_text=resolved.source_text,
+                source_name=f"snapshot:{resolved.snapshot_id}",
+            )
+            source = prepared.source_text
+            ir = prepared.ir
+            pkg_ctx = prepared.package_context
+            input_mode = "snapshot"
+            snapshot_id = resolved.snapshot_id
+            snapshot_store_str = str(resolved.store_path)
+            spec_path_for_report: str | None = None
+            effective_path_for_proof = resolved.store_path / f"{resolved.snapshot_id}.vibe.proof.json"
+            source_ref_path = Path(f"snapshot.{resolved.snapshot_id}.vibe")
+        else:
+            if path is None:
+                raise ValueError("missing required input: provide a path or --snapshot <sha256>")
+            prepared = prepare_verification_input(path=path)
+            source = prepared.source_text
+            ir = prepared.ir
+            pkg_ctx = prepared.package_context
+            spec_path_for_report = str(path)
+            effective_path_for_proof = default_proof_path(path)
+            source_ref_path = path
+    except SnapshotResolutionError as exc:
+        err = {
+            "schema_version": "v1",
+            "report_type": "verify",
+            "input_mode": "snapshot",
+            "snapshot_id": snapshot,
+            "snapshot_store": str((snapshot_store or default_snapshot_store()).resolve()),
+            "error_type": exc.code,
+            "error": str(exc),
+        }
+        if report == "json":
+            import json
+
+            print(json.dumps(err, indent=2, sort_keys=True))
+        else:
+            print(f"verify failed: {exc}")
+        return 1
+    except Exception as exc:
+        error_type = "parse_error" if isinstance(exc, ParseError) else "input_resolution_error"
+        err = {
+            "schema_version": "v1",
+            "report_type": "verify",
+            "input_mode": input_mode,
+            "snapshot_id": snapshot_id,
+            "snapshot_store": snapshot_store_str,
+            "error_type": error_type,
+            "error": str(exc),
+        }
+        if report == "json":
+            import json
+
+            print(json.dumps(err, indent=2, sort_keys=True))
+        else:
+            print(f"verify failed: {exc}")
+        return 1
     candidates = generate_candidates(ir, candidate_count)
     evaluations = [
         rank_candidate(
@@ -524,7 +586,7 @@ def _verify(
     ]
     if with_tests:
         emitted_code, backend = emit_code(ir)
-        projected_path = output_path_for(path, backend)
+        projected_path = output_path_for(path or Path("snapshot_input.vibe"), backend)
         generated_suite = generate_intent_guided_tests(
             ir=ir,
             output_path=projected_path,
@@ -538,25 +600,36 @@ def _verify(
         result.uncovered_items = list(generated_suite.uncovered_items)
         result.partial_coverage_items = list(generated_suite.partial_coverage_items)
         result.test_generation_notes = list(generated_suite.notes)
-    _print_report(
-        result,
-        report,
-        show_obligations=show_obligations,
-        show_equivalence=show_equivalence,
-    )
-    if result.backend_error:
-        print(f"verify failed: {result.backend_error}")
+    proof_path = effective_path_for_proof
     if write_proof:
-        proof_path = default_proof_path(path)
         proof = build_proof_artifact(
-            path,
+            source_ref_path,
             source,
             ir,
             result,
             emitted_blocked=not result.passed,
             notes=["verify flow proof artifact"],
+            input_mode=input_mode,
+            spec_path=spec_path_for_report,
+            snapshot_id=snapshot_id,
+            snapshot_store=snapshot_store_str,
         )
         write_proof_artifact(proof_path, proof)
+
+    _print_report(
+        result,
+        report,
+        show_obligations=show_obligations,
+        show_equivalence=show_equivalence,
+        spec_path=spec_path_for_report,
+        proof_artifact_path=str(proof_path) if write_proof else None,
+        input_mode=input_mode,
+        snapshot_id=snapshot_id,
+        snapshot_store=snapshot_store_str,
+    )
+    if result.backend_error:
+        print(f"verify failed: {result.backend_error}")
+    if write_proof:
         print(f"proof: {proof_path}")
     return 0 if result.passed else 1
 
@@ -570,6 +643,55 @@ def _calibrate(corpus_path: Path) -> int:
     print(f"model_version: {model.model_version}")
     print(f"fit_confidence: {model.fit_confidence:.4f}")
     print(f"artifact: {artifact}")
+    return 0
+
+
+def _snapshot_put(path: Path, report: ReportMode, snapshot_store: Path | None = None) -> int:
+    try:
+        source_text = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        if report == "json":
+            import json
+
+            print(
+                json.dumps(
+                    {
+                        "schema_version": "v1",
+                        "report_type": "snapshot_put",
+                        "error_type": "read_error",
+                        "error": str(exc),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(f"snapshot-put failed: {exc}")
+        return 1
+
+    out = snapshot_put(source_text, snapshot_store)
+    if report == "json":
+        import json
+
+        print(
+            json.dumps(
+                {
+                    "schema_version": "v1",
+                    "report_type": "snapshot_put",
+                    "snapshot_id": out.snapshot_id,
+                    "snapshot_store": str(out.store_path),
+                    "blob_path": str(out.blob_path),
+                    "already_present": out.already_present,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(f"snapshot_id: {out.snapshot_id}")
+        print(f"snapshot_store: {out.store_path}")
+        print(f"blob_path: {out.blob_path}")
+        print(f"already_present: {out.already_present}")
     return 0
 
 
@@ -739,14 +861,64 @@ def _diff(
     report: ReportMode,
     show_unchanged: bool = False,
     summary_only: bool = False,
+    with_verification_context: bool = False,
 ) -> int:
-    old_source = _load(old_path)
-    new_source = _load(new_path)
+    old_source = old_path.read_text(encoding="utf-8")
+    new_source = new_path.read_text(encoding="utf-8")
     old_ir = ast_to_ir(parse_source(old_source))
     new_ir = ast_to_ir(parse_source(new_source))
     result = compute_intent_diff(old_ir, new_ir)
+    verification_context: dict[str, object] | None = None
+    if with_verification_context:
+        try:
+            old_code, _ = emit_code(old_ir)
+            new_code, _ = emit_code(new_ir)
+            old_verify = verify(old_ir, old_code, use_calibration=False)
+            new_verify = verify(new_ir, new_code, use_calibration=False)
+            old_summary = {
+                "bridge_score": old_verify.bridge_score,
+                "epsilon_post": old_verify.epsilon_post,
+                "measurement_ratio": old_verify.measurement_ratio,
+                "epsilon_floor": old_verify.epsilon_floor,
+                "measurement_safe_ratio": old_verify.measurement_safe_ratio,
+                "obligations_total": len(old_verify.obligations),
+                "obligations_satisfied": sum(1 for o in old_verify.obligations if o.status == "satisfied"),
+            }
+            new_summary = {
+                "bridge_score": new_verify.bridge_score,
+                "epsilon_post": new_verify.epsilon_post,
+                "measurement_ratio": new_verify.measurement_ratio,
+                "epsilon_floor": new_verify.epsilon_floor,
+                "measurement_safe_ratio": new_verify.measurement_safe_ratio,
+                "obligations_total": len(new_verify.obligations),
+                "obligations_satisfied": sum(1 for o in new_verify.obligations if o.status == "satisfied"),
+            }
+            verification_context = {
+                "verification_requested": True,
+                "available": True,
+                "reason": None,
+                "old": old_summary,
+                "new": new_summary,
+                "bridge_score_delta": round(new_verify.bridge_score - old_verify.bridge_score, 6),
+            }
+        except Exception as exc:
+            verification_context = {
+                "verification_requested": True,
+                "available": False,
+                "reason": f"verification_context_unavailable: {exc}",
+                "old": None,
+                "new": None,
+                "bridge_score_delta": None,
+            }
     if report == "json":
-        print(render_intent_diff_json(result))
+        print(
+            render_intent_diff_json(
+                result,
+                old_spec=str(old_path),
+                new_spec=str(new_path),
+                verification_context=verification_context,
+            )
+        )
     else:
         print(render_intent_diff_human(result, show_unchanged=show_unchanged, summary_only=summary_only))
     return 0
@@ -957,8 +1129,8 @@ def _semver(
     apply_manifest: Path | None,
     show_rules: bool,
 ) -> int:
-    old_source = _load(old_path)
-    new_source = _load(new_path)
+    old_source = old_path.read_text(encoding="utf-8")
+    new_source = new_path.read_text(encoding="utf-8")
     old_ir = ast_to_ir(parse_source(old_source))
     new_ir = ast_to_ir(parse_source(new_source))
 
@@ -1003,7 +1175,7 @@ def _negotiate(
     if len(paths) < 2:
         print("negotiate failed: need at least two .vibe specs")
         return 1
-    sources = [_load(p) for p in paths]
+    sources = [p.read_text(encoding="utf-8") for p in paths]
     irs = [ast_to_ir(parse_source(src)) for src in sources]
     contract = negotiate_intents(irs, [str(p) for p in paths])
 
@@ -1050,9 +1222,68 @@ def _stdlib_list(report: ReportMode, root: Path = Path("stdlib")) -> int:
     return 0
 
 
+def _merge_verify(
+    base_path: Path,
+    left_path: Path,
+    right_path: Path,
+    report: ReportMode,
+    write_merged: Path | None,
+    write_merge_report_path: Path | None,
+    regression_top_n: int | None = None,
+    regression_include_evidence: bool = False,
+    require_merged_bridge: float | None = None,
+    fail_on_intent_conflicts: bool = False,
+) -> int:
+    result = merge_verify(
+        base_path.read_text(encoding="utf-8"),
+        left_path.read_text(encoding="utf-8"),
+        right_path.read_text(encoding="utf-8"),
+        regression_top_n=regression_top_n,
+        regression_include_evidence=regression_include_evidence,
+        require_merged_bridge=require_merged_bridge,
+        fail_on_intent_conflicts=fail_on_intent_conflicts,
+    )
+    payload = merge_verify_payload(
+        result,
+        base_spec=str(base_path),
+        left_spec=str(left_path),
+        right_spec=str(right_path),
+    )
+    merged_path = maybe_write_merged(write_merged, result)
+    merge_report_path = write_merge_report(write_merge_report_path, payload)
+    if report == "json":
+        payload_text = render_merge_verify_json(
+            result,
+            base_spec=str(base_path),
+            left_spec=str(left_path),
+            right_spec=str(right_path),
+        )
+        print(payload_text)
+        if merged_path is not None:
+            print(f"merged_output: {merged_path}")
+        if merge_report_path is not None:
+            print(f"merge_report: {merge_report_path}")
+    else:
+        print(render_merge_verify_human(result))
+        if merged_path is not None:
+            print(f"merged_output: {merged_path}")
+        if merge_report_path is not None:
+            print(f"merge_report: {merge_report_path}")
+    if result.merge_status == "error":
+        return 1
+    if result.merge_status == "conflict":
+        return 1
+    assert result.verification is not None
+    if not bool(result.verification.get("passed")):
+        return 1
+    if bool((result.policy_evaluation or {}).get("requested")) and not bool((result.policy_evaluation or {}).get("passed")):
+        return 1
+    return 0
+
+
 def _interchange_from_text(input_path: Path, report: ReportMode, write_output: Path | None) -> int:
     try:
-        source_text = _load(input_path)
+        source_text = input_path.read_text(encoding="utf-8")
     except Exception as exc:
         print(f"interchange-from-text failed: {exc}")
         return 1
@@ -1076,7 +1307,7 @@ def _interchange_from_text(input_path: Path, report: ReportMode, write_output: P
 
 def _intent_brief(path: Path, report: ReportMode, write_output: Path | None) -> int:
     try:
-        source_text = _load(path)
+        source_text = path.read_text(encoding="utf-8")
         brief = build_intent_brief(path, source_text)
     except Exception as exc:
         print(f"intent-brief failed: {exc}")
@@ -1161,7 +1392,9 @@ def build_parser() -> argparse.ArgumentParser:
     ex.add_argument("--show-genomics", action="store_true", help="Show genomics summary/issues/obligations")
 
     vf = sub.add_parser("verify", help="Run verifier without emission")
-    vf.add_argument("path", type=Path)
+    vf.add_argument("path", type=Path, nargs="?", default=None)
+    vf.add_argument("--snapshot", type=str, default=None, help="Verify from content-addressed snapshot sha256")
+    vf.add_argument("--snapshot-store", type=Path, default=None, help="Snapshot store directory (default ./.vibe_snapshots or VIBE_SNAPSHOT_STORE)")
     vf.add_argument("--report", choices=["human", "json"], default="human")
     vf.add_argument("--show-obligations", action="store_true", help="Show full obligation list in human report")
     vf.add_argument("--show-equivalence", action="store_true", help="Show detailed equivalence/diff entries in human report")
@@ -1171,6 +1404,11 @@ def build_parser() -> argparse.ArgumentParser:
     vf.add_argument("--write-proof", action="store_true", help="Write deterministic preservation proof artifact")
     vf.add_argument("--candidates", type=int, default=3, help="Number of deterministic synthesis candidates")
     vf.add_argument("--with-tests", action="store_true", help="Include intent-guided test metadata in verification report")
+
+    sp = sub.add_parser("snapshot-put", help="Store local .vibe source by content hash in a local snapshot store")
+    sp.add_argument("path", type=Path)
+    sp.add_argument("--snapshot-store", type=Path, default=None, help="Snapshot store directory (default ./.vibe_snapshots or VIBE_SNAPSHOT_STORE)")
+    sp.add_argument("--report", choices=["human", "json"], default="human")
 
     cal = sub.add_parser("calibrate", help="Fit/update empirical epsilon calibration model")
     cal.add_argument("corpus_path", type=Path)
@@ -1215,6 +1453,11 @@ def build_parser() -> argparse.ArgumentParser:
     df.add_argument("--report", choices=["human", "json"], default="human")
     df.add_argument("--show-unchanged", action="store_true", help="Show unchanged summary row if there are no semantic changes")
     df.add_argument("--summary-only", action="store_true", help="Show summary only")
+    df.add_argument(
+        "--with-verification-context",
+        action="store_true",
+        help="Include whole-spec old/new verification summaries in JSON diff output",
+    )
 
     pub = sub.add_parser("publish", help="Publish a package into the local filesystem intent registry")
     pub.add_argument("project_dir", type=Path, nargs="?", default=Path("."))
@@ -1316,6 +1559,36 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--report", choices=["human", "json"], default="human")
     pb.add_argument("--write-output", type=Path, default=None, help="Optional JSON brief path")
 
+    mv = sub.add_parser("merge-verify", help="Three-way merge and verify Vibe specs")
+    mv.add_argument("base_path", type=Path)
+    mv.add_argument("left_path", type=Path)
+    mv.add_argument("right_path", type=Path)
+    mv.add_argument("--report", choices=["human", "json"], default="human")
+    mv.add_argument("--write-merged", type=Path, default=None, help="Write merged .vibe file on successful merge")
+    mv.add_argument("--write-merge-report", type=Path, default=None, help="Write machine-readable merge-verify JSON report")
+    mv.add_argument(
+        "--regression-top-n",
+        type=int,
+        default=None,
+        help="Max number of regression_evidence top_problem_obligations rows to show (clamped to safe bounds)",
+    )
+    mv.add_argument(
+        "--regression-include-evidence",
+        action="store_true",
+        help="Include compact evidence_text in regression_evidence rows when available",
+    )
+    mv.add_argument(
+        "--require-merged-bridge",
+        type=float,
+        default=None,
+        help="Fail with non-zero exit if merged bridge_score is below this threshold",
+    )
+    mv.add_argument(
+        "--fail-on-intent-conflicts",
+        action="store_true",
+        help="Fail with non-zero exit if merged result contains any intent_conflicts",
+    )
+
     return parser
 
 
@@ -1368,7 +1641,11 @@ def main(argv: list[str] | None = None) -> int:
             write_proof=args.write_proof,
             candidate_count=args.candidates,
             with_tests=args.with_tests,
+            snapshot=args.snapshot,
+            snapshot_store=args.snapshot_store,
         )
+    if args.command == "snapshot-put":
+        return _snapshot_put(args.path, args.report, snapshot_store=args.snapshot_store)
     if args.command == "calibrate":
         return _calibrate(args.corpus_path)
     if args.command == "verify-proof":
@@ -1397,6 +1674,7 @@ def main(argv: list[str] | None = None) -> int:
             args.report,
             show_unchanged=args.show_unchanged,
             summary_only=args.summary_only,
+            with_verification_context=args.with_verification_context,
         )
     if args.command == "publish":
         return _publish(args.project_dir, args.report, registry_root=args.registry_root)
@@ -1462,6 +1740,19 @@ def main(argv: list[str] | None = None) -> int:
         return _intent_brief(args.path, args.report, args.write_output)
     if args.command == "proof-brief":
         return _proof_brief(args.path, args.report, args.write_output)
+    if args.command == "merge-verify":
+        return _merge_verify(
+            args.base_path,
+            args.left_path,
+            args.right_path,
+            args.report,
+            write_merged=args.write_merged,
+            write_merge_report_path=args.write_merge_report,
+            regression_top_n=args.regression_top_n,
+            regression_include_evidence=args.regression_include_evidence,
+            require_merged_bridge=args.require_merged_bridge,
+            fail_on_intent_conflicts=args.fail_on_intent_conflicts,
+        )
 
     parser.error("unknown command")
     return 2

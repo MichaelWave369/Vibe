@@ -1,0 +1,9 @@
+{
+  "error": "snapshot hash mismatch: requested `bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb`, observed `43fb6e69161b114818229306e4306185f6399da337cfa9c0da8a8c7da0a830f6`",
+  "error_type": "snapshot_hash_mismatch",
+  "input_mode": "snapshot",
+  "report_type": "verify",
+  "schema_version": "v1",
+  "snapshot_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "snapshot_store": "<SNAPSHOT_STORE>"
+}
