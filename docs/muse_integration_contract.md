@@ -54,6 +54,7 @@ Legacy `summary` + `changes` are retained for compatibility.
 
 Current shape:
 
+- `verification_requested` (boolean)
 - `available` (boolean)
 - `reason` (`null` when available, explanatory string when unavailable)
 - `old`/`new` summaries (`null` when unavailable)
@@ -74,6 +75,37 @@ Availability behavior:
 - `vibec diff --report json --with-verification-context` => context attempted; if successful, `available = true`
 - default (`vibec diff --report json` without flag) => `available = false` with explicit disabled reason
 - internal verification failures are surfaced as `available = false` with an explanatory reason
+
+## `vibec merge-verify <base> <left> <right>`
+
+Phase 2A adds a first real three-way merge + verify surface.
+
+Top-level JSON fields:
+
+- `schema_version` (`"v1"`)
+- `report_type` (`"merge_verify"`)
+- `base_spec`, `left_spec`, `right_spec`
+- `merge_status` (`merged`, `conflict`, `error`)
+- `merged_text` (only when merged)
+- `verification` (only when merged)
+- `conflicts` (structured list on conflict)
+- `error` (for parse/runtime failures)
+
+Conflict rows include:
+
+- `address`
+- `conflict_type`
+- `base_value`
+- `left_value`
+- `right_value`
+- `message`
+- `severity`
+
+Important contract semantics:
+
+- `merge_status = conflict` means structural/semantic merge compatibility could not be defended.
+- `merge_status = merged` + `verification.passed = false` means merge succeeded structurally, but preservation thresholds were not met.
+- A merge conflict is not the same as a merged-but-verification-failed result.
 
 ### `bridge_impact` semantics (Phase 1B)
 

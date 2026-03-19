@@ -87,6 +87,7 @@ Primary commands:
 - `vibec verify-proof <file.vibe>` — verification + proof artifact write.
 - `vibec inspect-proof <file.vibe.proof.json>` — inspect proof summary.
 - `vibec diff <old.vibe> <new.vibe>` — semantic intent diff.
+- `vibec merge-verify <base.vibe> <left.vibe> <right.vibe>` — conservative three-way merge + verification.
 - `vibec semver <old.vibe> <new.vibe>` — derive recommended semver bump.
 - `vibec negotiate <a.vibe> <b.vibe> ...` — deterministic contract negotiation.
 - `vibec init` / `manifest-check` / `build` — package lifecycle.

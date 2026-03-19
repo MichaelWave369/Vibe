@@ -78,6 +78,12 @@ from .refinement import (
 )
 from .report import render_report, render_report_json
 from .verification_flow import prepare_verification_input
+from .merge_verify import (
+    merge_verify,
+    maybe_write_merged,
+    render_merge_verify_human,
+    render_merge_verify_json,
+)
 from .synthesis import (
     generate_candidates,
     rank_candidate,
@@ -741,6 +747,7 @@ def _diff(
                 "obligations_satisfied": sum(1 for o in new_verify.obligations if o.status == "satisfied"),
             }
             verification_context = {
+                "verification_requested": True,
                 "available": True,
                 "reason": None,
                 "old": old_summary,
@@ -749,6 +756,7 @@ def _diff(
             }
         except Exception as exc:
             verification_context = {
+                "verification_requested": True,
                 "available": False,
                 "reason": f"verification_context_unavailable: {exc}",
                 "old": None,
@@ -1067,6 +1075,41 @@ def _stdlib_list(report: ReportMode, root: Path = Path("stdlib")) -> int:
     return 0
 
 
+def _merge_verify(
+    base_path: Path,
+    left_path: Path,
+    right_path: Path,
+    report: ReportMode,
+    write_merged: Path | None,
+) -> int:
+    result = merge_verify(
+        base_path.read_text(encoding="utf-8"),
+        left_path.read_text(encoding="utf-8"),
+        right_path.read_text(encoding="utf-8"),
+    )
+    merged_path = maybe_write_merged(write_merged, result)
+    if report == "json":
+        payload = render_merge_verify_json(
+            result,
+            base_spec=str(base_path),
+            left_spec=str(left_path),
+            right_spec=str(right_path),
+        )
+        print(payload)
+        if merged_path is not None:
+            print(f"merged_output: {merged_path}")
+    else:
+        print(render_merge_verify_human(result))
+        if merged_path is not None:
+            print(f"merged_output: {merged_path}")
+    if result.merge_status == "error":
+        return 1
+    if result.merge_status == "conflict":
+        return 1
+    assert result.verification is not None
+    return 0 if bool(result.verification.get("passed")) else 1
+
+
 def _interchange_from_text(input_path: Path, report: ReportMode, write_output: Path | None) -> int:
     try:
         source_text = input_path.read_text(encoding="utf-8")
@@ -1338,6 +1381,13 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--report", choices=["human", "json"], default="human")
     pb.add_argument("--write-output", type=Path, default=None, help="Optional JSON brief path")
 
+    mv = sub.add_parser("merge-verify", help="Three-way merge and verify Vibe specs")
+    mv.add_argument("base_path", type=Path)
+    mv.add_argument("left_path", type=Path)
+    mv.add_argument("right_path", type=Path)
+    mv.add_argument("--report", choices=["human", "json"], default="human")
+    mv.add_argument("--write-merged", type=Path, default=None, help="Write merged .vibe file on successful merge")
+
     return parser
 
 
@@ -1485,6 +1535,14 @@ def main(argv: list[str] | None = None) -> int:
         return _intent_brief(args.path, args.report, args.write_output)
     if args.command == "proof-brief":
         return _proof_brief(args.path, args.report, args.write_output)
+    if args.command == "merge-verify":
+        return _merge_verify(
+            args.base_path,
+            args.left_path,
+            args.right_path,
+            args.report,
+            write_merged=args.write_merged,
+        )
 
     parser.error("unknown command")
     return 2

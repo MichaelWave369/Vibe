@@ -660,6 +660,7 @@ def render_intent_diff_json(
         "verification_context": verification_context
         if verification_context is not None
         else {
+            "verification_requested": False,
             "available": False,
             "reason": "disabled (pass --with-verification-context to vibec diff)",
             "old": None,
