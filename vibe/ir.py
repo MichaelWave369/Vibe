@@ -138,6 +138,9 @@ class IRModule:
     agent_graph_issues: list[dict[str, object]] = field(default_factory=list)
     agent_boundary_summary: dict[str, object] = field(default_factory=dict)
     agent_boundary_issues: list[dict[str, object]] = field(default_factory=list)
+    delegation_tree: dict[str, object] = field(default_factory=dict)
+    delegation_summary: dict[str, object] = field(default_factory=dict)
+    delegation_issues: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -487,6 +490,18 @@ def ast_to_ir(program: Program) -> IR:
                 for o in program.orchestrations
             ],
         },
+        delegation_tree={
+            "edges": [
+                {
+                    "parent": d.parent,
+                    "child": d.child,
+                    "inherits": list(d.inherits),
+                    "max_depth": d.max_depth,
+                    "stop_when": d.stop_when,
+                }
+                for d in program.delegations
+            ]
+        },
     )
     ir = IR(module=module)
     from .semantic_types import annotate_semantic_types
@@ -552,6 +567,15 @@ def ast_to_ir(program: Program) -> IR:
         "critical_boundary_failures": boundary.summary.critical_boundary_failures,
         "aggregation_rule": boundary.summary.aggregation_rule,
         "propagation_notes": boundary.summary.propagation_notes,
+    }
+    from .delegation import annotate_delegation
+
+    delegation = annotate_delegation(ir)
+    ir.module.delegation_summary = {
+        "delegation_tree": delegation.summary.delegation_tree,
+        "inherited_contract_summary": delegation.summary.inherited_contract_summary,
+        "recursion_metadata": delegation.summary.recursion_metadata,
+        "propagation_notes": delegation.summary.propagation_notes,
     }
     validate_ir(ir)
     return ir
@@ -643,5 +667,8 @@ def serialize_ir(ir: IR) -> str:
         "agent_graph_issues": list(ir.module.agent_graph_issues),
         "agent_boundary_summary": dict(ir.module.agent_boundary_summary),
         "agent_boundary_issues": list(ir.module.agent_boundary_issues),
+        "delegation_tree": dict(ir.module.delegation_tree),
+        "delegation_summary": dict(ir.module.delegation_summary),
+        "delegation_issues": list(ir.module.delegation_issues),
     }
     return json.dumps(payload, indent=2, sort_keys=True)

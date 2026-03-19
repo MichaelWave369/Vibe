@@ -446,6 +446,24 @@ Vibe now propagates preservation checks across agent edges (`A -> B`) with expli
 
 This phase is static bridge propagation for compile-time integrity, not runtime monitoring.
 
+## AgentCeption: recursive delegation with proof inheritance (Phase 5.3)
+
+Vibe now supports static recursive delegation declarations:
+
+- `delegate Parent -> Child:` edges
+- inheritance policy (`inherits: [preserve, constraint, bridge]`)
+- optional recursion controls (`max_depth`, `stop_when`)
+
+Proof inheritance model in this phase:
+
+- child inherits parent preserve/constraint/bridge contracts by default
+- child may strengthen inherited contracts
+- child may not weaken critical inherited contracts (e.g. lower bridge thresholds, drop sovereignty guarantees)
+- recursive chains without explicit depth/stop reasoning surface delegation risks
+
+Delegation analysis is static and inspectable (IR/report/proof/diff/emitter metadata), and critical
+contract-weakening violations participate in compile blocking through preservation gating.
+
 ## Incremental compilation (Phase 1.4)
 
 Vibe now includes deterministic local incremental compilation primitives for `compile`:

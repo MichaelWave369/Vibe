@@ -25,6 +25,12 @@ from .agent_bridge import (
     annotate_agent_bridges,
 )
 from .equivalence import CorrespondenceEntry, analyze_intent_equivalence
+from .delegation import (
+    annotate_delegation,
+    delegation_issues_to_obligation_rows,
+    delegation_summary_payload,
+    issues_as_dicts as delegation_issues_as_dicts,
+)
 from .effects import (
     check_effect_issues,
     effect_issues_to_obligation_rows,
@@ -210,6 +216,9 @@ class VerificationResult:
     agent_boundary_summary: dict[str, object] = field(default_factory=dict)
     agent_boundary_issues: list[dict[str, object]] = field(default_factory=list)
     agent_boundary_obligations: list[dict[str, object]] = field(default_factory=list)
+    delegation_summary: dict[str, object] = field(default_factory=dict)
+    delegation_issues: list[dict[str, object]] = field(default_factory=list)
+    delegation_obligations: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -966,6 +975,28 @@ def _build_result(
         )
         for row in boundary_rows
     ]
+    delegation_result = annotate_delegation(ir)
+    delegation_issues = list(delegation_result.issues)
+    ir.module.delegation_summary = {
+        "delegation_tree": delegation_result.summary.delegation_tree,
+        "inherited_contract_summary": delegation_result.summary.inherited_contract_summary,
+        "recursion_metadata": delegation_result.summary.recursion_metadata,
+        "propagation_notes": delegation_result.summary.propagation_notes,
+    }
+    ir.module.delegation_issues = delegation_issues_as_dicts(delegation_issues)
+    delegation_rows = delegation_issues_to_obligation_rows(delegation_issues)
+    delegation_obligations = [
+        VerificationObligation(
+            obligation_id=str(row["obligation_id"]),
+            category=str(row["category"]),
+            description=str(row["description"]),
+            source_location=str(row["source_location"]) if row.get("source_location") is not None else None,
+            status=str(row["status"]),
+            evidence=str(row["evidence"]) if row.get("evidence") is not None else None,
+            critical=bool(row["critical"]),
+        )
+        for row in delegation_rows
+    ]
     all_obligations = (
         list(obligations)
         + semantic_obligations
@@ -974,6 +1005,7 @@ def _build_result(
         + inference_obligations
         + graph_obligations
         + boundary_obligations
+        + delegation_obligations
     )
 
     counts = _compute_obligation_counts(all_obligations)
@@ -1059,6 +1091,9 @@ def _build_result(
         agent_boundary_summary=boundary_summary_payload(ir),
         agent_boundary_issues=boundary_issues_as_dicts(boundary_issues),
         agent_boundary_obligations=boundary_rows,
+        delegation_summary=delegation_summary_payload(ir),
+        delegation_issues=delegation_issues_as_dicts(delegation_issues),
+        delegation_obligations=delegation_rows,
     )
 
 

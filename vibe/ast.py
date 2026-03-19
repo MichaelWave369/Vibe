@@ -115,6 +115,15 @@ class OrchestrateBlock:
 
 
 @dataclass(slots=True)
+class DelegationDecl:
+    parent: str
+    child: str
+    inherits: list[str] = field(default_factory=lambda: ["preserve", "constraint", "bridge"])
+    max_depth: int | None = None
+    stop_when: str | None = None
+
+
+@dataclass(slots=True)
 class Program:
     intent: IntentBlock
     preserve: list[PreserveRule] = field(default_factory=list)
@@ -132,3 +141,4 @@ class Program:
     interfaces: list[str] = field(default_factory=list)
     agents: list[AgentGraphAgent] = field(default_factory=list)
     orchestrations: list[OrchestrateBlock] = field(default_factory=list)
+    delegations: list[DelegationDecl] = field(default_factory=list)

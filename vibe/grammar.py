@@ -15,7 +15,7 @@ type            <- 'type' WS IDENT_PATH NEWLINE
 enum            <- 'enum' WS IDENT_PATH NEWLINE
 interface       <- 'interface' WS IDENT_PATH NEWLINE
 
-core_block      <- intent_block / preserve_block / constraint_block / bridge_block / agent_block / orchestrate_block / emit_stmt
+core_block      <- intent_block / preserve_block / constraint_block / bridge_block / agent_block / orchestrate_block / delegate_block / emit_stmt
 intent_block    <- 'intent' WS IDENT ':' NEWLINE INDENT intent_item+ DEDENT
 intent_item     <- goal_item / io_block
 io_block        <- ('inputs' / 'outputs') ':' NEWLINE INDENT field_decl+ DEDENT
@@ -36,6 +36,11 @@ orchestrate_block <- 'orchestrate' WS IDENT ':' NEWLINE INDENT orchestrate_item+
 orchestrate_item <- edge_line / on_error_line
 edge_line       <- IDENT WS? '->' WS? IDENT NEWLINE
 on_error_line   <- 'on_error:' WS? IDENT_PATH NEWLINE
+delegate_block  <- 'delegate' WS IDENT WS? '->' WS? IDENT ':' NEWLINE INDENT delegate_item+ DEDENT
+delegate_item   <- delegate_inherits / delegate_max_depth / delegate_stop_when
+delegate_inherits <- 'inherits:' WS? TYPE NEWLINE
+delegate_max_depth <- 'max_depth:' WS? NUMBER NEWLINE
+delegate_stop_when <- 'stop_when:' WS? TYPE NEWLINE
 emit_stmt       <- 'emit' WS IDENT NEWLINE?
 
 experimental_block <- tesla_block / agentora_block / agentception_block

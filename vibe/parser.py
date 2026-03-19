@@ -12,6 +12,7 @@ from .ast import (
     AgentoraBlock,
     BridgeSetting,
     Field,
+    DelegationDecl,
     OrchestrateBlock,
     OrchestrationEdge,
     IntentBlock,
@@ -265,6 +266,7 @@ def parse_source(source: str) -> Program:
     bridge: list[BridgeSetting] = []
     agents: list[AgentGraphAgent] = []
     orchestrations: list[OrchestrateBlock] = []
+    delegations: list[DelegationDecl] = []
     emit_target = "python"
 
     while i < len(tokens):
@@ -395,6 +397,35 @@ def parse_source(source: str) -> Program:
             orchestrations.append(OrchestrateBlock(name=orch_name, edges=edges, on_error=on_error))
             continue
 
+        if tk.text.startswith("delegate ") and tk.text.endswith(":"):
+            head = tk.text[len("delegate ") : -1].strip()
+            if "->" not in head:
+                raise ParseError("Malformed delegate header; expected `delegate Parent -> Child:`", tk.line, 1)
+            parent, child = [x.strip() for x in head.split("->", 1)]
+            if not parent or not child:
+                raise ParseError("Malformed delegate header; both parent and child required", tk.line, 1)
+            i += 1
+            inherits: list[str] = ["preserve", "constraint", "bridge"]
+            max_depth: int | None = None
+            stop_when: str | None = None
+            while i < len(tokens) and tokens[i].indent > 0:
+                cur = tokens[i]
+                if cur.indent != 2:
+                    raise ParseError("Malformed delegate block indentation", cur.line, cur.indent + 1)
+                if cur.text.startswith("inherits:"):
+                    inherits = _parse_list(cur.text.split(":", 1)[1].strip())
+                elif cur.text.startswith("max_depth:"):
+                    max_depth = int(float(cur.text.split(":", 1)[1].strip()))
+                elif cur.text.startswith("stop_when:"):
+                    stop_when = cur.text.split(":", 1)[1].strip()
+                else:
+                    raise ParseError("Malformed delegate block item", cur.line, cur.indent + 1)
+                i += 1
+            delegations.append(
+                DelegationDecl(parent=parent, child=child, inherits=[x.strip() for x in inherits], max_depth=max_depth, stop_when=stop_when)
+            )
+            continue
+
         if tk.text.startswith("emit "):
             emit_target = tk.text.split(maxsplit=1)[1].strip()
             i += 1
@@ -419,6 +450,7 @@ def parse_source(source: str) -> Program:
         interfaces=interfaces,
         agents=agents,
         orchestrations=orchestrations,
+        delegations=delegations,
     )
 
     if tesla_raw is not None:

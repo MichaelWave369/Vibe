@@ -174,6 +174,14 @@ def render_report(
             f"  agent_boundary_obligations: {result.agent_boundary_obligations}",
         ]
     )
+    lines.extend(
+        [
+            "delegation:",
+            f"  delegation_summary: {result.delegation_summary}",
+            f"  delegation_issues: {result.delegation_issues}",
+            f"  delegation_obligations: {result.delegation_obligations}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

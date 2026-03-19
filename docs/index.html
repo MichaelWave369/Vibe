@@ -219,6 +219,11 @@ emit python</code></pre>
           deterministic compatibility checks + an edge bridge score, with a propagated pipeline score
           (<code>product(edge_scores)</code>) and boundary-critical failures that can block compile.
         </p>
+        <p>
+          Phase 5.3 adds AgentCeption delegation analysis: native <code>delegate Parent -&gt; Child</code> declarations,
+          static proof inheritance for preserve/constraint/bridge contracts, contract-weakening detection,
+          and recursion risk surfacing when delegation chains lack explicit depth/stop reasoning.
+        </p>
         <pre><code>=== Vibe Bridge Report ===
 eps_pre: 0.9000
 eps_post: 0.9300

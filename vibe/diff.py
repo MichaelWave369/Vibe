@@ -313,6 +313,32 @@ def compute_intent_diff(old_ir: IR, new_ir: IR) -> IntentDiffResult:
                 "agent boundary bridge summary changed",
             ),
         )
+    if old_ir.module.delegation_tree != new_ir.module.delegation_tree:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "delegation",
+                "declared_delegation",
+                "modified",
+                "unknown",
+                old_ir.module.delegation_tree,
+                new_ir.module.delegation_tree,
+                "delegation declarations changed",
+            ),
+        )
+    if old_ir.module.delegation_summary != new_ir.module.delegation_summary:
+        _append(
+            entries,
+            IntentDiffEntry(
+                "delegation",
+                "delegation_summary",
+                "modified",
+                "unknown",
+                old_ir.module.delegation_summary,
+                new_ir.module.delegation_summary,
+                "delegation summary changed",
+            ),
+        )
 
     summary = {
         "total_changes": len(entries),

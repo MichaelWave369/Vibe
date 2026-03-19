@@ -37,6 +37,7 @@ REQUIRED_FIELDS = {
     "inference_types",
     "agent_graph",
     "agent_boundary_bridges",
+    "delegation",
     "notes",
 }
 
@@ -171,6 +172,11 @@ def build_proof_artifact(
             "issues": result.agent_boundary_issues,
             "derived_obligations": result.agent_boundary_obligations,
         },
+        "delegation": {
+            "summary": result.delegation_summary,
+            "issues": result.delegation_issues,
+            "derived_obligations": result.delegation_obligations,
+        },
         "notes": notes or [],
     }
     return artifact
@@ -212,6 +218,7 @@ def render_proof_summary(payload: dict[str, object]) -> str:
     inference_meta = payload["inference_types"]
     agent_graph_meta = payload["agent_graph"]
     boundary_meta = payload["agent_boundary_bridges"]
+    delegation_meta = payload["delegation"]
     return "\n".join(
         [
             "=== Vibe Proof Summary ===",
@@ -238,5 +245,6 @@ def render_proof_summary(payload: dict[str, object]) -> str:
             f"inference_issue_count: {len(inference_meta['issues'])}",
             f"agent_graph_issue_count: {len(agent_graph_meta['issues'])}",
             f"agent_boundary_issue_count: {len(boundary_meta['issues'])}",
+            f"delegation_issue_count: {len(delegation_meta['issues'])}",
         ]
     )
