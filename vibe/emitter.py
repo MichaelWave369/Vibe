@@ -5,9 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .generator_julia import generate_julia
 from .generator_python import generate_python
+from .generator_systemverilog import generate_systemverilog
 from .generator_typescript import generate_typescript
+from .generator_vhdl import generate_vhdl
 from .ir import IR
+from .target_plugins import get_target_plugin
 
 
 @dataclass(frozen=True)
@@ -35,16 +39,64 @@ class TypeScriptEmitter(EmitterBackend):
         return generate_typescript(ir)
 
 
+class JuliaEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="julia", extension=".jl")
+
+    def emit(self, ir: IR) -> str:
+        return generate_julia(ir)
+
+
+class VHDLEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="vhdl", extension=".vhd")
+
+    def emit(self, ir: IR) -> str:
+        return generate_vhdl(ir)
+
+
+class SystemVerilogEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="systemverilog", extension=".sv")
+
+    def emit(self, ir: IR) -> str:
+        return generate_systemverilog(ir)
+
+
+class StubEmitter(EmitterBackend):
+    def __init__(self, target: str, extension: str) -> None:
+        super().__init__(target=target, extension=extension)
+
+    def emit(self, ir: IR) -> str:
+        return (
+            f"# Vibe scaffold emitter for target `{self.target}`\\n"
+            f"# domain_profile: {ir.domain_profile}\\n"
+            "# This target is a Phase 7A scaffold and is not a full backend yet.\\n"
+            "artifact = {\n"
+            f"  \"intent\": \"{ir.intent_name}\",\n"
+            f"  \"emit_target\": \"{self.target}\",\n"
+            f"  \"domain_profile\": \"{ir.domain_profile}\",\n"
+            "  \"scaffold\": true\n"
+            "}\n"
+        )
+
+
 _BACKENDS = {
     "python": PythonEmitter(),
     "typescript": TypeScriptEmitter(),
+    "julia": JuliaEmitter(),
+    "vhdl": VHDLEmitter(),
+    "systemverilog": SystemVerilogEmitter(),
 }
 
 
 def resolve_backend(target: str) -> EmitterBackend:
     normalized = target.strip().lower()
     if normalized not in _BACKENDS:
-        raise ValueError(f"Unsupported emit target: {target}")
+        plugin = get_target_plugin(normalized)
+        if plugin is None:
+            raise ValueError(f"Unsupported emit target: {target}")
+        return StubEmitter(target=plugin.target, extension=plugin.extension)
     return _BACKENDS[normalized]
 
 

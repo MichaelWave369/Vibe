@@ -194,6 +194,32 @@ def render_report(
             f"  package_context: {result.package_context}",
         ]
     )
+    lines.extend(
+        [
+            "domain:",
+            f"  domain_profile: {result.domain_profile}",
+            f"  domain_summary: {result.domain_summary}",
+            f"  domain_issues: {result.domain_issues}",
+            f"  domain_target_metadata: {result.domain_target_metadata}",
+        ]
+    )
+    lines.extend(
+        [
+            "hardware:",
+            f"  hardware_summary: {result.hardware_summary}",
+            f"  hardware_issues: {result.hardware_issues}",
+            f"  hardware_target_metadata: {result.hardware_target_metadata}",
+        ]
+    )
+    lines.extend(
+        [
+            "scientific simulation:",
+            f"  scientific_simulation_summary: {result.scientific_simulation_summary}",
+            f"  scientific_simulation_issues: {result.scientific_simulation_issues}",
+            f"  scientific_simulation_obligations: {result.scientific_simulation_obligations}",
+            f"  scientific_target_metadata: {result.scientific_target_metadata}",
+        ]
+    )
     if result.mapping_notes:
         lines.append(f"  notes: {result.mapping_notes}")
     if result.candidate_summaries:

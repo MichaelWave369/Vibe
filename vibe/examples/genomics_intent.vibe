@@ -1,0 +1,18 @@
+domain genomics
+
+intent VariantPipeline:
+  goal: "Preserve variant-calling lineage and quality thresholds"
+  inputs:
+    sample_id: string
+  outputs:
+    variant_set: string
+
+preserve:
+  coverage_depth > 30
+  quality_score > 0.95
+
+constraint:
+  reference_build_grch38
+  pipeline_stage_traceable
+
+emit nextflow

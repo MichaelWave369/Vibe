@@ -142,6 +142,19 @@ class IRModule:
     delegation_summary: dict[str, object] = field(default_factory=dict)
     delegation_issues: list[dict[str, object]] = field(default_factory=list)
     runtime_monitor: dict[str, object] = field(default_factory=dict)
+    active_domain_profile: str = "general"
+    domain_summary: dict[str, object] = field(default_factory=dict)
+    domain_issues: list[dict[str, object]] = field(default_factory=list)
+    domain_obligations: list[dict[str, object]] = field(default_factory=list)
+    domain_target_metadata: dict[str, object] = field(default_factory=dict)
+    hardware_summary: dict[str, object] = field(default_factory=dict)
+    hardware_issues: list[dict[str, object]] = field(default_factory=list)
+    hardware_obligations: list[dict[str, object]] = field(default_factory=list)
+    hardware_target_metadata: dict[str, object] = field(default_factory=dict)
+    scientific_simulation_summary: dict[str, object] = field(default_factory=dict)
+    scientific_simulation_issues: list[dict[str, object]] = field(default_factory=list)
+    scientific_simulation_obligations: list[dict[str, object]] = field(default_factory=list)
+    scientific_target_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -324,6 +337,10 @@ class IR:
     def agent_graph(self) -> dict[str, object]:
         return dict(self.module.agent_graph)
 
+    @property
+    def domain_profile(self) -> str:
+        return str(self.module.active_domain_profile)
+
     def _value(self, ref: str) -> SSAValue:
         return self.module.values[ref]
 
@@ -503,6 +520,7 @@ def ast_to_ir(program: Program) -> IR:
                 for d in program.delegations
             ]
         },
+        active_domain_profile=program.domain_profile or "general",
     )
     ir = IR(module=module)
     from .semantic_types import annotate_semantic_types
@@ -581,6 +599,9 @@ def ast_to_ir(program: Program) -> IR:
     from .runtime_monitor import monitor_config_payload
 
     ir.module.runtime_monitor = monitor_config_payload(ir)
+    from .domain_profiles import apply_domain_profile
+
+    apply_domain_profile(ir, program.domain_profile)
     validate_ir(ir)
     return ir
 
