@@ -1,0 +1,23 @@
+intent CsvApiTransformer:
+  goal: "Transform CSV records into API-safe payloads."
+  inputs:
+    record_id: string
+    amount: number
+    country: string
+  outputs:
+    payload_json: string
+
+preserve:
+  readability = high
+  testability = high
+
+constraint:
+  deterministic field mapping
+  no hardcoded secrets
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+emit python
