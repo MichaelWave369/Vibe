@@ -15,7 +15,7 @@ type            <- 'type' WS IDENT_PATH NEWLINE
 enum            <- 'enum' WS IDENT_PATH NEWLINE
 interface       <- 'interface' WS IDENT_PATH NEWLINE
 
-core_block      <- intent_block / preserve_block / constraint_block / bridge_block / agent_block / orchestrate_block / delegate_block / emit_stmt
+core_block      <- intent_block / preserve_block / constraint_block / bridge_block / sigil_block / sigil_temporal_block / agent_block / orchestrate_block / delegate_block / emit_stmt
 intent_block    <- 'intent' WS IDENT ':' NEWLINE INDENT intent_item+ DEDENT
 intent_item     <- goal_item / io_block
 io_block        <- ('inputs' / 'outputs') ':' NEWLINE INDENT field_decl+ DEDENT
@@ -25,6 +25,11 @@ goal_item       <- 'goal:' WS? STRING NEWLINE
 preserve_block  <- 'preserve:' NEWLINE INDENT preserve_rule+ DEDENT
 constraint_block<- 'constraint:' NEWLINE INDENT constraint_line+ DEDENT
 bridge_block    <- 'bridge:' NEWLINE INDENT bridge_setting+ DEDENT
+sigil_block     <- 'sigil:' NEWLINE INDENT sigil_decl+ DEDENT
+sigil_decl      <- IDENT ':' WS? SIGIL_EXPR NEWLINE
+sigil_temporal_block <- 'sigil_temporal:' NEWLINE INDENT sigil_temporal_decl+ DEDENT
+sigil_temporal_decl <- IDENT ':' NEWLINE INDENT sigil_step+ DEDENT
+sigil_step      <- IDENT ':' WS? SIGIL_EXPR NEWLINE
 agent_block     <- 'agent' WS IDENT ':' NEWLINE INDENT agent_item+ DEDENT
 agent_item      <- role_item / receives_item / emits_item / agent_preserve_item / agent_constraint_item
 role_item       <- 'role:' WS? STRING NEWLINE

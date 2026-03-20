@@ -18,6 +18,9 @@ from .ast import (
     IntentBlock,
     PreserveRule,
     Program,
+    SigilExpression,
+    SigilTemporalSequence,
+    SigilTemporalStep,
     TeslaArcTower,
     TeslaBreathCycle,
     TeslaLifeRay,
@@ -41,6 +44,9 @@ BARE_PRESERVE_RULES = {
     "provenance retained",
     "stable normalization method",
 }
+PRIMARY_SIGIL_GENERATORS = {"Φ", "∴", "☉", "∇", "Ω"}
+SIGIL_OPERATORS = {"⟨", "⟩", "⟡", "⟐", "⟢", "⟣"}
+SIGIL_STATES = {"◌", "◉", "◎", "⊙", "⊚"}
 
 
 class ParseError(ValueError):
@@ -238,6 +244,59 @@ def _parse_agentception(inner: str) -> AgentceptionBlock:
     )
 
 
+def _strip_sigil_term(raw: str) -> str:
+    out = raw.strip()
+    if out.startswith("⟨") and out.endswith("⟩"):
+        return out[1:-1].strip()
+    return out
+
+
+def _validate_sigil_term(term: str, line_no: int) -> None:
+    if not term:
+        raise ParseError("Sigil expression terms must be non-empty", line_no, 1)
+    if " " in term and not any(ch in SIGIL_STATES for ch in term):
+        raise ParseError(f"Sigil term `{term}` must be atomic (no whitespace)", line_no, 1)
+
+
+def _parse_sigil_expr(name: str, expr: str, line_no: int) -> SigilExpression:
+    basic = re.fullmatch(r"⟨([^⟨⟩]+)⟩⟢⟨([^⟨⟩]+)⟩⟢⟨([^⟨⟩]+)⟩", expr)
+    if basic:
+        source, operation, target = (_strip_sigil_term(v) for v in basic.groups())
+        _validate_sigil_term(source, line_no)
+        _validate_sigil_term(operation, line_no)
+        _validate_sigil_term(target, line_no)
+        return SigilExpression(name=name, form="basic", source=source, operation=operation, target=target)
+
+    coupling = re.fullmatch(r"⟨([^⟨⟩]+)⟩⟡⟨([^⟨⟩]+)⟩⟢(.+)", expr)
+    if coupling:
+        source, coupled, target_raw = coupling.groups()
+        source, coupled, target = _strip_sigil_term(source), _strip_sigil_term(coupled), _strip_sigil_term(target_raw)
+        for term in (source, coupled, target):
+            _validate_sigil_term(term, line_no)
+        return SigilExpression(
+            name=name,
+            form="coupling",
+            source=source,
+            operation="⟡",
+            target=target,
+            coupled_with=coupled,
+        )
+
+    recursive = re.fullmatch(r"⟨([^⟨⟩]+)⟩⟣([^⟢]+)⟢(.+)", expr)
+    if recursive:
+        source, operation, target_raw = recursive.groups()
+        source, operation, target = _strip_sigil_term(source), _strip_sigil_term(operation), _strip_sigil_term(target_raw)
+        for term in (source, operation, target):
+            _validate_sigil_term(term, line_no)
+        return SigilExpression(name=name, form="recursive", source=source, operation=operation, target=target)
+
+    raise ParseError(
+        "Invalid sigil expression. Expected basic `⟨s⟩⟢⟨op⟩⟢⟨t⟩`, coupling `⟨a⟩⟡⟨b⟩⟢target`, or recursive `⟨a⟩⟣op⟢target`",
+        line_no,
+        1,
+    )
+
+
 def parse_source(source: str) -> Program:
     """Parse raw source text into an AST Program using the formal grammar."""
 
@@ -286,6 +345,8 @@ def parse_source(source: str) -> Program:
     agents: list[AgentGraphAgent] = []
     orchestrations: list[OrchestrateBlock] = []
     delegations: list[DelegationDecl] = []
+    sigils: list[SigilExpression] = []
+    sigil_sequences: list[SigilTemporalSequence] = []
     emit_target = "python"
 
     while i < len(tokens):
@@ -352,6 +413,43 @@ def parse_source(source: str) -> Program:
                 key, value = [x.strip() for x in cur.text.split("=", 1)]
                 bridge.append(BridgeSetting(key=key, value=value))
                 i += 1
+            continue
+        if tk.text == "sigil:":
+            i += 1
+            while i < len(tokens) and tokens[i].indent > 0:
+                cur = tokens[i]
+                if cur.indent != 2 or ":" not in cur.text:
+                    raise ParseError("Malformed sigil declaration; expected `name: expression`", cur.line, cur.indent + 1)
+                name, expr = [x.strip() for x in cur.text.split(":", 1)]
+                if not name:
+                    raise ParseError("Sigil declaration requires a name", cur.line, 1)
+                sigils.append(_parse_sigil_expr(name, expr, cur.line))
+                i += 1
+            continue
+
+        if tk.text == "sigil_temporal:":
+            i += 1
+            while i < len(tokens) and tokens[i].indent > 0:
+                head = tokens[i]
+                if head.indent != 2 or not head.text.endswith(":"):
+                    raise ParseError(
+                        "Malformed sigil_temporal sequence header; expected `sequence_name:`",
+                        head.line,
+                        head.indent + 1,
+                    )
+                seq_name = head.text[:-1].strip()
+                i += 1
+                steps: list[SigilTemporalStep] = []
+                while i < len(tokens) and tokens[i].indent > 2:
+                    step = tokens[i]
+                    if step.indent != 4 or ":" not in step.text:
+                        raise ParseError("Malformed sigil temporal step; expected `step: expression`", step.line, step.indent + 1)
+                    step_name, expr = [x.strip() for x in step.text.split(":", 1)]
+                    steps.append(SigilTemporalStep(name=step_name, expression=_parse_sigil_expr(step_name, expr, step.line)))
+                    i += 1
+                if not steps:
+                    raise ParseError("sigil_temporal sequence requires at least one step", head.line, 1)
+                sigil_sequences.append(SigilTemporalSequence(name=seq_name, steps=steps))
             continue
 
         if tk.text.startswith("agent ") and tk.text.endswith(":"):
@@ -471,6 +569,8 @@ def parse_source(source: str) -> Program:
         orchestrations=orchestrations,
         delegations=delegations,
         domain_profile=domain_profile,
+        sigils=sigils,
+        sigil_sequences=sigil_sequences,
     )
 
     if tesla_raw is not None:

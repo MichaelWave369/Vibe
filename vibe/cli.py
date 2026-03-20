@@ -734,6 +734,77 @@ def _inspect_proof(path: Path) -> int:
     return 0
 
 
+def _sigil_validate(path: Path, report: ReportMode) -> int:
+    try:
+        source = path.read_text(encoding="utf-8")
+        ir = ast_to_ir(parse_source(source))
+    except Exception as exc:
+        if report == "json":
+            import json
+
+            print(json.dumps({"ok": False, "error": str(exc)}, indent=2, sort_keys=True))
+        else:
+            print(f"sigil-validate failed: {exc}")
+        return 1
+    summary = dict(ir.module.sigil_summary)
+    ok = bool(summary.get("syntax_valid", True)) and not any(
+        not bool(summary.get(k, True))
+        for k in (
+            "structure_composable",
+            "state_transition_allowed",
+            "epsilon_nonzero",
+            "temporal_sequence_coherent",
+            "bridge_threshold_passed",
+        )
+    )
+    if report == "json":
+        import json
+
+        print(json.dumps({"ok": ok, "summary": summary, "issues": list(ir.module.sigil_issues)}, indent=2, sort_keys=True))
+    else:
+        print("=== Vibe Sigil Validate ===")
+        print(f"path: {path}")
+        print(f"ok: {ok}")
+        print(f"summary: {summary}")
+        print(f"issues: {ir.module.sigil_issues}")
+    return 0 if ok else 1
+
+
+def _sigil_inspect(path: Path, report: ReportMode) -> int:
+    try:
+        source = path.read_text(encoding="utf-8")
+        ir = ast_to_ir(parse_source(source))
+    except Exception as exc:
+        if report == "json":
+            import json
+
+            print(json.dumps({"error": str(exc)}, indent=2, sort_keys=True))
+        else:
+            print(f"sigil-inspect failed: {exc}")
+        return 1
+    if report == "json":
+        import json
+
+        print(
+            json.dumps(
+                {
+                    "sigil_graph": ir.module.sigil_graph,
+                    "sigil_summary": ir.module.sigil_summary,
+                    "sigil_issues": ir.module.sigil_issues,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    else:
+        print("=== Vibe Sigil Inspect ===")
+        print(f"path: {path}")
+        print(f"sigil_graph: {ir.module.sigil_graph}")
+        print(f"sigil_summary: {ir.module.sigil_summary}")
+        print(f"sigil_issues: {ir.module.sigil_issues}")
+    return 0
+
+
 def _monitor_eval(proof_path: Path, events_path: Path, report: ReportMode, show_events: bool = False) -> int:
     try:
         proof = load_proof_artifact(proof_path)
@@ -1603,6 +1674,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fail with non-zero exit if merged result contains any intent_conflicts",
     )
+    sg = sub.add_parser("sigil-validate", help="Validate sigil notation obligations in a .vibe file")
+    sg.add_argument("path", type=Path)
+    sg.add_argument("--report", choices=["human", "json"], default="human")
+    si = sub.add_parser("sigil-inspect", help="Inspect lowered canonical SigilGraph IR for a .vibe file")
+    si.add_argument("path", type=Path)
+    si.add_argument("--report", choices=["human", "json"], default="human")
 
     return parser
 
@@ -1674,6 +1751,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     if args.command == "inspect-proof":
         return _inspect_proof(args.path)
+    if args.command == "sigil-validate":
+        return _sigil_validate(args.path, args.report)
+    if args.command == "sigil-inspect":
+        return _sigil_inspect(args.path, args.report)
     if args.command in {"monitor-eval", "runtime-check"}:
         return _monitor_eval(args.proof_path, args.events_path, args.report, show_events=args.show_events)
     if args.command == "init":
