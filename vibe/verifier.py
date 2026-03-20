@@ -254,6 +254,9 @@ class VerificationResult:
     genomics_target_metadata: dict[str, object] = field(default_factory=dict)
     metadata_privacy_summary: dict[str, object] = field(default_factory=dict)
     workflow_provenance_metadata: dict[str, object] = field(default_factory=dict)
+    sigil_summary: dict[str, object] = field(default_factory=dict)
+    sigil_issues: list[dict[str, object]] = field(default_factory=list)
+    sigil_obligations: list[dict[str, object]] = field(default_factory=list)
     self_hosting_enabled: bool = False
     compiler_spec_path: str | None = None
     self_bridge_score: float | None = None
@@ -414,6 +417,19 @@ class HeuristicObligationBackend:
             elif kind == "delegation_not_enabled":
                 status = "not_applicable"
                 evidence = "agentception disabled"
+            elif kind.startswith("sigil_"):
+                evidence_map = {
+                    "sigil_syntax_valid": "syntax_valid",
+                    "sigil_structure_composable": "structure_composable",
+                    "sigil_state_transition_allowed": "state_transition_allowed",
+                    "sigil_epsilon_nonzero": "epsilon_nonzero",
+                    "sigil_temporal_sequence_coherent": "temporal_sequence_coherent",
+                    "sigil_bridge_threshold_passed": "bridge_threshold_passed",
+                }
+                key = evidence_map.get(kind, "")
+                observed = bool(context.observed_bools.get(f"sigil.{key}", False))
+                status = "satisfied" if observed else "violated"
+                evidence = f"{key}={observed}"
 
             evaluated.append(
                 VerificationObligation(
@@ -546,6 +562,24 @@ class SMTObligationBackend:
                 status = "not_applicable"
                 evidence = "not applicable in current program state"
                 solver_evaluated += 1
+            elif kind.startswith("sigil_"):
+                evidence_map = {
+                    "sigil_syntax_valid": "sigil.syntax_valid",
+                    "sigil_structure_composable": "sigil.structure_composable",
+                    "sigil_state_transition_allowed": "sigil.state_transition_allowed",
+                    "sigil_epsilon_nonzero": "sigil.epsilon_nonzero",
+                    "sigil_temporal_sequence_coherent": "sigil.temporal_sequence_coherent",
+                    "sigil_bridge_threshold_passed": "sigil.bridge_threshold_passed",
+                }
+                evidence_key = evidence_map.get(kind, "")
+                obs = context.observed_bools.get(evidence_key)
+                if obs is None:
+                    deferred += 1
+                    evidence = f"deferred: no observed boolean for `{evidence_key}`"
+                else:
+                    status = "satisfied" if obs else "violated"
+                    evidence = f"solver-evaluated: {evidence_key}={obs}"
+                    solver_evaluated += 1
             else:
                 deferred += 1
 
@@ -887,6 +921,29 @@ def generate_normalized_obligations(ir: IR) -> list[NormalizedObligation]:
             )
         )
 
+    if int(ir.module.sigil_summary.get("sigil_count", 0)) > 0 or int(ir.module.sigil_summary.get("temporal_sequence_count", 0)) > 0:
+        sigil_requirements = [
+            ("sigil.syntax.valid", "sigil syntax is valid", "sigil_syntax_valid"),
+            ("sigil.structure.composable", "sigil structure is composable", "sigil_structure_composable"),
+            ("sigil.state.transition.allowed", "sigil state transitions are allowed", "sigil_state_transition_allowed"),
+            ("sigil.epsilon.nonzero", "sigil epsilon surface is non-zero", "sigil_epsilon_nonzero"),
+            ("sigil.temporal.sequence.coherent", "sigil temporal sequence is coherent", "sigil_temporal_sequence_coherent"),
+            ("sigil.bridge.threshold.passed", "sigil bridge threshold is passed", "sigil_bridge_threshold_passed"),
+        ]
+        for obligation_id, description, kind in sigil_requirements:
+            obligations.append(
+                NormalizedObligation(
+                    obligation_id=obligation_id,
+                    category="sigil",
+                    description=description,
+                    source_location=None,
+                    subject_ref="sigil.graph",
+                    expected_predicate={"kind": kind},
+                    severity="error",
+                    critical=True,
+                )
+            )
+
     return obligations
 
 
@@ -1126,6 +1183,76 @@ def _build_result(
         )
         for row in domain_obligation_rows
     ]
+    sigil_rows = []
+    if int(ir.module.sigil_summary.get("sigil_count", 0)) > 0 or int(ir.module.sigil_summary.get("temporal_sequence_count", 0)) > 0:
+        sigil_rows = [
+            {
+                "obligation_id": "sigil.syntax.valid",
+                "category": "sigil",
+                "description": "sigil syntax is valid",
+                "source_location": None,
+                "status": "satisfied" if bool(ir.module.sigil_summary.get("syntax_valid", False)) else "violated",
+                "evidence": f"syntax_valid={bool(ir.module.sigil_summary.get('syntax_valid', False))}",
+                "critical": True,
+            },
+            {
+                "obligation_id": "sigil.structure.composable",
+                "category": "sigil",
+                "description": "sigil structure is composable",
+                "source_location": None,
+                "status": "satisfied" if bool(ir.module.sigil_summary.get("structure_composable", False)) else "violated",
+                "evidence": f"structure_composable={bool(ir.module.sigil_summary.get('structure_composable', False))}",
+                "critical": True,
+            },
+            {
+                "obligation_id": "sigil.state.transition.allowed",
+                "category": "sigil",
+                "description": "sigil state transitions are allowed",
+                "source_location": None,
+                "status": "satisfied" if bool(ir.module.sigil_summary.get("state_transition_allowed", False)) else "violated",
+                "evidence": f"state_transition_allowed={bool(ir.module.sigil_summary.get('state_transition_allowed', False))}",
+                "critical": True,
+            },
+            {
+                "obligation_id": "sigil.epsilon.nonzero",
+                "category": "sigil",
+                "description": "sigil epsilon surface is non-zero",
+                "source_location": None,
+                "status": "satisfied" if bool(ir.module.sigil_summary.get("epsilon_nonzero", False)) else "violated",
+                "evidence": f"epsilon_nonzero={bool(ir.module.sigil_summary.get('epsilon_nonzero', False))}",
+                "critical": True,
+            },
+            {
+                "obligation_id": "sigil.temporal.sequence.coherent",
+                "category": "sigil",
+                "description": "sigil temporal sequence is coherent",
+                "source_location": None,
+                "status": "satisfied" if bool(ir.module.sigil_summary.get("temporal_sequence_coherent", False)) else "violated",
+                "evidence": f"temporal_sequence_coherent={bool(ir.module.sigil_summary.get('temporal_sequence_coherent', False))}",
+                "critical": True,
+            },
+            {
+                "obligation_id": "sigil.bridge.threshold.passed",
+                "category": "sigil",
+                "description": "sigil bridge threshold is passed",
+                "source_location": None,
+                "status": "satisfied" if bool(ir.module.sigil_summary.get("bridge_threshold_passed", False)) else "violated",
+                "evidence": f"bridge_threshold_passed={bool(ir.module.sigil_summary.get('bridge_threshold_passed', False))}",
+                "critical": True,
+            },
+        ]
+    sigil_obligations = [
+        VerificationObligation(
+            obligation_id=str(row["obligation_id"]),
+            category="sigil",
+            description=str(row["description"]),
+            source_location=None,
+            status=str(row["status"]),
+            evidence=str(row["evidence"]),
+            critical=True,
+        )
+        for row in sigil_rows
+    ]
     all_obligations = (
         list(obligations)
         + list(external_obligations or [])
@@ -1137,6 +1264,7 @@ def _build_result(
         + boundary_obligations
         + delegation_obligations
         + domain_obligations
+        + sigil_obligations
     )
 
     counts = _compute_obligation_counts(all_obligations)
@@ -1253,6 +1381,9 @@ def _build_result(
         genomics_target_metadata=dict(ir.module.genomics_target_metadata),
         metadata_privacy_summary=dict(ir.module.metadata_privacy_summary),
         workflow_provenance_metadata=dict(ir.module.workflow_provenance_metadata),
+        sigil_summary=dict(ir.module.sigil_summary),
+        sigil_issues=list(ir.module.sigil_issues),
+        sigil_obligations=sigil_rows,
         external_obligation_providers=list(external_provider_executions or []),
     )
 
@@ -1279,6 +1410,17 @@ def _build_observed_facts(ir: IR, metrics: _MetricSnapshot, generated_code: str)
         "inherit.preserve": bool(ir.agentception_config.get("inherit_preserve", False)),
         "preserve.epsilon": metrics.epsilon_post > metrics.epsilon_floor,
     }
+    for key in (
+        "syntax_valid",
+        "structure_composable",
+        "state_transition_allowed",
+        "epsilon_nonzero",
+        "temporal_sequence_coherent",
+        "bridge_threshold_passed",
+    ):
+        val = bool(ir.module.sigil_summary.get(key, False))
+        bool_facts[f"sigil.{key}"] = val
+        bool_facts[f"sigil.{key.replace('_', '.')}"] = val
     symbol_facts: dict[str, str] = {
         "verdict": metrics.verdict,
         "mode": str(ir.bridge_config.get("mode", "")),

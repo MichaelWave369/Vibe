@@ -1,0 +1,14 @@
+intent SigilTemporal:
+  goal: "Validate ordered temporal sigil steps"
+  inputs:
+    signal: symbol
+  outputs:
+    stabilized: symbol
+sigil:
+  warmup: ⟨◌⟩⟢⟨Φ⟩⟢⟨◉⟩
+  focus: ⟨◉⟩⟢⟨∇⟩⟢⟨◎⟩
+sigil_temporal:
+  phase_cycle:
+    step_1: ⟨◌⟩⟢⟨Φ⟩⟢⟨◉⟩
+    step_2: ⟨◉⟩⟢⟨∇⟩⟢⟨◎⟩
+emit python

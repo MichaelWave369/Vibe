@@ -4,6 +4,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+SIGIL_GLYPHS = {
+    "Φ",
+    "∴",
+    "☉",
+    "∇",
+    "Ω",
+    "⟨",
+    "⟩",
+    "⟡",
+    "⟐",
+    "⟢",
+    "⟣",
+    "◌",
+    "◉",
+    "◎",
+    "⊙",
+    "⊚",
+}
+
 
 @dataclass(slots=True)
 class Token:
@@ -28,8 +47,11 @@ def lex(source: str) -> list[Token]:
         if indent % 2 != 0:
             raise ValueError(f"Line {line_no}: indentation must use multiples of 2 spaces")
         stripped = raw.strip()
+        has_sigil = any(ch in SIGIL_GLYPHS for ch in stripped)
         if stripped.endswith(":"):
             tokens.append(Token("BLOCK", stripped[:-1], line_no, indent))
+        elif has_sigil:
+            tokens.append(Token("SIGIL", stripped, line_no, indent))
         else:
             tokens.append(Token("LINE", stripped, line_no, indent))
     return tokens

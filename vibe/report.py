@@ -85,6 +85,11 @@ def verify_contract_payload(
         "sha256": proof_sha256,
     }
     payload["external_obligation_providers"] = list(getattr(result, "external_obligation_providers", []))
+    payload["sigils"] = {
+        "summary": dict(getattr(result, "sigil_summary", {})),
+        "issues": list(getattr(result, "sigil_issues", [])),
+        "obligations": list(getattr(result, "sigil_obligations", [])),
+    }
     payload["legacy_report"] = legacy
     return payload
 
@@ -315,6 +320,14 @@ def render_report(
             f"  genomics_target_metadata: {result.genomics_target_metadata}",
             f"  metadata_privacy_summary: {result.metadata_privacy_summary}",
             f"  workflow_provenance_metadata: {result.workflow_provenance_metadata}",
+        ]
+    )
+    lines.extend(
+        [
+            "sigils:",
+            f"  sigil_summary: {result.sigil_summary}",
+            f"  sigil_issues: {result.sigil_issues}",
+            f"  sigil_obligations: {result.sigil_obligations}",
         ]
     )
     lines.extend(

@@ -1,0 +1,11 @@
+intent SigilCollective:
+  goal: "Compose coupling and recursive sigils"
+  inputs:
+    a: symbol
+    b: symbol
+  outputs:
+    collective: symbol
+sigil:
+  coupling: ⟨Φ⟩⟡⟨☉⟩⟢Ω
+  recurse: ⟨◉⟩⟣∇⟢⊙
+emit python

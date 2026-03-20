@@ -124,6 +124,28 @@ class DelegationDecl:
 
 
 @dataclass(slots=True)
+class SigilExpression:
+    name: str
+    form: str
+    source: str
+    operation: str
+    target: str
+    coupled_with: str | None = None
+
+
+@dataclass(slots=True)
+class SigilTemporalStep:
+    name: str
+    expression: SigilExpression
+
+
+@dataclass(slots=True)
+class SigilTemporalSequence:
+    name: str
+    steps: list[SigilTemporalStep] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class Program:
     intent: IntentBlock
     preserve: list[PreserveRule] = field(default_factory=list)
@@ -143,3 +165,5 @@ class Program:
     orchestrations: list[OrchestrateBlock] = field(default_factory=list)
     delegations: list[DelegationDecl] = field(default_factory=list)
     domain_profile: str | None = None
+    sigils: list[SigilExpression] = field(default_factory=list)
+    sigil_sequences: list[SigilTemporalSequence] = field(default_factory=list)

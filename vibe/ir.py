@@ -108,6 +108,22 @@ class IRAgentception:
 
 
 @dataclass(slots=True)
+class IRSigilExpression:
+    name_ref: str
+    form_ref: str
+    source_ref: str
+    operation_ref: str
+    target_ref: str
+    coupled_with_ref: str | None = None
+
+
+@dataclass(slots=True)
+class IRSigilTemporalSequence:
+    name_ref: str
+    step_refs: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class IRModule:
     module_name: str
     vibe_version_ref: str | None
@@ -125,6 +141,11 @@ class IRModule:
     tesla_layer: IRTeslaLayer | None
     agentora: IRAgentora | None
     agentception: IRAgentception | None
+    sigils: list[IRSigilExpression] = field(default_factory=list)
+    sigil_temporal_sequences: list[IRSigilTemporalSequence] = field(default_factory=list)
+    sigil_graph: dict[str, object] = field(default_factory=dict)
+    sigil_summary: dict[str, object] = field(default_factory=dict)
+    sigil_issues: list[dict[str, object]] = field(default_factory=list)
     semantic_summary: dict[str, object] = field(default_factory=dict)
     semantic_issues: list[dict[str, object]] = field(default_factory=list)
     effect_summary: dict[str, object] = field(default_factory=dict)
@@ -475,6 +496,45 @@ def ast_to_ir(program: Program) -> IR:
             stop_when_ref=b.const("variant", "literal", a.stop_when),
         )
 
+    sigils: list[IRSigilExpression] = []
+    graph_nodes: set[str] = set()
+    graph_edges: list[dict[str, str]] = []
+    for sigil in program.sigils:
+        name_ref = b.const("symbol", "identifier", sigil.name)
+        form_ref = b.const("symbol", "identifier", sigil.form)
+        source_ref = b.const("symbol", "identifier", sigil.source)
+        operation_ref = b.const("symbol", "identifier", sigil.operation)
+        target_ref = b.const("symbol", "identifier", sigil.target)
+        coupled_with_ref = b.const("symbol", "identifier", sigil.coupled_with) if sigil.coupled_with else None
+        sigils.append(
+            IRSigilExpression(
+                name_ref=name_ref,
+                form_ref=form_ref,
+                source_ref=source_ref,
+                operation_ref=operation_ref,
+                target_ref=target_ref,
+                coupled_with_ref=coupled_with_ref,
+            )
+        )
+        graph_nodes.update([sigil.source, sigil.target, sigil.operation])
+        graph_edges.append({"kind": "transform", "source": sigil.source, "operation": sigil.operation, "target": sigil.target})
+        if sigil.coupled_with:
+            graph_nodes.add(sigil.coupled_with)
+            graph_edges.append({"kind": "couple", "source": sigil.source, "target": sigil.coupled_with})
+
+    temporal_sequences: list[IRSigilTemporalSequence] = []
+    temporal_payload: list[dict[str, object]] = []
+    for seq in program.sigil_sequences:
+        seq_name_ref = b.const("symbol", "identifier", seq.name)
+        step_refs: list[str] = []
+        steps_payload: list[dict[str, str]] = []
+        for step in seq.steps:
+            step_ref = b.const("symbol", "identifier", step.name)
+            step_refs.append(step_ref)
+            steps_payload.append({"name": step.name, "sigil": step.expression.name})
+        temporal_sequences.append(IRSigilTemporalSequence(name_ref=seq_name_ref, step_refs=step_refs))
+        temporal_payload.append({"name": seq.name, "steps": steps_payload})
+
     vibe_version_ref = b.const("string", "literal", program.vibe_version) if program.vibe_version else None
     imports_refs = [b.const("symbol", "identifier", v) for v in program.imports]
     modules_refs = [b.const("symbol", "identifier", v) for v in program.modules]
@@ -499,6 +559,14 @@ def ast_to_ir(program: Program) -> IR:
         tesla_layer=tesla_layer,
         agentora=agentora,
         agentception=agentception,
+        sigils=sigils,
+        sigil_temporal_sequences=temporal_sequences,
+        sigil_graph={
+            "kind": "SigilGraph",
+            "nodes": sorted(graph_nodes),
+            "edges": sorted(graph_edges, key=lambda row: (row["kind"], row["source"], row["target"])),
+            "temporal_sequences": temporal_payload,
+        },
         agent_graph={
             "agents": [
                 {
@@ -534,6 +602,29 @@ def ast_to_ir(program: Program) -> IR:
         },
         active_domain_profile=program.domain_profile or "general",
     )
+    bridge_lookup = {x.key: x.value for x in program.bridge}
+    epsilon_floor = float(bridge_lookup.get("epsilon_floor", DEFAULT_EPSILON_FLOOR))
+    allowed_states = {"◌": 0, "◉": 1, "◎": 2, "⊙": 3, "⊚": 4}
+    state_transition_allowed = True
+    for s in program.sigils:
+        if s.source in allowed_states and s.target in allowed_states and allowed_states[s.source] > allowed_states[s.target]:
+            state_transition_allowed = False
+            break
+    module.sigil_summary = {
+        "sigil_count": len(program.sigils),
+        "temporal_sequence_count": len(program.sigil_sequences),
+        "syntax_valid": True,
+        "structure_composable": all(bool(s.operation) for s in program.sigils),
+        "state_transition_allowed": state_transition_allowed,
+        "epsilon_nonzero": epsilon_floor > 0.0,
+        "temporal_sequence_coherent": all(len(seq.steps) > 0 for seq in program.sigil_sequences),
+        "bridge_threshold_passed": float(bridge_lookup.get("measurement_safe_ratio", DEFAULT_MEASUREMENT_SAFE_RATIO)) >= 0.5,
+    }
+    module.sigil_issues = [
+        {"issue_id": f"sigil.{k}", "message": f"sigil check `{k}` failed"}
+        for k, v in module.sigil_summary.items()
+        if k not in {"sigil_count", "temporal_sequence_count"} and not bool(v)
+    ]
     ir = IR(module=module)
     from .semantic_types import annotate_semantic_types
 
@@ -663,6 +754,13 @@ def validate_ir(ir: IR) -> None:
             refs.extend(_obj_dict(a).values())
     if ir.module.agentception:
         refs.extend(_obj_dict(ir.module.agentception).values())
+    for s in ir.module.sigils:
+        refs.extend([s.name_ref, s.form_ref, s.source_ref, s.operation_ref, s.target_ref])
+        if s.coupled_with_ref:
+            refs.append(s.coupled_with_ref)
+    for seq in ir.module.sigil_temporal_sequences:
+        refs.append(seq.name_ref)
+        refs.extend(seq.step_refs)
 
     for ref in refs:
         if ref not in ir.module.values:
@@ -691,6 +789,11 @@ def serialize_ir(ir: IR) -> str:
             {"agents": [_obj_dict(a) for a in ir.module.agentora.agents]} if ir.module.agentora else None
         ),
         "agentception": _obj_dict(ir.module.agentception) if ir.module.agentception else None,
+        "sigils": [_obj_dict(s) for s in ir.module.sigils],
+        "sigil_temporal_sequences": [_obj_dict(s) for s in ir.module.sigil_temporal_sequences],
+        "sigil_graph": dict(ir.module.sigil_graph),
+        "sigil_summary": dict(ir.module.sigil_summary),
+        "sigil_issues": list(ir.module.sigil_issues),
         "semantic_summary": dict(ir.module.semantic_summary),
         "semantic_issues": list(ir.module.semantic_issues),
         "effect_summary": dict(ir.module.effect_summary),

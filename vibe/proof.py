@@ -48,6 +48,7 @@ REQUIRED_FIELDS = {
     "scientific_simulation",
     "legal_compliance",
     "genomics",
+    "sigils",
     "self_hosting",
     "notes",
 }
@@ -229,6 +230,12 @@ def build_proof_artifact(
             "target_metadata": result.genomics_target_metadata,
             "metadata_privacy_summary": result.metadata_privacy_summary,
             "workflow_provenance_metadata": result.workflow_provenance_metadata,
+        },
+        "sigils": {
+            "summary": result.sigil_summary,
+            "issues": result.sigil_issues,
+            "obligations": result.sigil_obligations,
+            "graph": dict(ir.module.sigil_graph),
         },
         "self_hosting": {
             "self_hosting_enabled": result.self_hosting_enabled,

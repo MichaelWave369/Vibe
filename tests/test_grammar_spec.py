@@ -11,3 +11,5 @@ def test_grammar_is_primary_definition_contains_new_blocks() -> None:
     assert "experimental.tesla.victory.layer" in GRAMMAR
     assert "agentora" in GRAMMAR
     assert "agentception" in GRAMMAR
+    assert "sigil:" in GRAMMAR
+    assert "sigil_temporal:" in GRAMMAR

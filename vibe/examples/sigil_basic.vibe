@@ -1,0 +1,9 @@
+intent SigilBasic:
+  goal: "Prototype sigil transformation"
+  inputs:
+    source: symbol
+  outputs:
+    target: symbol
+sigil:
+  seed_flow: ⟨Φ⟩⟢⟨∇⟩⟢⟨Ω⟩
+emit python
