@@ -132,3 +132,8 @@ Each verifier run prints:
 - Multiple emit targets (e.g., TypeScript).
 - Constraint solver hooks and stronger semantic checks.
 - Pluggable bridge metric calibrators for domain-specific validation.
+
+## License
+
+MIT — see LICENSE.
+
