@@ -9,7 +9,7 @@ description = "Vibe: intent-first programming language and compiler prototype"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Michael Wave / Parallax" }]
-license = "AGPL-3.0-only"
+license = "MIT"
 keywords = ["compiler", "dsl", "intent", "verification"]
 classifiers = [
   "Programming Language :: Python :: 3",

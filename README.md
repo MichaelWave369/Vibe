@@ -336,4 +336,4 @@ Near-term:
 
 ## License
 
-See `LICENSE`.
+MIT — see `LICENSE`.
