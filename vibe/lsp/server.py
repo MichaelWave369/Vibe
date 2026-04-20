@@ -9,7 +9,7 @@ from .completion import completions
 from .definitions import definition_location
 from .diagnostics import collect_diagnostics
 from .documents import DocumentStore
-from .hover import hover_content
+from .hover import hover_content, python_hover_content
 from .lenses import intent_lenses
 from .semantic_tokens import TOKEN_TYPES, semantic_tokens_full
 from .symbols import document_symbols
@@ -82,6 +82,8 @@ class VibeLanguageServer:
         doc = self.documents.get(uri)
         if doc is None:
             return None
+        if doc.path is not None and doc.path.suffix == ".py":
+            return python_hover_content(doc.text, line, ch)
         return hover_content(doc.text, line, ch)
 
     def on_completion(self, params: dict[str, object]) -> list[dict[str, object]]:
