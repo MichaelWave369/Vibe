@@ -4,6 +4,7 @@ import re
 
 from ..ir import ast_to_ir
 from ..parser import ParseError, parse_source
+from ..phipython import explanation_for_keyword, get_snippet
 
 
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]*")
@@ -67,3 +68,34 @@ def hover_content(source: str, line: int, character: int) -> dict[str, object] |
             "value": "\n".join(detail),
         }
     }
+
+
+def python_hover_content(source: str, line: int, character: int) -> dict[str, object] | None:
+    """Bounded hover help for Python documents (keywords + PhiPython snippets)."""
+
+    lines = source.splitlines()
+    if line < 0 or line >= len(lines):
+        return None
+    token = _word_at_line(lines[line], character)
+    if not token:
+        return None
+
+    keyword_help = explanation_for_keyword(token)
+    if keyword_help is not None:
+        return {"contents": {"kind": "markdown", "value": f"### `{token}`\n\n{keyword_help}"}}
+
+    snippet = get_snippet(token)
+    if snippet is not None:
+        return {
+            "contents": {
+                "kind": "markdown",
+                "value": (
+                    f"### PhiPython snippet `{snippet.trigger}`\n\n"
+                    f"- category: `{snippet.category}`\n"
+                    f"- description: {snippet.description}\n"
+                    f"- tags: {', '.join(snippet.tags) if snippet.tags else 'none'}"
+                ),
+            }
+        }
+
+    return None
