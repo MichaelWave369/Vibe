@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..manifest import load_manifest
+from ..phipython import snippet_completion_items
 
 
 _KEYWORDS = [
@@ -56,5 +57,8 @@ def completions(prefix: str, path: Path | None = None) -> list[dict[str, object]
     for imp in _import_completions(path):
         if not prefix_norm or imp.lower().startswith(prefix_norm):
             rows.append({"label": imp, "kind": 9, "detail": "package-local import"})
+
+    if path is not None and path.suffix == ".py":
+        rows.extend(snippet_completion_items(prefix_norm))
 
     return sorted(rows, key=lambda r: (str(r["label"]), str(r.get("detail", ""))))
