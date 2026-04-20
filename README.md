@@ -86,6 +86,57 @@ python -m pytest -q
 
 ---
 
+## PhiPython v1.2 (guided Python layer inside Vibe)
+
+PhiPython is a **bounded, deterministic Python authoring layer inside Vibe**, not a separate product.
+
+- **Vibe** remains the intent-first source-of-truth system.
+- **PhiPython** adds guided Python learning/building flows.
+- **Python** is used as a practical emit/runtime target where appropriate.
+
+Current PhiPython v1.2 scope:
+
+- scaffold generation for starter Python projects (`cli`, `automation`, `api_tool`, `scraper`, `flask_app`, `dashboard`),
+- deterministic snippet registry with metadata/placeholders (`forloop`, `readfile`, `writejson`, `api_get`, `tryexcept`, `flask_app`, `argparse_cli`, `pandas_csv`, `requests_json`, `file_append`, `env_var`),
+- plain-English Python explanation helpers for common beginner constructs,
+- plain-English translation for common Python exception types,
+- bounded intent-to-Python scaffold bridge for structured starter inputs,
+- bounded fix engine for common starter mistakes (candidate fixes only),
+- bounded traceback parser + traceback-aware fix suggestions,
+- bounded scaffold-from-intent helper (template selection + starter generation),
+- optional safe patch preview/apply flow for a narrow set of high-confidence fixes,
+- bounded `doctor` project/scaffold validation and local scaffold metadata introspection.
+
+Important truthfulness boundary:
+
+- PhiPython v1.2 **does not claim full semantic verification of arbitrary Python programs**.
+- Explanations and error guidance are intentionally bounded and may be heuristic.
+- Fix suggestions are heuristic candidates, not guaranteed patches.
+- Traceback analysis (including chain parsing) is bounded to common traceback shapes.
+- Scaffold-from-intent is starter generation, not full semantic synthesis.
+- Safe patching is optional, narrow, and should be reviewed via preview before `--apply`.
+- Doctor checks scaffold health only, not full packaging/runtime verification.
+
+Examples:
+
+```bash
+vibec phipython init cli
+vibec phipython explain hello.py
+vibec phipython translate-error --type TypeError --message "unsupported operand type(s) for +: 'int' and 'str'"
+vibec phipython fix hello.py
+vibec phipython fix-traceback trace.txt
+vibec phipython scaffold --from-intent "build a flask starter app"
+vibec phipython show-template flask_app
+vibec phipython show-snippet api_get
+vibec phipython doctor ./demo_app
+vibec phipython patch app.py --preview
+vibec phipython patch app.py --apply
+vibec phipython patch-traceback trace.txt --preview
+vibec phipython inspect-project ./demo_app
+```
+
+---
+
 ## CLI overview
 
 Primary commands:
@@ -103,6 +154,20 @@ Primary commands:
 - `vibec init` / `manifest-check` / `build` — package lifecycle.
 - `vibec publish` / `search` / `registry-inspect` / `compat` — local registry operations.
 - `vibec lsp` — local LSP server over stdio.
+- `vibec phipython init <template>` — create starter Python scaffolds.
+- `vibec phipython explain <file.py>` — plain-English explanation for simple Python files.
+- `vibec phipython explain-snippet <trigger>` — describe snippet usage and starter code.
+- `vibec phipython show-template <template>` — show scaffold metadata and starter file layout.
+- `vibec phipython show-snippet <trigger>` — show snippet metadata and expanded default body.
+- `vibec phipython translate-error --type <ExceptionName> --message <msg>` — plain-English error guidance.
+- `vibec phipython fix <file.py>` — bounded candidate fixes for common starter issues.
+- `vibec phipython fix-traceback <traceback.txt>` — bounded traceback parsing and fix hints.
+- `vibec phipython scaffold --from-intent "<text>"` — bounded intent-to-template scaffold helper.
+- `vibec phipython doctor <path>` — bounded scaffold/project validation checks.
+- `vibec phipython patch <file.py> [--preview|--apply]` — narrow safe patch preview/apply flow.
+- `vibec phipython patch-traceback <traceback.txt> [--preview|--apply]` — traceback-driven patch preview/apply for safe cases.
+- `vibec phipython inspect-project <path>` — inspect scaffold metadata and local file structure.
+- `vibec phipython list-templates` / `list-snippets` — inspect deterministic PhiPython registries.
 - `vibec ci-check` — deterministic CI bridge checks.
 - `vibec self-check` — bounded self-hosting check.
 - `vibec domains` — list domain profiles.
