@@ -11,6 +11,7 @@ from vibe.phipython import (
     list_snippets,
     list_templates,
     parse_traceback,
+    preview_patch_plan_for_file,
     run_patch,
     run_patch_traceback,
     suggest_fixes,
@@ -18,6 +19,7 @@ from vibe.phipython import (
     summarize_traceback_chain,
     translate_error,
 )
+from vibe.phipython.patch_plans import list_patch_plans
 
 
 def test_template_listing_and_richer_scaffold_generation(tmp_path: Path) -> None:
@@ -143,6 +145,31 @@ def test_patch_preview_apply_and_rejection(tmp_path: Path) -> None:
     assert reject["can_apply"] is False
     assert reject["applied"] is False
 
+    interactive = main(["phipython", "patch", str(target), "--interactive", "--report", "json"])
+    assert interactive == 0
+
+
+def test_multi_file_patch_plan_preview_and_apply(tmp_path: Path) -> None:
+    target = tmp_path / "main.py"
+    target.write_text("def main():\n    return 1\n", encoding="utf-8")
+    plan = preview_patch_plan_for_file(target, "plan-002")
+    assert plan["can_apply"] is True
+    assert plan["files"]
+
+
+def test_patch_plan_rejection_and_env_stub_generation(tmp_path: Path) -> None:
+    target = tmp_path / "main.py"
+    target.write_text("print('hello')\n", encoding="utf-8")
+    empty = list_patch_plans(target)
+    assert empty["plans"] == []
+    assert "rejection_reason" in empty
+
+    (tmp_path / ".phipython.json").write_text(json.dumps({"template": "api_tool"}), encoding="utf-8")
+    target.write_text("def main():\n    return 1\n", encoding="utf-8")
+    listing = list_patch_plans(target)
+    plan_ids = {plan["plan_id"] for plan in listing["plans"]}
+    assert "plan-003" in plan_ids
+
 
 def test_cli_phipython_v12_commands(capsys, tmp_path: Path) -> None:
     code_file = tmp_path / "hello.py"
@@ -161,6 +188,7 @@ def test_cli_phipython_v12_commands(capsys, tmp_path: Path) -> None:
     assert main(["phipython", "doctor", str(project), "--report", "json"]) == 0
     doctor_out = json.loads(capsys.readouterr().out)
     assert doctor_out["status"] in {"ok", "warn"}
+    assert any(check["id"] == "cli.usage_example" for check in doctor_out["checks"])
 
     assert main(["phipython", "inspect-project", str(project), "--report", "json"]) == 0
     inspect_out = json.loads(capsys.readouterr().out)
@@ -177,6 +205,37 @@ def test_cli_phipython_v12_commands(capsys, tmp_path: Path) -> None:
     assert main(["phipython", "patch-traceback", str(trace_file), "--preview", "--report", "json"]) == 0
     trace_out = json.loads(capsys.readouterr().out)
     assert "traceback_summary" in trace_out
+
+    assert main(["phipython", "patch", str(code_file), "--interactive", "--report", "json"]) == 0
+    patch_list = json.loads(capsys.readouterr().out)
+    assert patch_list["mode"] == "interactive_selection"
+
+    if patch_list["candidates"]:
+        first_id = patch_list["candidates"][0]["patch_id"]
+        assert (
+            main(
+                [
+                    "phipython",
+                    "patch",
+                    str(code_file),
+                    "--select",
+                    first_id,
+                    "--preview",
+                    "--report",
+                    "json",
+                ]
+            )
+            == 0
+        )
+        selected = json.loads(capsys.readouterr().out)
+        assert selected["can_apply"] is True
+
+    export_dir = tmp_path / "artifacts"
+    assert main(["phipython", "doctor", str(project), "--export", str(export_dir), "--report", "json"]) == 0
+    assert (export_dir / "phipython_doctor.json").exists()
+
+    assert main(["phipython", "inspect-project", str(project), "--export", str(export_dir), "--report", "json"]) == 0
+    assert (export_dir / "phipython_inspect_project.json").exists()
 
 
 def test_patch_traceback_file_not_found(tmp_path: Path) -> None:

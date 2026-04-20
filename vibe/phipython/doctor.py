@@ -1,19 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from pathlib import Path
 
+from .doctor_profiles import DoctorCheck, baseline_checks, template_profile_checks
 from .scaffold_metadata import read_metadata
 from .templates import get_template, list_templates
-
-
-@dataclass(frozen=True, slots=True)
-class DoctorCheck:
-    id: str
-    status: str
-    summary: str
-    details: str
-    suggested_action: str
 
 
 def _guess_template(path: Path, metadata: dict[str, object] | None) -> str:
@@ -32,10 +24,10 @@ def _guess_template(path: Path, metadata: dict[str, object] | None) -> str:
     return "unknown"
 
 
-def doctor_project(path: Path) -> dict[str, object]:
+def doctor_project(path: Path, template_profile: str | None = None) -> dict[str, object]:
     checks: list[DoctorCheck] = []
     metadata = read_metadata(path)
-    guess = _guess_template(path, metadata)
+    guess = template_profile or _guess_template(path, metadata)
 
     if not path.exists() or not path.is_dir():
         checks.append(
@@ -55,72 +47,10 @@ def doctor_project(path: Path) -> dict[str, object]:
             "notes": ["Doctor is bounded scaffold validation only."],
         }
 
-    readme = path / "README.md"
-    checks.append(
-        DoctorCheck(
-            id="readme.present",
-            status="pass" if readme.exists() else "warn",
-            summary="README presence check.",
-            details="README.md found." if readme.exists() else "README.md missing.",
-            suggested_action="Add README.md with quickstart instructions." if not readme.exists() else "None.",
-        )
-    )
-
-    main_py = path / "main.py"
-    checks.append(
-        DoctorCheck(
-            id="entrypoint.main",
-            status="pass" if main_py.exists() else "fail",
-            summary="Entrypoint presence check.",
-            details="main.py found." if main_py.exists() else "main.py not found.",
-            suggested_action="Add a minimal main.py entrypoint.",
-        )
-    )
-
-    metadata_status = "pass" if metadata is not None else "warn"
-    checks.append(
-        DoctorCheck(
-            id="metadata.present",
-            status=metadata_status,
-            summary="PhiPython scaffold metadata check.",
-            details=".phipython.json found." if metadata else "No .phipython.json metadata file.",
-            suggested_action="Regenerate scaffold or add .phipython.json manually for richer doctor checks.",
-        )
-    )
+    checks.extend(baseline_checks(path, metadata_present=metadata is not None))
 
     req_text = (path / "requirements.txt").read_text(encoding="utf-8") if (path / "requirements.txt").exists() else ""
-    if guess in {"api_tool", "scraper"} and "requests" not in req_text:
-        checks.append(
-            DoctorCheck(
-                id="deps.requests",
-                status="warn",
-                summary="Potential missing requests dependency hint.",
-                details="requirements.txt does not include requests.",
-                suggested_action="Add requests>=2.31.0 to requirements.txt.",
-            )
-        )
-    else:
-        checks.append(
-            DoctorCheck(
-                id="deps.requests",
-                status="pass",
-                summary="Dependency hint check completed.",
-                details="No obvious requests dependency mismatch.",
-                suggested_action="None.",
-            )
-        )
-
-    if guess == "flask_app":
-        env_ok = (path / ".env.example").exists()
-        checks.append(
-            DoctorCheck(
-                id="env.example",
-                status="pass" if env_ok else "warn",
-                summary="Environment example file check.",
-                details=".env.example found." if env_ok else "Expected .env.example for flask starter.",
-                suggested_action="Add .env.example with starter Flask environment keys.",
-            )
-        )
+    checks.extend(template_profile_checks(path, template=guess, req_text=req_text))
 
     template = get_template(guess)
     if template is not None:
@@ -147,8 +77,8 @@ def doctor_project(path: Path) -> dict[str, object]:
         "status": status,
         "checks": [asdict(c) for c in checks],
         "notes": [
-            "Doctor validates bounded scaffold health only.",
-            "It does not perform full packaging, runtime, or environment resolution.",
+            "Doctor profiles are bounded starter/template checks only.",
+            "Doctor does not provide full packaging, runtime, or semantic correctness guarantees.",
         ],
     }
 

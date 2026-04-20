@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
+from .artifacts import export_artifact_bundle
 from .doctor import doctor_project, inspect_project as inspect_project_payload
 from .errors import translate_python_error
 from .explain import explain_python_source
 from .fix import suggest_fixes_for_source, suggest_fixes_for_traceback
 from .intent_scaffold import classify_intent_to_template, classify_intent_to_template_dict
-from .patch import apply_safe_patch, patch_from_traceback, preview_safe_patch
+from .patch import apply_safe_patch, list_patch_candidates, patch_from_traceback, preview_safe_patch
+from .patch_plans import apply_patch_plan, list_patch_plans, preview_patch_plan
 from .python_bridge import BridgeResult, PythonScaffoldIntent, bridge_intent_to_python_scaffold
 from .scaffold_metadata import metadata_for_template, read_metadata, write_metadata
 from .snippets import expand_snippet, list_snippets, snippet_as_dict
@@ -103,8 +105,8 @@ def snippet_preview(trigger: str, values: dict[str, str] | None = None) -> dict[
     return snippet
 
 
-def doctor(path: Path) -> dict[str, object]:
-    return doctor_project(path)
+def doctor(path: Path, template_profile: str | None = None) -> dict[str, object]:
+    return doctor_project(path, template_profile=template_profile)
 
 
 def inspect_project(path: Path) -> dict[str, object]:
@@ -113,13 +115,45 @@ def inspect_project(path: Path) -> dict[str, object]:
     return payload
 
 
-def preview_patch(path: Path, issue_type: str | None = None) -> dict[str, object]:
-    return preview_safe_patch(path, issue_type=issue_type)
+def list_patch_candidates_for_file(path: Path, issue_type: str | None = None) -> dict[str, object]:
+    return list_patch_candidates(path, issue_type=issue_type)
 
 
-def run_patch(path: Path, issue_type: str | None = None, apply: bool = False) -> dict[str, object]:
-    return apply_safe_patch(path, issue_type=issue_type, apply=apply)
+def preview_patch(path: Path, issue_type: str | None = None, select: str | None = None) -> dict[str, object]:
+    return preview_safe_patch(path, issue_type=issue_type, select=select)
 
 
-def run_patch_traceback(traceback_path: Path, apply: bool = False, issue_type: str | None = None) -> dict[str, object]:
-    return patch_from_traceback(traceback_path, apply=apply, issue_type=issue_type)
+def run_patch(path: Path, issue_type: str | None = None, apply: bool = False, select: str | None = None) -> dict[str, object]:
+    return apply_safe_patch(path, issue_type=issue_type, apply=apply, select=select)
+
+
+def run_patch_traceback(
+    traceback_path: Path,
+    apply: bool = False,
+    issue_type: str | None = None,
+    interactive: bool = False,
+    select: str | None = None,
+) -> dict[str, object]:
+    return patch_from_traceback(
+        traceback_path,
+        apply=apply,
+        issue_type=issue_type,
+        interactive=interactive,
+        select=select,
+    )
+
+
+def list_patch_plans_for_file(path: Path) -> dict[str, object]:
+    return list_patch_plans(path)
+
+
+def preview_patch_plan_for_file(path: Path, plan_id: str) -> dict[str, object]:
+    return preview_patch_plan(path, plan_id=plan_id)
+
+
+def apply_patch_plan_for_file(path: Path, plan_id: str, apply: bool = False) -> dict[str, object]:
+    return apply_patch_plan(path, plan_id=plan_id, apply=apply)
+
+
+def export_artifacts(export_dir: Path, prefix: str, payload: dict[str, object], title: str) -> dict[str, object]:
+    return export_artifact_bundle(export_dir=export_dir, prefix=prefix, payload=payload, title=title)

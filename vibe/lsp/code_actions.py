@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..phipython import explanation_for_keyword, get_snippet
+from ..phipython.doctor import inspect_project
 from ..phipython.fix import suggest_fixes_for_source
-from ..phipython.patch import preview_safe_patch
+from ..phipython.patch import list_patch_candidates, preview_safe_patch
 from ..phipython.traceback_utils import parse_traceback_text
 
 
@@ -99,6 +100,30 @@ def python_code_actions(
                         "data": {"patch_preview": patch_preview},
                     }
                 )
+            candidate_payload = list_patch_candidates(path)
+            if candidate_payload.get("candidates"):
+                actions.append(
+                    {
+                        "title": "PhiPython: list candidate patches",
+                        "kind": "quickfix",
+                        "data": {"patch_candidates": candidate_payload},
+                    }
+                )
+            project_info = inspect_project(path.parent)
+            actions.append(
+                {
+                    "title": "PhiPython: show template profile checks",
+                    "kind": "quickfix",
+                    "data": {"template_guess": project_info.get("template_guess"), "project": project_info.get("path")},
+                }
+            )
+            actions.append(
+                {
+                    "title": "PhiPython: run scaffold doctor on project",
+                    "kind": "quickfix",
+                    "data": {"project": project_info.get("path"), "mode": "doctor"},
+                }
+            )
 
     if diagnostics:
         for diag in diagnostics:

@@ -203,4 +203,6 @@ def test_lsp_python_completion_and_hover_support(tmp_path: Path) -> None:
     titles = [item["title"] for item in actions]
     assert any("expand snippet" in title for title in titles)
     assert any("preview safe patch" in title for title in titles)
+    assert any("list candidate patches" in title for title in titles)
+    assert any("run scaffold doctor on project" in title for title in titles)
     assert any("explain this error" in title for title in titles)

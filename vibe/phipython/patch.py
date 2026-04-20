@@ -84,9 +84,8 @@ def _requests_status_patch(source: str, path: Path) -> dict[str, object] | None:
     return None
 
 
-def preview_safe_patch(path: Path, issue_type: str | None = None) -> dict[str, object]:
-    source = path.read_text(encoding="utf-8")
-    patchers: list[tuple[str, callable]] = [
+def _patchers() -> list[tuple[str, callable]]:
+    return [
         ("missing_import", _missing_import_patch),
         ("int_str_concat", _int_str_concat_patch),
         ("missing_colon", _missing_colon_patch),
@@ -95,19 +94,74 @@ def preview_safe_patch(path: Path, issue_type: str | None = None) -> dict[str, o
         ("requests_status_handling", _requests_status_patch),
     ]
 
-    for patch_name, patcher in patchers:
-        if issue_type and patch_name != issue_type:
+
+def list_patch_candidates(path: Path, issue_type: str | None = None) -> dict[str, object]:
+    source = path.read_text(encoding="utf-8")
+    candidates: list[dict[str, object]] = []
+    for idx, (patch_name, patcher) in enumerate(_patchers(), start=1):
+        if issue_type and issue_type != patch_name:
             continue
         candidate = patcher(source, path)
-        if candidate and candidate["can_apply"]:
-            candidate["notes"].extend(
-                [
-                    "Safe patch scope is intentionally narrow and deterministic.",
-                    "Review preview before using --apply.",
-                ]
-            )
-            return candidate
+        if not candidate or not candidate["can_apply"]:
+            continue
+        candidates.append(
+            {
+                "patch_id": f"patch-{idx:03d}",
+                "patch_type": patch_name,
+                "summary": candidate["summary"],
+                "confidence": candidate["confidence"],
+                "files": [str(path)],
+                "notes": ["Safe deterministic candidate."],
+                "preview": candidate["preview"],
+            }
+        )
 
+    return {
+        "mode": "interactive_selection",
+        "target": str(path),
+        "candidates": candidates,
+        "notes": ["Candidates are bounded and require explicit selection/apply."],
+    }
+
+
+def _candidate_by_id(path: Path, patch_id: str, issue_type: str | None = None) -> dict[str, object] | None:
+    payload = list_patch_candidates(path, issue_type=issue_type)
+    for candidate in payload["candidates"]:
+        if candidate["patch_id"] == patch_id:
+            return candidate
+    return None
+
+
+def preview_safe_patch(path: Path, issue_type: str | None = None, select: str | None = None) -> dict[str, object]:
+    if select:
+        candidate = _candidate_by_id(path, select, issue_type=issue_type)
+        if candidate:
+            return {
+                "can_apply": True,
+                "patch_type": candidate["patch_type"],
+                "summary": candidate["summary"],
+                "target_file": str(path),
+                "preview": candidate["preview"],
+                "confidence": candidate["confidence"],
+                "notes": [f"Selected candidate {select}.", "Review preview before --apply."],
+            }
+        source = path.read_text(encoding="utf-8")
+        return _preview(source, source, path, issue_type or "none", "Unknown patch selection id.", False, ["Use --interactive to list ids."])
+
+    candidates = list_patch_candidates(path, issue_type=issue_type)["candidates"]
+    if candidates:
+        top = candidates[0]
+        return {
+            "can_apply": True,
+            "patch_type": top["patch_type"],
+            "summary": top["summary"],
+            "target_file": str(path),
+            "preview": top["preview"],
+            "confidence": top["confidence"],
+            "notes": ["Safe patch scope is narrow.", "Use --interactive for full candidate list."],
+        }
+
+    source = path.read_text(encoding="utf-8")
     return _preview(
         source,
         source,
@@ -119,8 +173,8 @@ def preview_safe_patch(path: Path, issue_type: str | None = None) -> dict[str, o
     )
 
 
-def apply_safe_patch(path: Path, issue_type: str | None = None, apply: bool = False) -> dict[str, object]:
-    payload = preview_safe_patch(path, issue_type=issue_type)
+def apply_safe_patch(path: Path, issue_type: str | None = None, apply: bool = False, select: str | None = None) -> dict[str, object]:
+    payload = preview_safe_patch(path, issue_type=issue_type, select=select)
     payload["applied"] = False
     if apply and payload["can_apply"]:
         path.write_text(str(payload["preview"]["after"]), encoding="utf-8")
@@ -133,7 +187,13 @@ def apply_safe_patch(path: Path, issue_type: str | None = None, apply: bool = Fa
     return payload
 
 
-def patch_from_traceback(traceback_path: Path, apply: bool = False, issue_type: str | None = None) -> dict[str, object]:
+def patch_from_traceback(
+    traceback_path: Path,
+    apply: bool = False,
+    issue_type: str | None = None,
+    interactive: bool = False,
+    select: str | None = None,
+) -> dict[str, object]:
     summary = parse_traceback_text(traceback_path.read_text(encoding="utf-8"))
     target = Path(summary.file_path) if summary.file_path else None
     issue = issue_type
@@ -147,6 +207,7 @@ def patch_from_traceback(traceback_path: Path, apply: bool = False, issue_type: 
 
     if target is None or not target.exists():
         return {
+            "mode": "interactive_selection" if interactive else "direct",
             "can_apply": False,
             "patch_type": issue or "unknown",
             "summary": "Traceback did not resolve to an accessible local target file.",
@@ -162,7 +223,16 @@ def patch_from_traceback(traceback_path: Path, apply: bool = False, issue_type: 
             },
         }
 
-    payload = apply_safe_patch(target, issue_type=issue, apply=apply)
+    if interactive:
+        payload = list_patch_candidates(target, issue_type=issue)
+        payload["traceback_summary"] = {
+            "exception_type": summary.exception_type,
+            "message": summary.message,
+            "line_number": summary.line_number,
+        }
+        return payload
+
+    payload = apply_safe_patch(target, issue_type=issue, apply=apply, select=select)
     payload["traceback_summary"] = {
         "exception_type": summary.exception_type,
         "message": summary.message,
