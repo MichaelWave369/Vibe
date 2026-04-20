@@ -89,7 +89,12 @@ def python_hover_content(source: str, line: int, character: int) -> dict[str, ob
         return {
             "contents": {
                 "kind": "markdown",
-                "value": f"### PhiPython snippet `{snippet.trigger}`\n\n{snippet.description}",
+                "value": (
+                    f"### PhiPython snippet `{snippet.trigger}`\n\n"
+                    f"- category: `{snippet.category}`\n"
+                    f"- description: {snippet.description}\n"
+                    f"- tags: {', '.join(snippet.tags) if snippet.tags else 'none'}"
+                ),
             }
         }
 

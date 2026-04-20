@@ -37,13 +37,17 @@ def bridge_intent_to_python_scaffold(intent: PythonScaffoldIntent) -> BridgeResu
         reqs = files.get("requirements.txt", "")
         if "requests" not in reqs:
             files["requirements.txt"] = (reqs + "requests>=2.31.0\n").lstrip("\n")
+    if "env_config" in feature_set and ".env.example" not in files:
+        files[".env.example"] = "APP_ENV=development\n"
+    if "csv_io" in feature_set and "examples/sample.csv" not in files:
+        files["examples/sample.csv"] = "name,value\nsample,1\n"
 
     return BridgeResult(
         project_name=intent.name,
         template=template.name,
         files=files,
         note=(
-            "Bounded scaffold bridge only: PhiPython v1.0 maps small structured intent inputs to starter files. "
+            "Bounded scaffold bridge only: PhiPython v1.1 maps small structured intent inputs to starter files. "
             "It does not claim full semantic preservation of arbitrary Python programs."
         ),
     )

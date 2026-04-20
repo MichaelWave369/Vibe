@@ -41,6 +41,11 @@ from .phipython import (
     init_template as pp_init_template,
     list_snippet_triggers as pp_list_snippet_triggers,
     list_template_names as pp_list_template_names,
+    scaffold_from_intent as pp_scaffold_from_intent,
+    show_template as pp_show_template,
+    snippet_preview as pp_snippet_preview,
+    suggest_fixes as pp_suggest_fixes,
+    suggest_fixes_for_traceback_text as pp_suggest_fixes_for_traceback_text,
     translate_error as pp_translate_error,
 )
 from .interchange import (
@@ -1485,7 +1490,7 @@ def _phipython_explain(path: Path, report: ReportMode) -> int:
 
 def _phipython_explain_snippet(trigger: str, report: ReportMode) -> int:
     try:
-        payload = pp_explain_snippet(trigger)
+        payload = pp_snippet_preview(trigger)
     except KeyError as exc:
         print(str(exc))
         return 1
@@ -1493,11 +1498,20 @@ def _phipython_explain_snippet(trigger: str, report: ReportMode) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(f"trigger: {payload['trigger']}")
+        print(f"category: {payload['category']}")
         print(f"description: {payload['description']}")
+        tags = ", ".join(payload.get("tags", []))
+        if tags:
+            print(f"tags: {tags}")
+        placeholders = payload.get("placeholders", [])
+        if placeholders:
+            print("placeholders:")
+            for item in placeholders:
+                print(f"  - {item['name']}: {item['description']} (default={item['default']!r})")
         if payload.get("educational_note"):
             print(f"note: {payload['educational_note']}")
-        print("code:")
-        print(payload["code"])
+        print("expanded code:")
+        print(payload["expanded"])
     return 0
 
 
@@ -1536,6 +1550,80 @@ def _phipython_list_snippets(report: ReportMode) -> int:
     else:
         for trigger in triggers:
             print(trigger)
+    return 0
+
+
+def _phipython_fix(path: Path, report: ReportMode) -> int:
+    payload = pp_suggest_fixes(path)
+    if report == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        issues = payload.get("issues", [])
+        if not issues:
+            print("No bounded starter-pattern issues detected.")
+        for issue in issues:
+            line = f" (line {issue['line']})" if issue.get("line") else ""
+            print(f"[{issue['issue_type']}] {issue['summary']}{line}")
+            for fix in issue["candidate_fixes"]:
+                print(f"- {fix['title']} [{fix['confidence']}]: {fix['patch_hint']}")
+        for note in payload.get("notes", []):
+            print(f"note: {note}")
+    return 0
+
+
+def _phipython_fix_traceback(path: Path, report: ReportMode) -> int:
+    text = path.read_text(encoding="utf-8")
+    payload = pp_suggest_fixes_for_traceback_text(text)
+    if report == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        summary = payload["traceback_summary"]
+        print(f"traceback exception: {summary['exception_type']}")
+        if summary.get("line_number"):
+            print(f"likely line: {summary['line_number']}")
+        if summary.get("message"):
+            print(f"message: {summary['message']}")
+        for issue in payload.get("issues", []):
+            print(f"[{issue['issue_type']}] {issue['summary']}")
+            for fix in issue["candidate_fixes"]:
+                print(f"- {fix['title']} [{fix['confidence']}]: {fix['patch_hint']}")
+        for note in payload.get("notes", []):
+            print(f"note: {note}")
+    return 0
+
+
+def _phipython_scaffold_from_intent(intent_text: str, output_dir: Path | None, report: ReportMode) -> int:
+    destination = output_dir or Path(".")
+    payload = pp_scaffold_from_intent(intent_text, destination=destination, project_name=destination.name)
+    if report == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        match = payload["match"]
+        print(f"template: {payload['template']}")
+        print(f"confidence: {match['confidence']}")
+        print(f"reason: {match['reason']}")
+        print(f"destination: {destination}")
+        print("files:")
+        for rel in payload["files"]:
+            print(f"  - {rel}")
+        print(f"note: {payload['note']}")
+    return 0
+
+
+def _phipython_show_template(template: str, report: ReportMode) -> int:
+    try:
+        payload = pp_show_template(template)
+    except KeyError as exc:
+        print(str(exc))
+        return 1
+    if report == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(f"template: {payload['name']}")
+        print(payload["description"])
+        print("files:")
+        for rel in payload["files"]:
+            print(f"  - {rel}")
     return 0
 
 
@@ -1684,10 +1772,31 @@ def build_parser() -> argparse.ArgumentParser:
     pp_explain_snippet.add_argument("trigger", type=str)
     pp_explain_snippet.add_argument("--report", choices=["human", "json"], default="human")
 
+    pp_show_snippet = pp_sub.add_parser("show-snippet", help="Show snippet metadata and expanded default code")
+    pp_show_snippet.add_argument("trigger", type=str)
+    pp_show_snippet.add_argument("--report", choices=["human", "json"], default="human")
+
+    pp_show_template = pp_sub.add_parser("show-template", help="Show template metadata and starter file list")
+    pp_show_template.add_argument("template", type=str)
+    pp_show_template.add_argument("--report", choices=["human", "json"], default="human")
+
     pp_translate = pp_sub.add_parser("translate-error", help="Translate common Python exceptions to plain-English guidance")
     pp_translate.add_argument("--type", required=True, dest="exception_type")
     pp_translate.add_argument("--message", default="")
     pp_translate.add_argument("--report", choices=["human", "json"], default="human")
+
+    pp_fix = pp_sub.add_parser("fix", help="Suggest bounded candidate fixes for a Python source file")
+    pp_fix.add_argument("path", type=Path)
+    pp_fix.add_argument("--report", choices=["human", "json"], default="human")
+
+    pp_fix_trace = pp_sub.add_parser("fix-traceback", help="Suggest bounded candidate fixes from traceback text")
+    pp_fix_trace.add_argument("path", type=Path)
+    pp_fix_trace.add_argument("--report", choices=["human", "json"], default="human")
+
+    pp_scaffold = pp_sub.add_parser("scaffold", help="Generate starter scaffold from bounded intent text")
+    pp_scaffold.add_argument("--from-intent", required=True, dest="intent_text")
+    pp_scaffold.add_argument("--output-dir", type=Path, default=None, help="Destination directory (default current dir)")
+    pp_scaffold.add_argument("--report", choices=["human", "json"], default="human")
 
     pp_sub.add_parser("list-templates", help="List available PhiPython templates").add_argument(
         "--report", choices=["human", "json"], default="human"
@@ -1920,8 +2029,18 @@ def main(argv: list[str] | None = None) -> int:
             return _phipython_explain(args.path, args.report)
         if args.phipython_command == "explain-snippet":
             return _phipython_explain_snippet(args.trigger, args.report)
+        if args.phipython_command == "show-snippet":
+            return _phipython_explain_snippet(args.trigger, args.report)
+        if args.phipython_command == "show-template":
+            return _phipython_show_template(args.template, args.report)
         if args.phipython_command == "translate-error":
             return _phipython_translate_error(args.exception_type, args.message, args.report)
+        if args.phipython_command == "fix":
+            return _phipython_fix(args.path, args.report)
+        if args.phipython_command == "fix-traceback":
+            return _phipython_fix_traceback(args.path, args.report)
+        if args.phipython_command == "scaffold":
+            return _phipython_scaffold_from_intent(args.intent_text, args.output_dir, args.report)
         if args.phipython_command == "list-templates":
             return _phipython_list_templates(args.report)
         if args.phipython_command == "list-snippets":

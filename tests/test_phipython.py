@@ -5,15 +5,19 @@ from vibe.cli import main
 from vibe.phipython import (
     PythonScaffoldIntent,
     bridge_intent_to_python_scaffold,
+    classify_intent,
     explain_python_source,
     get_snippet,
     list_snippets,
     list_templates,
+    parse_traceback,
+    suggest_fixes,
+    suggest_fixes_for_traceback_text,
     translate_error,
 )
 
 
-def test_template_listing_and_scaffold_generation(tmp_path: Path) -> None:
+def test_template_listing_and_richer_scaffold_generation(tmp_path: Path) -> None:
     templates = [tpl.name for tpl in list_templates()]
     assert templates == ["api_tool", "automation", "cli", "dashboard", "flask_app", "scraper"]
 
@@ -24,13 +28,29 @@ def test_template_listing_and_scaffold_generation(tmp_path: Path) -> None:
         assert (out / "README.md").exists()
         assert (out / "main.py").exists()
 
+    assert (tmp_path / "cli" / "tests" / "test_parser.py").exists()
+    assert (tmp_path / "flask_app" / ".env.example").exists()
 
-def test_snippet_listing_and_lookup() -> None:
+
+def test_snippet_listing_and_metadata_lookup() -> None:
     triggers = [item.trigger for item in list_snippets()]
-    assert triggers == ["api_get", "flask_app", "forloop", "readfile", "tryexcept", "writejson"]
+    assert triggers == [
+        "api_get",
+        "argparse_cli",
+        "env_var",
+        "file_append",
+        "flask_app",
+        "forloop",
+        "pandas_csv",
+        "readfile",
+        "requests_json",
+        "tryexcept",
+        "writejson",
+    ]
     snippet = get_snippet("forloop")
     assert snippet is not None
-    assert "enumerate" in snippet.code
+    assert snippet.category == "loops"
+    assert snippet.placeholders[0].name == "iterable"
 
 
 def test_explain_simple_python_constructs() -> None:
@@ -50,52 +70,86 @@ def test_translate_common_exception_types() -> None:
 
 def test_bridge_intent_to_python_scaffold_is_bounded() -> None:
     result = bridge_intent_to_python_scaffold(
-        PythonScaffoldIntent(template="api_tool", name="weather_client", features=("requests", "json_output"))
+        PythonScaffoldIntent(template="api_tool", name="weather_client", features=("requests", "json_output", "env_config"))
     )
     assert result.template == "api_tool"
     assert "main.py" in result.files
+    assert ".env.example" in result.files
     assert "Bounded scaffold bridge only" in result.note
 
 
-def test_cli_phipython_commands(capsys, tmp_path: Path) -> None:
+def test_fix_engine_and_traceback_helpers(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.py"
+    bad.write_text("if True\n    print('x')\n", encoding="utf-8")
+    fixes = suggest_fixes(bad)
+    issue_types = [issue["issue_type"] for issue in fixes["issues"]]
+    assert "missing_colon" in issue_types or "syntax_error" in issue_types
+
+    tb_text = """Traceback (most recent call last):
+  File \"app.py\", line 9, in <module>
+    print(1 + \"x\")
+TypeError: unsupported operand type(s) for +: 'int' and 'str'
+"""
+    summary = parse_traceback(tb_text)
+    assert summary["exception_type"] == "TypeError"
+    assert summary["line_number"] == 9
+
+    tb_fixes = suggest_fixes_for_traceback_text(tb_text)
+    assert tb_fixes["issues"]
+
+
+def test_intent_scaffold_classifier() -> None:
+    result = classify_intent("build a flask starter app")
+    assert result["template"] == "flask_app"
+    assert result["confidence"] in {"high", "medium"}
+
+
+def test_cli_phipython_v11_commands(capsys, tmp_path: Path) -> None:
     code_file = tmp_path / "hello.py"
-    code_file.write_text("x = 1\nif x:\n    print(x)\n", encoding="utf-8")
+    code_file.write_text("import argparse\nname + 'x'\n", encoding="utf-8")
 
-    assert main(["phipython", "list-templates", "--report", "json"]) == 0
-    out = capsys.readouterr().out
-    parsed = json.loads(out)
-    assert "cli" in parsed["templates"]
+    trace_file = tmp_path / "trace.txt"
+    trace_file.write_text(
+        "Traceback (most recent call last):\n  File \"main.py\", line 2, in <module>\n    name\nNameError: name 'name' is not defined\n",
+        encoding="utf-8",
+    )
 
-    assert main(["phipython", "list-snippets", "--report", "json"]) == 0
-    out = capsys.readouterr().out
-    parsed = json.loads(out)
-    assert "forloop" in parsed["snippets"]
+    assert main(["phipython", "show-template", "flask_app", "--report", "json"]) == 0
+    assert "flask_app" in capsys.readouterr().out
 
-    assert main(["phipython", "explain", str(code_file)]) == 0
-    assert "Plain-English explanation" in capsys.readouterr().out
+    assert main(["phipython", "show-snippet", "api_get", "--report", "json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["trigger"] == "api_get"
+    assert "expanded" in out
 
-    assert main(["phipython", "explain-snippet", "readfile"]) == 0
-    assert "trigger: readfile" in capsys.readouterr().out
+    assert main(["phipython", "fix", str(code_file), "--report", "json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["issues"]
 
+    assert main(["phipython", "fix-traceback", str(trace_file), "--report", "json"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["traceback_summary"]["exception_type"] == "NameError"
+
+    scaffold_dir = tmp_path / "from_intent"
     assert (
         main(
             [
                 "phipython",
-                "translate-error",
-                "--type",
-                "TypeError",
-                "--message",
-                "unsupported operand type(s) for +",
+                "scaffold",
+                "--from-intent",
+                "create a requests-based API tool",
+                "--output-dir",
+                str(scaffold_dir),
             ]
         )
         == 0
     )
-    assert "likely fixes:" in capsys.readouterr().out
+    assert (scaffold_dir / "main.py").exists()
 
 
 def test_cli_phipython_unknown_items_return_nonzero(capsys) -> None:
     assert main(["phipython", "init", "missing_template"]) == 1
     assert "unknown template" in capsys.readouterr().out
 
-    assert main(["phipython", "explain-snippet", "missing_trigger"]) == 1
+    assert main(["phipython", "show-snippet", "missing_trigger"]) == 1
     assert "unknown snippet" in capsys.readouterr().out

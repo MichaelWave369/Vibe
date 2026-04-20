@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .completion import completions
+from .code_actions import python_code_actions
 from .definitions import definition_location
 from .diagnostics import collect_diagnostics
 from .documents import DocumentStore
@@ -32,6 +33,7 @@ class VibeLanguageServer:
                 "textDocumentSync": 1,
                 "hoverProvider": True,
                 "completionProvider": {"resolveProvider": False},
+                "codeActionProvider": True,
                 "definitionProvider": True,
                 "documentSymbolProvider": True,
                 "codeLensProvider": {"resolveProvider": False},
@@ -140,6 +142,28 @@ class VibeLanguageServer:
             return []
         return intent_lenses(doc.text)
 
+    def on_code_action(self, params: dict[str, object]) -> list[dict[str, object]]:
+        td = dict(params.get("textDocument", {}))
+        uri = str(td.get("uri"))
+        doc = self.documents.get(uri)
+        if doc is None:
+            return []
+        range_params = dict(params.get("range", {}))
+        start = dict(range_params.get("start", {}))
+        end = dict(range_params.get("end", {}))
+        start_line = int(start.get("line", 0))
+        end_line = int(end.get("line", start_line))
+        selected_text = None
+        if 0 <= start_line < len(doc.text.splitlines()):
+            selected_text = doc.text.splitlines()[start_line].strip()
+        return python_code_actions(
+            text=doc.text,
+            path=doc.path,
+            start_line=start_line,
+            end_line=end_line,
+            selected_text=selected_text,
+        )
+
     def handle(self, method: str, params: dict[str, object] | None) -> Any:
         params = params or {}
         if method == "initialize":
@@ -162,6 +186,8 @@ class VibeLanguageServer:
             return self.on_semantic_tokens_full(params)
         if method == "textDocument/codeLens":
             return self.on_code_lens(params)
+        if method == "textDocument/codeAction":
+            return self.on_code_action(params)
         if method in {"shutdown", "exit"}:
             return None
         raise KeyError(f"unsupported method: {method}")

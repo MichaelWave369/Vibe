@@ -191,3 +191,14 @@ def test_lsp_python_completion_and_hover_support(tmp_path: Path) -> None:
         {"textDocument": {"uri": uri}, "position": {"line": 1, "character": 1}},
     )
     assert "conditional branch" in hover_keyword["contents"]["value"]
+
+    actions = srv.handle(
+        "textDocument/codeAction",
+        {
+            "textDocument": {"uri": uri},
+            "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 7}},
+            "context": {"diagnostics": []},
+        },
+    )
+    titles = [item["title"] for item in actions]
+    assert any("expand snippet" in title for title in titles)
