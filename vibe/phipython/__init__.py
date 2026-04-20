@@ -3,6 +3,7 @@
 from .artifacts import export_artifact_bundle
 from .doctor import doctor_project
 from .engine import (
+    build_bundle,
     apply_patch_plan_for_file,
     classify_intent,
     doctor,
@@ -11,8 +12,10 @@ from .engine import (
     export_artifacts,
     init_template,
     inspect_project,
+    generate_starter_tests,
     list_patch_candidates_for_file,
     list_patch_plans_for_file,
+    get_receipts,
     list_snippet_triggers,
     list_template_names,
     parse_traceback,
@@ -22,10 +25,13 @@ from .engine import (
     run_patch_traceback,
     scaffold_from_intent,
     show_template,
+    show_test_profile,
     snippet_preview,
     suggest_fixes,
     suggest_fixes_for_traceback_text,
     translate_error,
+    write_patch_receipt,
+    write_plan_receipt,
 )
 from .errors import list_supported_error_types
 from .explain import explain_python_source, explanation_for_keyword
@@ -36,6 +42,7 @@ from .patch_plans import apply_patch_plan, list_patch_plans, preview_patch_plan
 from .python_bridge import PythonScaffoldIntent, bridge_intent_to_python_scaffold
 from .scaffold_metadata import read_metadata
 from .snippets import expand_snippet, get_snippet, list_snippets, snippet_completion_items
+from .test_profiles import get_test_profile, list_test_profiles
 from .templates import get_template, list_templates, render_template_files
 from .traceback_utils import parse_traceback_text, summarize_traceback_chain
 
@@ -44,6 +51,7 @@ __all__ = [
     "apply_patch_plan",
     "apply_patch_plan_for_file",
     "apply_safe_patch",
+    "build_bundle",
     "bridge_intent_to_python_scaffold",
     "classify_intent",
     "classify_intent_to_template",
@@ -57,7 +65,10 @@ __all__ = [
     "export_artifact_bundle",
     "export_artifacts",
     "get_snippet",
+    "get_receipts",
+    "get_test_profile",
     "get_template",
+    "generate_starter_tests",
     "init_template",
     "inspect_project",
     "list_patch_candidates",
@@ -67,6 +78,7 @@ __all__ = [
     "list_snippet_triggers",
     "list_snippets",
     "list_supported_error_types",
+    "list_test_profiles",
     "list_template_names",
     "list_templates",
     "parse_traceback",
@@ -82,6 +94,7 @@ __all__ = [
     "run_patch_traceback",
     "scaffold_from_intent",
     "show_template",
+    "show_test_profile",
     "snippet_completion_items",
     "snippet_preview",
     "suggest_fixes",
@@ -90,4 +103,6 @@ __all__ = [
     "suggest_fixes_for_traceback_text",
     "summarize_traceback_chain",
     "translate_error",
+    "write_patch_receipt",
+    "write_plan_receipt",
 ]

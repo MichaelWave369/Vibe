@@ -12,8 +12,12 @@ from .intent_scaffold import classify_intent_to_template, classify_intent_to_tem
 from .patch import apply_safe_patch, list_patch_candidates, patch_from_traceback, preview_safe_patch
 from .patch_plans import apply_patch_plan, list_patch_plans, preview_patch_plan
 from .python_bridge import BridgeResult, PythonScaffoldIntent, bridge_intent_to_python_scaffold
+from .receipts import build_patch_receipt, build_plan_receipt, list_receipts, write_receipt
+from .review_bundles import create_review_bundle
 from .scaffold_metadata import metadata_for_template, read_metadata, write_metadata
 from .snippets import expand_snippet, list_snippets, snippet_as_dict
+from .test_profiles import get_test_profile
+from .testgen import generate_tests
 from .templates import list_templates, template_as_dict
 from .traceback_utils import parse_traceback_text, summarize_traceback_chain
 
@@ -157,3 +161,40 @@ def apply_patch_plan_for_file(path: Path, plan_id: str, apply: bool = False) -> 
 
 def export_artifacts(export_dir: Path, prefix: str, payload: dict[str, object], title: str) -> dict[str, object]:
     return export_artifact_bundle(export_dir=export_dir, prefix=prefix, payload=payload, title=title)
+
+
+def generate_starter_tests(path: Path, template: str | None = None, apply: bool = False) -> dict[str, object]:
+    return generate_tests(path, template=template, apply=apply)
+
+
+def show_test_profile(template: str) -> dict[str, object]:
+    profile = get_test_profile(template)
+    if profile is None:
+        raise KeyError(f"unknown test profile: {template}")
+    return {
+        "template": profile.template,
+        "test_files": list(profile.test_files),
+        "covered_signals": list(profile.covered_signals),
+        "skipped_areas": list(profile.skipped_areas),
+        "notes": list(profile.notes),
+    }
+
+
+def write_patch_receipt(path: Path, payload: dict[str, object], receipt_type: str = "patch") -> dict[str, object]:
+    receipt = build_patch_receipt(payload, receipt_type=receipt_type, target=path)
+    out = write_receipt(path.parent if path.is_file() else path, receipt)
+    return {"receipt": receipt, "path": str(out)}
+
+
+def write_plan_receipt(path: Path, payload: dict[str, object]) -> dict[str, object]:
+    receipt = build_plan_receipt(payload, target=path)
+    out = write_receipt(path.parent if path.is_file() else path, receipt)
+    return {"receipt": receipt, "path": str(out)}
+
+
+def get_receipts(path: Path) -> list[dict[str, object]]:
+    return list_receipts(path if path.is_dir() else path.parent)
+
+
+def build_bundle(path: Path, out_dir: Path) -> dict[str, object]:
+    return create_review_bundle(path if path.is_dir() else path.parent, out_dir)

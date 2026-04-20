@@ -238,6 +238,45 @@ def test_cli_phipython_v12_commands(capsys, tmp_path: Path) -> None:
     assert (export_dir / "phipython_inspect_project.json").exists()
 
 
+def test_phipython_v14_testgen_receipts_and_bundle(capsys, tmp_path: Path) -> None:
+    project = tmp_path / "proj"
+    assert main(["phipython", "init", "cli", "--output-dir", str(project)]) == 0
+    capsys.readouterr()
+
+    assert main(["phipython", "testgen", str(project), "--preview", "--report", "json"]) == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert preview["can_generate"] is True
+    assert preview["applied"] is False
+
+    assert main(["phipython", "testgen", str(project), "--apply", "--report", "json"]) == 0
+    applied = json.loads(capsys.readouterr().out)
+    assert applied["applied"] is True
+    assert (project / ".phipython.tests.json").exists()
+
+    code_file = project / "main.py"
+    assert main(["phipython", "patch", str(code_file), "--preview", "--report", "json"]) == 0
+    capsys.readouterr()
+    assert main(["phipython", "receipts", str(project), "--report", "json"]) == 0
+    receipts = json.loads(capsys.readouterr().out)
+    assert receipts["receipts"]
+
+    bundle_dir = tmp_path / "bundle"
+    assert main(["phipython", "bundle", str(project), "--out", str(bundle_dir), "--report", "json"]) == 0
+    bundle = json.loads(capsys.readouterr().out)
+    assert Path(bundle["artifacts"]["doctor"]).exists()
+    assert (bundle_dir / "test_manifest.json").exists()
+
+    assert main(["phipython", "show-test-profile", "cli", "--report", "json"]) == 0
+    profile = json.loads(capsys.readouterr().out)
+    assert profile["template"] == "cli"
+
+    assert main(["phipython", "doctor", str(project), "--report", "json"]) == 0
+    doctor = json.loads(capsys.readouterr().out)
+    check_ids = {check["id"] for check in doctor["checks"]}
+    assert "tests.present" in check_ids
+    assert "tests.manifest_present" in check_ids
+
+
 def test_patch_traceback_file_not_found(tmp_path: Path) -> None:
     trace_file = tmp_path / "trace_unknown.txt"
     trace_file.write_text(

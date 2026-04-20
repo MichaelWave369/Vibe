@@ -86,7 +86,7 @@ python -m pytest -q
 
 ---
 
-## PhiPython v1.3 (guided Python layer inside Vibe)
+## PhiPython v1.4 (guided Python layer inside Vibe)
 
 PhiPython is a **bounded, deterministic Python authoring layer inside Vibe**, not a separate product.
 
@@ -94,7 +94,7 @@ PhiPython is a **bounded, deterministic Python authoring layer inside Vibe**, no
 - **PhiPython** adds guided Python learning/building flows.
 - **Python** is used as a practical emit/runtime target where appropriate.
 
-Current PhiPython v1.3 scope:
+Current PhiPython v1.4 scope:
 
 - scaffold generation for starter Python projects (`cli`, `automation`, `api_tool`, `scraper`, `flask_app`, `dashboard`),
 - deterministic snippet registry with metadata/placeholders (`forloop`, `readfile`, `writejson`, `api_get`, `tryexcept`, `flask_app`, `argparse_cli`, `pandas_csv`, `requests_json`, `file_append`, `env_var`),
@@ -109,10 +109,13 @@ Current PhiPython v1.3 scope:
 - interactive-style deterministic patch selection (`--interactive`, `--select`),
 - constrained multi-file patch plans with preview-first per-file views,
 - local exportable doctor/patch/inspect artifacts for CI-friendly review.
+- starter-aware deterministic test generation (`testgen`) + local `.phipython.tests.json` manifests,
+- local repair receipts for patch/plan preview/apply/reject flows,
+- local review bundles that combine doctor/inspect/receipt/test-manifest artifacts.
 
 Important truthfulness boundary:
 
-- PhiPython v1.3 **does not claim full semantic verification of arbitrary Python programs**.
+- PhiPython v1.4 **does not claim full semantic verification of arbitrary Python programs**.
 - Explanations and error guidance are intentionally bounded and may be heuristic.
 - Fix suggestions are heuristic candidates, not guaranteed patches.
 - Traceback analysis (including chain parsing) is bounded to common traceback shapes.
@@ -121,6 +124,9 @@ Important truthfulness boundary:
 - Doctor profiles are starter/template oriented and do not guarantee runtime correctness.
 - Multi-file patch plans are narrow and preview-first.
 - Exported artifacts are local review artifacts, not proofs of correctness.
+- Generated tests are starter-oriented guidance, not exhaustive correctness validation.
+- Repair receipts are local review artifacts, not formal proofs.
+- Review bundles are local operator-inspection bundles, not proof bundles.
 
 Examples:
 
@@ -144,6 +150,11 @@ vibec phipython patch-traceback trace.txt --interactive
 vibec phipython inspect-project ./demo_app
 vibec phipython doctor ./demo_app --export ./artifacts
 vibec phipython inspect-project ./demo_app --export ./artifacts
+vibec phipython testgen ./demo_cli --preview
+vibec phipython testgen ./demo_cli --apply
+vibec phipython show-test-profile cli
+vibec phipython receipts ./demo_cli
+vibec phipython bundle ./demo_cli --out ./artifacts
 ```
 
 ---
@@ -179,6 +190,10 @@ Primary commands:
 - `vibec phipython patch-traceback <traceback.txt> [--interactive|--select <id>] [--preview|--apply]` — traceback-driven patch selection + preview/apply for safe cases.
 - `vibec phipython inspect-project <path> [--export <dir>]` — inspect scaffold metadata/file structure and optionally export review artifacts.
 - `vibec phipython doctor <path> [--template-profile <name>] [--export <dir>]` — template-aware bounded doctor checks + optional artifact export.
+- `vibec phipython testgen <path> [--template <id>] [--preview|--apply]` — bounded starter-aware pytest generation.
+- `vibec phipython show-test-profile <template>` — inspect bounded test generation profile coverage for a starter template.
+- `vibec phipython receipts <path>` — inspect local repair receipts for patch/plan flows.
+- `vibec phipython bundle <path> --out <dir>` — build a local review bundle combining doctor/inspect/receipt/test-manifest artifacts.
 - `vibec phipython list-templates` / `list-snippets` — inspect deterministic PhiPython registries.
 - `vibec ci-check` — deterministic CI bridge checks.
 - `vibec self-check` — bounded self-hosting check.

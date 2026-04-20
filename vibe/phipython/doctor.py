@@ -5,6 +5,8 @@ from pathlib import Path
 
 from .doctor_profiles import DoctorCheck, baseline_checks, template_profile_checks
 from .scaffold_metadata import read_metadata
+from .test_profiles import TEST_MANIFEST_FILE, get_test_profile
+from .testgen import read_test_manifest
 from .templates import get_template, list_templates
 
 
@@ -51,6 +53,60 @@ def doctor_project(path: Path, template_profile: str | None = None) -> dict[str,
 
     req_text = (path / "requirements.txt").read_text(encoding="utf-8") if (path / "requirements.txt").exists() else ""
     checks.extend(template_profile_checks(path, template=guess, req_text=req_text))
+    tests_dir = path / "tests"
+    has_tests = tests_dir.exists() and any(tests_dir.glob("test_*.py"))
+    test_manifest = read_test_manifest(path)
+    checks.append(
+        DoctorCheck(
+            id="tests.present",
+            status="pass" if has_tests else "warn",
+            summary="Starter-oriented test presence check.",
+            details="At least one test file found in tests/." if has_tests else "No starter tests detected in tests/.",
+            suggested_action="Run `vibec phipython testgen <path> --apply` to generate bounded starter tests.",
+        )
+    )
+    profile = get_test_profile(guess)
+    checks.append(
+        DoctorCheck(
+            id="tests.profile_coverage",
+            status="pass" if profile is not None else "warn",
+            summary="Template test-profile coverage check.",
+            details="Template has bounded test profile coverage." if profile is not None else "No bounded test profile found for inferred template.",
+            suggested_action="Use a supported template profile or generate tests manually.",
+        )
+    )
+    if test_manifest is None:
+        checks.append(
+            DoctorCheck(
+                id="tests.manifest_present",
+                status="warn",
+                summary="Test generation manifest check.",
+                details=f"{TEST_MANIFEST_FILE} not found.",
+                suggested_action="Generate starter tests to emit a manifest for local lifecycle tracking.",
+            )
+        )
+    else:
+        checks.append(
+            DoctorCheck(
+                id="tests.manifest_present",
+                status="pass",
+                summary="Test generation manifest check.",
+                details=f"{TEST_MANIFEST_FILE} present.",
+                suggested_action="Regenerate starter tests when scaffold changes materially.",
+            )
+        )
+        metadata_path = path / ".phipython.json"
+        manifest_path = path / TEST_MANIFEST_FILE
+        stale = metadata_path.exists() and manifest_path.exists() and manifest_path.stat().st_mtime < metadata_path.stat().st_mtime
+        checks.append(
+            DoctorCheck(
+                id="tests.manifest_freshness",
+                status="warn" if stale else "pass",
+                summary="Starter test manifest freshness check.",
+                details="Manifest appears older than scaffold metadata." if stale else "Manifest freshness looks consistent with scaffold metadata timestamps.",
+                suggested_action="Re-run test generation if metadata/template changed.",
+            )
+        )
 
     template = get_template(guess)
     if template is not None:

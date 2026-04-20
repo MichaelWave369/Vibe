@@ -124,6 +124,34 @@ def python_code_actions(
                     "data": {"project": project_info.get("path"), "mode": "doctor"},
                 }
             )
+            actions.append(
+                {
+                    "title": "PhiPython: generate starter tests",
+                    "kind": "quickfix",
+                    "data": {"project": project_info.get("path"), "mode": "testgen_preview"},
+                }
+            )
+            actions.append(
+                {
+                    "title": "PhiPython: preview doctor bundle",
+                    "kind": "quickfix",
+                    "data": {"project": project_info.get("path"), "mode": "bundle_preview"},
+                }
+            )
+            actions.append(
+                {
+                    "title": "PhiPython: show last repair receipt",
+                    "kind": "quickfix",
+                    "data": {"project": project_info.get("path"), "mode": "show_last_receipt"},
+                }
+            )
+            actions.append(
+                {
+                    "title": "PhiPython: preview local review bundle",
+                    "kind": "quickfix",
+                    "data": {"project": project_info.get("path"), "mode": "bundle_preview_local"},
+                }
+            )
 
     if diagnostics:
         for diag in diagnostics:

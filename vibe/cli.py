@@ -37,9 +37,12 @@ from .manifest import VibeManifest
 from .lsp.server import run_stdio_server
 from .phipython import (
     apply_patch_plan_for_file as pp_apply_patch_plan_for_file,
+    build_bundle as pp_build_bundle,
     doctor as pp_doctor,
     export_artifacts as pp_export_artifacts,
     explain_file as pp_explain_file,
+    generate_starter_tests as pp_generate_starter_tests,
+    get_receipts as pp_get_receipts,
     init_template as pp_init_template,
     inspect_project as pp_inspect_project,
     list_patch_candidates_for_file as pp_list_patch_candidates_for_file,
@@ -52,10 +55,13 @@ from .phipython import (
     run_patch as pp_run_patch,
     run_patch_traceback as pp_run_patch_traceback,
     show_template as pp_show_template,
+    show_test_profile as pp_show_test_profile,
     snippet_preview as pp_snippet_preview,
     suggest_fixes as pp_suggest_fixes,
     suggest_fixes_for_traceback_text as pp_suggest_fixes_for_traceback_text,
     translate_error as pp_translate_error,
+    write_patch_receipt as pp_write_patch_receipt,
+    write_plan_receipt as pp_write_plan_receipt,
 )
 from .interchange import (
     build_interchange_from_text,
@@ -1636,11 +1642,19 @@ def _phipython_show_template(template: str, report: ReportMode) -> int:
     return 0
 
 
-def _phipython_doctor(path: Path, report: ReportMode, template_profile: str | None = None, export: Path | None = None) -> int:
+def _phipython_doctor(
+    path: Path,
+    report: ReportMode,
+    template_profile: str | None = None,
+    export: Path | None = None,
+    bundle: Path | None = None,
+) -> int:
     payload = pp_doctor(path, template_profile=template_profile)
     export_payload = None
     if export is not None:
         export_payload = pp_export_artifacts(export, prefix="phipython_doctor", payload=payload, title="PhiPython Doctor")
+    if bundle is not None:
+        pp_build_bundle(path, bundle)
     if report == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
@@ -1669,6 +1683,7 @@ def _phipython_patch(
     select: str | None = None,
     export: Path | None = None,
     plan: str | None = None,
+    bundle: Path | None = None,
 ) -> int:
     if interactive:
         payload = pp_list_patch_candidates_for_file(path, issue_type=issue_type)
@@ -1679,15 +1694,19 @@ def _phipython_patch(
             if do_apply
             else pp_preview_patch_plan_for_file(path, plan_id=plan)
         )
+        pp_write_plan_receipt(path, payload)
     else:
         payload = (
             pp_preview_patch(path, issue_type=issue_type, select=select)
             if preview and not do_apply
             else pp_run_patch(path, issue_type=issue_type, apply=do_apply, select=select)
         )
+        pp_write_patch_receipt(path, payload, receipt_type="patch")
     export_payload = None
     if export is not None:
         export_payload = pp_export_artifacts(export, prefix="phipython_patch", payload=payload, title="PhiPython Patch")
+    if bundle is not None:
+        pp_build_bundle(path, bundle)
     if report == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
@@ -1726,6 +1745,7 @@ def _phipython_patch_traceback(
     interactive: bool = False,
     select: str | None = None,
     export: Path | None = None,
+    bundle: Path | None = None,
 ) -> int:
     payload = (
         pp_run_patch_traceback(traceback_path, apply=False, issue_type=issue_type, interactive=True)
@@ -1738,11 +1758,17 @@ def _phipython_patch_traceback(
             select=select,
         )
     )
+    if not interactive:
+        target_path = Path(str(payload.get("target_file", traceback_path)))
+        if "preview" in payload:
+            pp_write_patch_receipt(target_path, payload, receipt_type="patch_traceback")
     export_payload = None
     if export is not None:
         export_payload = pp_export_artifacts(
             export, prefix="phipython_patch_traceback", payload=payload, title="PhiPython Patch from Traceback"
         )
+    if bundle is not None:
+        pp_build_bundle(traceback_path.parent, bundle)
     if report == "json":
         print(json.dumps(payload, indent=2, sort_keys=True))
     else:
@@ -1784,6 +1810,73 @@ def _phipython_inspect_project(path: Path, report: ReportMode, export: Path | No
             print(f"note: {note}")
         if export_payload is not None:
             print(f"artifacts: {export_payload['json']}, {export_payload['markdown']}")
+    return 0
+
+
+def _phipython_testgen(
+    path: Path,
+    report: ReportMode,
+    template: str | None = None,
+    preview: bool = False,
+    do_apply: bool = False,
+    bundle: Path | None = None,
+) -> int:
+    payload = pp_generate_starter_tests(path, template=template, apply=do_apply and not preview)
+    if bundle is not None:
+        pp_build_bundle(path, bundle)
+    if report == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(f"project: {payload['project']}")
+        print(f"template: {payload.get('template')}")
+        print(f"can_generate: {payload.get('can_generate')}")
+        print(f"applied: {payload.get('applied', False)}")
+        for note in payload.get("notes", []):
+            print(f"note: {note}")
+        for item in payload.get("files", []):
+            print(f"file: {item['path']}")
+    return 0
+
+
+def _phipython_show_test_profile(template: str, report: ReportMode) -> int:
+    try:
+        payload = pp_show_test_profile(template)
+    except KeyError as exc:
+        print(str(exc))
+        return 1
+    if report == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(f"template: {payload['template']}")
+        print("test_files:")
+        for rel in payload["test_files"]:
+            print(f"  - {rel}")
+        print("covered_signals:")
+        for signal in payload["covered_signals"]:
+            print(f"  - {signal}")
+    return 0
+
+
+def _phipython_receipts(path: Path, report: ReportMode) -> int:
+    payload = {"path": str(path), "receipts": pp_get_receipts(path)}
+    if report == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(f"path: {path}")
+        print(f"receipts: {len(payload['receipts'])}")
+        for row in payload["receipts"][:20]:
+            print(f"- {row.get('receipt_type')} [{row.get('status')}] -> {row.get('_path')}")
+    return 0
+
+
+def _phipython_bundle(path: Path, out_dir: Path, report: ReportMode) -> int:
+    payload = pp_build_bundle(path, out_dir)
+    if report == "json":
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(f"bundle_dir: {payload['bundle_dir']}")
+        for name, artifact in payload["artifacts"].items():
+            print(f"{name}: {artifact}")
     return 0
 
 
@@ -1962,6 +2055,7 @@ def build_parser() -> argparse.ArgumentParser:
     pp_doctor.add_argument("path", type=Path)
     pp_doctor.add_argument("--template-profile", default=None, help="Optional explicit template profile override")
     pp_doctor.add_argument("--export", type=Path, default=None, help="Optional artifact export directory")
+    pp_doctor.add_argument("--bundle", type=Path, default=None, help="Optional review bundle output directory")
     pp_doctor.add_argument("--report", choices=["human", "json"], default="human")
 
     pp_patch = pp_sub.add_parser("patch", help="Preview/apply bounded safe patch candidates for a Python file")
@@ -1973,6 +2067,7 @@ def build_parser() -> argparse.ArgumentParser:
     pp_patch.add_argument("--apply", action="store_true")
     pp_patch.add_argument("--preview", action="store_true")
     pp_patch.add_argument("--export", type=Path, default=None, help="Optional artifact export directory")
+    pp_patch.add_argument("--bundle", type=Path, default=None, help="Optional review bundle output directory")
     pp_patch.add_argument("--report", choices=["human", "json"], default="human")
 
     pp_patch_tb = pp_sub.add_parser("patch-traceback", help="Preview/apply bounded safe patches from traceback text")
@@ -1983,12 +2078,34 @@ def build_parser() -> argparse.ArgumentParser:
     pp_patch_tb.add_argument("--apply", action="store_true")
     pp_patch_tb.add_argument("--preview", action="store_true")
     pp_patch_tb.add_argument("--export", type=Path, default=None, help="Optional artifact export directory")
+    pp_patch_tb.add_argument("--bundle", type=Path, default=None, help="Optional review bundle output directory")
     pp_patch_tb.add_argument("--report", choices=["human", "json"], default="human")
 
     pp_inspect = pp_sub.add_parser("inspect-project", help="Inspect local scaffold metadata and file structure")
     pp_inspect.add_argument("path", type=Path)
     pp_inspect.add_argument("--export", type=Path, default=None, help="Optional artifact export directory")
     pp_inspect.add_argument("--report", choices=["human", "json"], default="human")
+
+    pp_testgen = pp_sub.add_parser("testgen", help="Generate bounded starter-oriented pytest files")
+    pp_testgen.add_argument("path", type=Path)
+    pp_testgen.add_argument("--template", default=None, help="Optional explicit template id override")
+    pp_testgen.add_argument("--preview", action="store_true")
+    pp_testgen.add_argument("--apply", action="store_true")
+    pp_testgen.add_argument("--bundle", type=Path, default=None, help="Optional review bundle output directory")
+    pp_testgen.add_argument("--report", choices=["human", "json"], default="human")
+
+    pp_show_test_profile = pp_sub.add_parser("show-test-profile", help="Show bounded test profile for a template")
+    pp_show_test_profile.add_argument("template", type=str)
+    pp_show_test_profile.add_argument("--report", choices=["human", "json"], default="human")
+
+    pp_receipts = pp_sub.add_parser("receipts", help="List local PhiPython repair receipts")
+    pp_receipts.add_argument("path", type=Path)
+    pp_receipts.add_argument("--report", choices=["human", "json"], default="human")
+
+    pp_bundle = pp_sub.add_parser("bundle", help="Build a local PhiPython review bundle")
+    pp_bundle.add_argument("path", type=Path)
+    pp_bundle.add_argument("--out", required=True, type=Path)
+    pp_bundle.add_argument("--report", choices=["human", "json"], default="human")
 
     pp_sub.add_parser("list-templates", help="List available PhiPython templates").add_argument(
         "--report", choices=["human", "json"], default="human"
@@ -2234,7 +2351,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.phipython_command == "scaffold":
             return _phipython_scaffold_from_intent(args.intent_text, args.output_dir, args.report)
         if args.phipython_command == "doctor":
-            return _phipython_doctor(args.path, args.report, template_profile=args.template_profile, export=args.export)
+            return _phipython_doctor(
+                args.path,
+                args.report,
+                template_profile=args.template_profile,
+                export=args.export,
+                bundle=args.bundle,
+            )
         if args.phipython_command == "patch":
             return _phipython_patch(
                 args.path,
@@ -2246,6 +2369,7 @@ def main(argv: list[str] | None = None) -> int:
                 select=args.select,
                 export=args.export,
                 plan=args.plan,
+                bundle=args.bundle,
             )
         if args.phipython_command == "patch-traceback":
             return _phipython_patch_traceback(
@@ -2257,9 +2381,25 @@ def main(argv: list[str] | None = None) -> int:
                 interactive=args.interactive,
                 select=args.select,
                 export=args.export,
+                bundle=args.bundle,
             )
         if args.phipython_command == "inspect-project":
             return _phipython_inspect_project(args.path, args.report, export=args.export)
+        if args.phipython_command == "testgen":
+            return _phipython_testgen(
+                args.path,
+                args.report,
+                template=args.template,
+                preview=args.preview,
+                do_apply=args.apply,
+                bundle=args.bundle,
+            )
+        if args.phipython_command == "show-test-profile":
+            return _phipython_show_test_profile(args.template, args.report)
+        if args.phipython_command == "receipts":
+            return _phipython_receipts(args.path, args.report)
+        if args.phipython_command == "bundle":
+            return _phipython_bundle(args.path, args.out, args.report)
         if args.phipython_command == "list-templates":
             return _phipython_list_templates(args.report)
         if args.phipython_command == "list-snippets":
