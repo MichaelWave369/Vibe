@@ -86,6 +86,37 @@ python -m pytest -q
 
 ---
 
+## PhiPython v1.0 (guided Python layer inside Vibe)
+
+PhiPython is a **bounded, deterministic Python authoring layer inside Vibe**, not a separate product.
+
+- **Vibe** remains the intent-first source-of-truth system.
+- **PhiPython** adds guided Python learning/building flows.
+- **Python** is used as a practical emit/runtime target where appropriate.
+
+Current PhiPython v1.0 scope:
+
+- scaffold generation for starter Python projects (`cli`, `automation`, `api_tool`, `scraper`, `flask_app`, `dashboard`),
+- deterministic snippet registry (`forloop`, `readfile`, `writejson`, `api_get`, `tryexcept`, `flask_app`),
+- plain-English Python explanation helpers for common beginner constructs,
+- plain-English translation for common Python exception types,
+- bounded intent-to-Python scaffold bridge for structured starter inputs.
+
+Important truthfulness boundary:
+
+- PhiPython v1.0 **does not claim full semantic verification of arbitrary Python programs**.
+- Explanations and error guidance are intentionally bounded and may be heuristic.
+
+Examples:
+
+```bash
+vibec phipython init cli
+vibec phipython explain hello.py
+vibec phipython translate-error --type TypeError --message "unsupported operand type(s) for +: 'int' and 'str'"
+```
+
+---
+
 ## CLI overview
 
 Primary commands:
@@ -103,6 +134,11 @@ Primary commands:
 - `vibec init` / `manifest-check` / `build` — package lifecycle.
 - `vibec publish` / `search` / `registry-inspect` / `compat` — local registry operations.
 - `vibec lsp` — local LSP server over stdio.
+- `vibec phipython init <template>` — create starter Python scaffolds.
+- `vibec phipython explain <file.py>` — plain-English explanation for simple Python files.
+- `vibec phipython explain-snippet <trigger>` — describe snippet usage and starter code.
+- `vibec phipython translate-error --type <ExceptionName> --message <msg>` — plain-English error guidance.
+- `vibec phipython list-templates` / `list-snippets` — inspect deterministic PhiPython registries.
 - `vibec ci-check` — deterministic CI bridge checks.
 - `vibec self-check` — bounded self-hosting check.
 - `vibec domains` — list domain profiles.

@@ -163,3 +163,31 @@ def test_lsp_initialize_capabilities_shape() -> None:
     assert caps["semanticTokensProvider"]["full"] is True
     # deterministic serialization surface
     assert json.dumps(payload, sort_keys=True) == json.dumps(payload, sort_keys=True)
+
+
+def test_lsp_python_completion_and_hover_support(tmp_path: Path) -> None:
+    srv = VibeLanguageServer()
+    py_file = tmp_path / "app.py"
+    text = "forloop\nif True:\n    pass\n"
+    py_file.write_text(text, encoding="utf-8")
+    uri = _doc_uri(py_file)
+    srv.handle("textDocument/didOpen", {"textDocument": {"uri": uri, "version": 1, "text": text}})
+
+    completion = srv.handle(
+        "textDocument/completion",
+        {"textDocument": {"uri": uri}, "position": {"line": 0, "character": 7}},
+    )
+    labels = [item["label"] for item in completion["items"]]
+    assert "forloop" in labels
+
+    hover_snippet = srv.handle(
+        "textDocument/hover",
+        {"textDocument": {"uri": uri}, "position": {"line": 0, "character": 3}},
+    )
+    assert "PhiPython snippet" in hover_snippet["contents"]["value"]
+
+    hover_keyword = srv.handle(
+        "textDocument/hover",
+        {"textDocument": {"uri": uri}, "position": {"line": 1, "character": 1}},
+    )
+    assert "conditional branch" in hover_keyword["contents"]["value"]
