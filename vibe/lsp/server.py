@@ -153,6 +153,10 @@ class VibeLanguageServer:
         end = dict(range_params.get("end", {}))
         start_line = int(start.get("line", 0))
         end_line = int(end.get("line", start_line))
+        start_character = int(start.get("character", 0))
+        end_character = int(end.get("character", 0))
+        context = dict(params.get("context", {}))
+        diagnostics = list(context.get("diagnostics", []))
         selected_text = None
         if 0 <= start_line < len(doc.text.splitlines()):
             selected_text = doc.text.splitlines()[start_line].strip()
@@ -161,7 +165,10 @@ class VibeLanguageServer:
             path=doc.path,
             start_line=start_line,
             end_line=end_line,
+            start_character=start_character,
+            end_character=end_character,
             selected_text=selected_text,
+            diagnostics=diagnostics,
         )
 
     def handle(self, method: str, params: dict[str, object] | None) -> Any:

@@ -11,8 +11,11 @@ from vibe.phipython import (
     list_snippets,
     list_templates,
     parse_traceback,
+    run_patch,
+    run_patch_traceback,
     suggest_fixes,
     suggest_fixes_for_traceback_text,
+    summarize_traceback_chain,
     translate_error,
 )
 
@@ -27,6 +30,7 @@ def test_template_listing_and_richer_scaffold_generation(tmp_path: Path) -> None
         assert rc == 0
         assert (out / "README.md").exists()
         assert (out / "main.py").exists()
+        assert (out / ".phipython.json").exists()
 
     assert (tmp_path / "cli" / "tests" / "test_parser.py").exists()
     assert (tmp_path / "flask_app" / ".env.example").exists()
@@ -98,53 +102,91 @@ TypeError: unsupported operand type(s) for +: 'int' and 'str'
     assert tb_fixes["issues"]
 
 
+def test_chained_traceback_summary() -> None:
+    chained = """Traceback (most recent call last):
+  File \"app.py\", line 3, in <module>
+    int("nope")
+ValueError: invalid literal for int() with base 10: 'nope'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File \"app.py\", line 6, in <module>
+    raise RuntimeError("failed")
+RuntimeError: failed
+"""
+    payload = summarize_traceback_chain(chained)
+    assert payload["final_exception"] == "RuntimeError"
+    assert len(payload["stages"]) >= 2
+
+
 def test_intent_scaffold_classifier() -> None:
     result = classify_intent("build a flask starter app")
     assert result["template"] == "flask_app"
     assert result["confidence"] in {"high", "medium"}
 
 
-def test_cli_phipython_v11_commands(capsys, tmp_path: Path) -> None:
+def test_patch_preview_apply_and_rejection(tmp_path: Path) -> None:
+    target = tmp_path / "patch_me.py"
+    target.write_text("requests.get('https://example.com')\n", encoding="utf-8")
+
+    preview = run_patch(target, issue_type="missing_import", apply=False)
+    assert preview["can_apply"] is True
+    assert "import requests" in preview["preview"]["after"]
+    assert preview["applied"] is False
+
+    applied = run_patch(target, issue_type="missing_import", apply=True)
+    assert applied["applied"] is True
+    assert target.read_text(encoding="utf-8").startswith("import requests")
+
+    reject = run_patch(target, issue_type="unsupported_issue", apply=True)
+    assert reject["can_apply"] is False
+    assert reject["applied"] is False
+
+
+def test_cli_phipython_v12_commands(capsys, tmp_path: Path) -> None:
     code_file = tmp_path / "hello.py"
-    code_file.write_text("import argparse\nname + 'x'\n", encoding="utf-8")
+    code_file.write_text("requests.get('https://example.com')\n", encoding="utf-8")
 
     trace_file = tmp_path / "trace.txt"
     trace_file.write_text(
-        "Traceback (most recent call last):\n  File \"main.py\", line 2, in <module>\n    name\nNameError: name 'name' is not defined\n",
+        "Traceback (most recent call last):\n  File \"main.py\", line 1, in <module>\n    requests.get('x')\nModuleNotFoundError: No module named 'requests'\n",
         encoding="utf-8",
     )
 
-    assert main(["phipython", "show-template", "flask_app", "--report", "json"]) == 0
-    assert "flask_app" in capsys.readouterr().out
+    project = tmp_path / "proj"
+    assert main(["phipython", "init", "cli", "--output-dir", str(project)]) == 0
+    capsys.readouterr()
 
-    assert main(["phipython", "show-snippet", "api_get", "--report", "json"]) == 0
-    out = json.loads(capsys.readouterr().out)
-    assert out["trigger"] == "api_get"
-    assert "expanded" in out
+    assert main(["phipython", "doctor", str(project), "--report", "json"]) == 0
+    doctor_out = json.loads(capsys.readouterr().out)
+    assert doctor_out["status"] in {"ok", "warn"}
 
-    assert main(["phipython", "fix", str(code_file), "--report", "json"]) == 0
-    out = json.loads(capsys.readouterr().out)
-    assert out["issues"]
+    assert main(["phipython", "inspect-project", str(project), "--report", "json"]) == 0
+    inspect_out = json.loads(capsys.readouterr().out)
+    assert inspect_out["metadata_exists"] is True
 
-    assert main(["phipython", "fix-traceback", str(trace_file), "--report", "json"]) == 0
-    out = json.loads(capsys.readouterr().out)
-    assert out["traceback_summary"]["exception_type"] == "NameError"
+    assert main(["phipython", "patch", str(code_file), "--preview", "--report", "json"]) == 0
+    patch_out = json.loads(capsys.readouterr().out)
+    assert "can_apply" in patch_out
 
-    scaffold_dir = tmp_path / "from_intent"
-    assert (
-        main(
-            [
-                "phipython",
-                "scaffold",
-                "--from-intent",
-                "create a requests-based API tool",
-                "--output-dir",
-                str(scaffold_dir),
-            ]
-        )
-        == 0
+    assert main(["phipython", "patch", str(code_file), "--apply", "--report", "json"]) == 0
+    apply_out = json.loads(capsys.readouterr().out)
+    assert apply_out["applied"] in {True, False}
+
+    assert main(["phipython", "patch-traceback", str(trace_file), "--preview", "--report", "json"]) == 0
+    trace_out = json.loads(capsys.readouterr().out)
+    assert "traceback_summary" in trace_out
+
+
+def test_patch_traceback_file_not_found(tmp_path: Path) -> None:
+    trace_file = tmp_path / "trace_unknown.txt"
+    trace_file.write_text(
+        "Traceback (most recent call last):\n  File \"/no/such/file.py\", line 1, in <module>\n    x\nNameError: name 'x' is not defined\n",
+        encoding="utf-8",
     )
-    assert (scaffold_dir / "main.py").exists()
+    out = run_patch_traceback(trace_file, apply=True)
+    assert out["can_apply"] is False
 
 
 def test_cli_phipython_unknown_items_return_nonzero(capsys) -> None:

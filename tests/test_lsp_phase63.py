@@ -168,7 +168,7 @@ def test_lsp_initialize_capabilities_shape() -> None:
 def test_lsp_python_completion_and_hover_support(tmp_path: Path) -> None:
     srv = VibeLanguageServer()
     py_file = tmp_path / "app.py"
-    text = "forloop\nif True:\n    pass\n"
+    text = "forloop\nif True:\n    requests.get('https://example.com')\n"
     py_file.write_text(text, encoding="utf-8")
     uri = _doc_uri(py_file)
     srv.handle("textDocument/didOpen", {"textDocument": {"uri": uri, "version": 1, "text": text}})
@@ -197,8 +197,10 @@ def test_lsp_python_completion_and_hover_support(tmp_path: Path) -> None:
         {
             "textDocument": {"uri": uri},
             "range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 7}},
-            "context": {"diagnostics": []},
+            "context": {"diagnostics": [{"code": "parse.error", "message": "demo"}]},
         },
     )
     titles = [item["title"] for item in actions]
     assert any("expand snippet" in title for title in titles)
+    assert any("preview safe patch" in title for title in titles)
+    assert any("explain this error" in title for title in titles)

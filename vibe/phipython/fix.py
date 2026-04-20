@@ -347,10 +347,15 @@ def suggest_fixes_for_traceback(summary: TracebackSummary) -> dict[str, object]:
             )
         )
 
+    intermediate = [stage.exception_type for stage in summary.chain[:-1]]
+    notes = [
+        "Traceback-driven fixes are heuristic candidates, not guaranteed patches.",
+        summary.heuristic_note,
+    ]
+    if intermediate:
+        notes.append(f"Observed chained exceptions before final error: {', '.join(intermediate)}.")
+
     return {
         "issues": [asdict(issue) for issue in issues],
-        "notes": [
-            "Traceback-driven fixes are heuristic candidates, not guaranteed patches.",
-            summary.heuristic_note,
-        ],
+        "notes": notes,
     }
