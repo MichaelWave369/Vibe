@@ -1,7 +1,7 @@
 intent TypingDojo:
   goal: "Provide an exact-character keyboard typing exercise with visible accuracy and timing feedback."
   inputs:
-    lesson: text
+    lesson: string
   outputs:
     accuracy: number
 
