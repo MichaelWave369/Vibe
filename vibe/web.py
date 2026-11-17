@@ -484,6 +484,13 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 .vibe-typing-curriculum select:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
 .vibe-typing-saved{margin-top:1rem;border-top:1px solid #465d80;padding-top:.8rem}
 .vibe-typing-saved p{font-size:.9rem;margin:.4rem 0}
+.vibe-heatmap-section{margin:1rem 0}.vibe-heatmap-section h3{margin:.5rem 0}.vibe-heatmap-section p{font-size:.83rem;color:#c7d5e8}
+#vibe-typing-heatmap{display:flex;flex-wrap:wrap;gap:.25rem;max-width:620px}
+.vibe-key{display:inline-flex;align-items:center;justify-content:center;background:#22314c;border:1px solid #526482;border-radius:5px;min-width:30px;min-height:34px;font:600 .85rem ui-monospace,monospace}
+.vibe-key-space{min-width:105px}
+.vibe-key-error{background:#914447;color:#fff;border-color:#ffada0}
+.vibe-key-heavy{background:#b33034;color:#fff;border-color:#ffcf9c}
+#vibe-typing-history{font-size:.85rem;line-height:1.6;color:#e0ebf9;padding-left:1.4rem}
 .vibe-typing-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin:1rem 0}
 .vibe-typing-metrics>div{background:#1a2943;padding:.55rem .8rem;border-radius:10px}
 .vibe-typing-metrics dt{font-size:.85rem;color:#bdd4f1}.vibe-typing-metrics dd{font-size:1.25rem;font-weight:750;margin:0}
@@ -1030,7 +1037,7 @@ def render_html(page: WebPage) -> str:
         if page.typing.lessons:
             typing_config = {
                 "lessons": [
-                    {"name": lesson.name, "difficulty": lesson.difficulty, "passage": lesson.passage}
+                    {"name": lesson.name, "difficulty": lesson.difficulty, "passage": lesson.passage, "pack": lesson.pack}
                     for lesson in page.typing.lessons
                 ],
                 "progress": page.typing.progress,
@@ -1078,8 +1085,18 @@ def render_html(page: WebPage) -> str:
                 f'<option value="{i}">{escape(lesson.name)} ({escape(lesson.difficulty)})</option>'
                 for i, lesson in enumerate(lessons)
             )
+            packs = list(dict.fromkeys(lesson.pack for lesson in lessons))
+            pack_markup = ""
+            if len(packs) > 1:
+                pack_options = "".join(
+                    f'<option value="{escape(pack, quote=True)}">{escape(pack)}</option>'
+                    for pack in packs
+                )
+                pack_markup = f"""<div><label for="vibe-typing-pack">Lesson pack</label>
+          <select id="vibe-typing-pack"><option value="all">All packs</option>{pack_options}</select></div>"""
             curriculum_markup = f"""
       <div class="vibe-typing-curriculum">
+        {pack_markup}
         <div><label for="vibe-typing-difficulty">Difficulty</label>
           <select id="vibe-typing-difficulty">
             <option value="all">All difficulties</option>
@@ -1096,9 +1113,17 @@ def render_html(page: WebPage) -> str:
       <div class="vibe-typing-saved">
         <p id="vibe-typing-completed">0 lessons completed</p>
         <p id="vibe-typing-best">Best WPM: not yet recorded</p>
+        <h3>Recent lesson results</h3>
+        <ol id="vibe-typing-history" aria-label="Recent attempts for selected lesson"></ol>
         <button type="button" id="vibe-typing-clear">Clear saved progress</button>
         <p id="vibe-typing-save-status" role="status" aria-live="polite"></p>
       </div>"""
+        heat_keys = "QWERTYUIOPASDFGHJKLZXCVBNM"
+        heat_markup = "".join(
+            f'<span class="vibe-key" data-vibe-key="{key.lower()}" aria-label="{key} zero errors">{key}</span>'
+            for key in heat_keys
+        )
+        heat_markup += '<span class="vibe-key vibe-key-space" data-vibe-key=" " aria-label="Space zero errors">Space</span>'
         typing_markup = f"""
     <section id="vibe-typing" aria-label="Typing dojo">
       <h2>Keyboard dojo</h2>
@@ -1118,6 +1143,11 @@ def render_html(page: WebPage) -> str:
         <div><dt>Errors</dt><dd id="vibe-typing-errors">0</dd></div>
         <div><dt>Elapsed</dt><dd id="vibe-typing-elapsed">0.0s</dd></div>
       </dl>
+      <div class="vibe-heatmap-section">
+        <h3>Keyboard trouble spots</h3>
+        <p>Highlighted keys show characters missed during this attempt, even after you correct them.</p>
+        <div id="vibe-typing-heatmap" role="group" aria-label="Keyboard error heatmap">{heat_markup}</div>
+      </div>
       <button type="button" id="vibe-typing-reset">Restart lesson</button>
       <p role="status" aria-live="polite" id="vibe-typing-status">Ready to type.</p>
 {progress_markup}
