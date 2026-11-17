@@ -156,10 +156,13 @@ class WebButton:
 
 @dataclass(slots=True)
 class WebComponent:
-    """Reusable bounded view fragment sharing its parent page's state."""
+    """Bounded reusable view fragment with optional per-instance state and string props."""
     name: str
     texts: list[str] = field(default_factory=list)
     buttons: list[WebButton] = field(default_factory=list)
+    props: list[str] = field(default_factory=list)
+    state: dict[str, int] = field(default_factory=dict)
+    bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -174,6 +177,7 @@ class WebPage:
     bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
     components: dict[str, WebComponent] = field(default_factory=dict)
     uses: list[str] = field(default_factory=list)
+    use_props: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
