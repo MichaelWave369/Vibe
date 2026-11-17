@@ -300,6 +300,14 @@ def _parse_sigil_expr(name: str, expr: str, line_no: int) -> SigilExpression:
 def parse_source(source: str) -> Program:
     """Parse raw source text into an AST Program using the formal grammar."""
 
+    # Parse the bounded web-page block into Vibe's native AST, while preserving
+    # the legacy parser behavior for every non-web spec.
+    web_page = None
+    if re.search(r"(?m)^page\s", source):
+        from .web import parse_web_source
+
+        web_page, source = parse_web_source(source)
+
     # Grammar source of truth is kept in vibe.grammar.GRAMMAR.
     tesla_raw, trimmed = _extract_brace_block(source, "experimental.tesla.victory.layer")
     agentora_raw, trimmed = _extract_brace_block(trimmed, "agentora")
@@ -553,12 +561,18 @@ def parse_source(source: str) -> Program:
     if intent is None:
         raise ParseError("Program missing required intent block", 1, 1)
 
+    if web_page is not None and web_page.name != intent.name:
+        raise ParseError(f"page {web_page.name!r} must match intent {intent.name!r}")
+    if web_page is None and emit_target == "web":
+        raise ParseError("emit web requires a page block")
+
     program = Program(
         intent=intent,
         preserve=preserve,
         constraints=constraints,
         bridge=bridge,
-        emit_target=emit_target,
+        emit_target="web" if web_page is not None else emit_target,
+        web_page=web_page,
         vibe_version=vibe_version,
         imports=imports,
         modules=modules,

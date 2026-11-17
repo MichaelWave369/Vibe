@@ -15,7 +15,7 @@ type            <- 'type' WS IDENT_PATH NEWLINE
 enum            <- 'enum' WS IDENT_PATH NEWLINE
 interface       <- 'interface' WS IDENT_PATH NEWLINE
 
-core_block      <- intent_block / preserve_block / constraint_block / bridge_block / sigil_block / sigil_temporal_block / agent_block / orchestrate_block / delegate_block / emit_stmt
+core_block      <- intent_block / preserve_block / constraint_block / bridge_block / sigil_block / sigil_temporal_block / agent_block / orchestrate_block / delegate_block / page_block / emit_stmt
 intent_block    <- 'intent' WS IDENT ':' NEWLINE INDENT intent_item+ DEDENT
 intent_item     <- goal_item / io_block
 io_block        <- ('inputs' / 'outputs') ':' NEWLINE INDENT field_decl+ DEDENT
@@ -46,6 +46,10 @@ delegate_item   <- delegate_inherits / delegate_max_depth / delegate_stop_when
 delegate_inherits <- 'inherits:' WS? TYPE NEWLINE
 delegate_max_depth <- 'max_depth:' WS? NUMBER NEWLINE
 delegate_stop_when <- 'stop_when:' WS? TYPE NEWLINE
+page_block      <- 'page' WS IDENT ':' NEWLINE INDENT page_field+ DEDENT
+# Bounded title, heading, state, bounds, and view fields.
+# The strict indentation/action parser is implemented in vibe.web.
+page_field      <- 'title:' WS STRING / 'heading:' WS STRING / 'state:' / 'bounds:' / 'view:'
 emit_stmt       <- 'emit' WS IDENT NEWLINE?
 
 experimental_block <- tesla_block / agentora_block / agentception_block

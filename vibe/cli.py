@@ -189,6 +189,26 @@ def _compile(
     emitted_code, backend = emit_code(ir)
     out_path = output_path_for(path, backend)
 
+    if ir.emit_target == "web":
+        # Web emits exact deterministic HTML. Generic candidate synthesis
+        # can mutate and invalidate markup, so we bypass that for this target.
+        if with_tests or refine:
+            print("web target does not support --with-tests or --refine yet")
+            return 2
+        result = verify(
+            ir, emitted_code,
+            backend=verification_backend,
+            fallback_backend=fallback_backend,
+            use_calibration=False,
+        )
+        _print_report(result, report, spec_path=str(path))
+        if not result.passed:
+            print("web compile blocked: Vibe bridge preservation gate failed")
+            return 1
+        out_path.write_text(emitted_code, encoding="utf-8")
+        print(f"emitted: {out_path}")
+        return 0
+
     if clean_cache:
         clear_cache(path)
 

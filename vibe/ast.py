@@ -145,6 +145,27 @@ class SigilTemporalSequence:
     steps: list[SigilTemporalStep] = field(default_factory=list)
 
 
+@dataclass(frozen=True, slots=True)
+class WebButton:
+    """A bounded VibeWeb action with an integer-only assignment."""
+    label: str
+    variable: str
+    operation: str
+    value: int
+
+
+@dataclass(slots=True)
+class WebPage:
+    """Page syntax node with no arbitrary script evaluation."""
+    name: str
+    title: str = ""
+    heading: str = ""
+    state: dict[str, int] = field(default_factory=dict)
+    texts: list[str] = field(default_factory=list)
+    buttons: list[WebButton] = field(default_factory=list)
+    bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
+
+
 @dataclass(slots=True)
 class Program:
     intent: IntentBlock
@@ -167,3 +188,4 @@ class Program:
     domain_profile: str | None = None
     sigils: list[SigilExpression] = field(default_factory=list)
     sigil_sequences: list[SigilTemporalSequence] = field(default_factory=list)
+    web_page: WebPage | None = None
