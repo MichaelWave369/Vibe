@@ -306,21 +306,39 @@ _SCRIPT = r"""
   'use strict';
   const config = JSON.parse(document.getElementById('vibe-config').textContent);
   const state = Object.assign(Object.create(null), config.state);
+  const scopedStates = Object.create(null);
+  Object.entries(config.scope_states || {}).forEach(([scope, values]) => {
+    scopedStates[scope] = Object.assign(Object.create(null), values);
+  });
+  const owns = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
   const render = () => {
     document.querySelectorAll('[data-vibe-text]').forEach((node) => {
-      const template = config.texts[Number(node.dataset.vibeText)];
+      const index = Number(node.dataset.vibeText);
+      const template = config.texts[index];
+      const scope = (config.text_scopes || [])[index];
+      const props = (config.text_props || [])[index] || {};
+      const local = scope == null ? null : scopedStates[scope];
       node.textContent = template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
-        (_, key) => String(state[key]));
+        (_, key) => {
+          if (owns(props, key)) return String(props[key]);
+          if (local && owns(local, key)) return String(local[key]);
+          return String(state[key]);
+        });
     });
   };
   document.querySelectorAll('[data-vibe-button]').forEach((node) => {
     node.addEventListener('click', () => {
       const action = config.buttons[Number(node.dataset.vibeButton)];
-      const old = state[action.variable];
+      const scope = action.scope;
+      const local = scope == null ? null : scopedStates[scope];
+      const target = local && owns(local, action.variable) ? local : state;
+      const old = target[action.variable];
       const next = action.operation === '=' ? action.value :
         action.operation === '+=' ? old + action.value : old - action.value;
-      const bounds = config.bounds[action.variable];
-      state[action.variable] = bounds ? Math.max(bounds[0], Math.min(bounds[1], next)) : next;
+      const bounds = target === state
+        ? config.bounds[action.variable]
+        : config.scope_bounds[scope][action.variable];
+      target[action.variable] = bounds ? Math.max(bounds[0], Math.min(bounds[1], next)) : next;
       render();
     });
   });
