@@ -332,37 +332,55 @@ _SCRIPT = r"""
 def render_html(page: WebPage) -> str:
     """Generate deterministic HTML with no framework/runtime dependencies."""
     texts = list(page.texts)
-    buttons = list(page.buttons)
+    text_scopes: list[str | None] = [None] * len(page.texts)
+    text_props: list[dict[str, str]] = [{} for _ in page.texts]
+    buttons: list[dict[str, object]] = [
+        {"label": action.label, "variable": action.variable,
+         "operation": action.operation, "value": action.value, "scope": None}
+        for action in page.buttons
+    ]
+    scope_states: dict[str, dict[str, int]] = {}
+    scope_bounds: dict[str, dict[str, tuple[int, int]]] = {}
     component_sections: list[str] = []
-    for name in page.uses:
+    for instance_id, (name, props) in enumerate(zip(page.uses, page.use_props)):
         component = page.components[name]
+        scope = f"instance_{instance_id}"
+        scope_states[scope] = dict(component.state)
+        scope_bounds[scope] = dict(component.bounds)
         body: list[str] = []
         for value in component.texts:
             index = len(texts)
             texts.append(value)
+            text_scopes.append(scope)
+            text_props.append(dict(props))
             body.append(f'      <p data-vibe-text="{index}" aria-live="polite"></p>')
         actions: list[str] = []
         for action in component.buttons:
             index = len(buttons)
-            buttons.append(action)
+            buttons.append({
+                "label": action.label, "variable": action.variable,
+                "operation": action.operation, "value": action.value,
+                "scope": scope,
+            })
             actions.append(f'        <button type="button" data-vibe-button="{index}">{escape(action.label)}</button>')
         if actions:
             body.append('      <div class="controls" role="group" aria-label="Component actions">')
             body.extend(actions)
             body.append("      </div>")
         component_sections.append(
-            '    <section class="vibe-component" aria-label="' + escape(name, quote=True) + '">\n'
-            + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\n'
-            + '\n'.join(body) + '\n    </section>'
+            '    <section class="vibe-component" aria-label="' + escape(name, quote=True) + '">\\n'
+            + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\\n'
+            + '\\n'.join(body) + '\\n    </section>'
         )
     payload = {
         "state": page.state,
         "texts": texts,
-        "buttons": [
-            {"label": b.label, "variable": b.variable, "operation": b.operation, "value": b.value}
-            for b in buttons
-        ],
+        "buttons": buttons,
         "bounds": page.bounds,
+        "text_scopes": text_scopes,
+        "text_props": text_props,
+        "scope_states": scope_states,
+        "scope_bounds": scope_bounds,
     }
     raw_json = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     safe_json = (raw_json.replace("&", "\\u0026").replace("<", "\\u003c")
