@@ -389,7 +389,10 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 .vibe-layout-grid .vibe-component{margin:0}
 .vibe-fields{display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0}.vibe-field{display:flex;flex-direction:column;gap:.35rem}
 .vibe-field label{font-size:.92rem;color:#dce8f8}.vibe-field input{max-width:100%;min-height:44px;border:1px solid #7c99c5;border-radius:10px;padding:.55rem;background:#0d1931;color:white;font:inherit}
-.vibe-field input:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
+.vibe-field input:focus-visible,.vibe-field select:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
+.vibe-field select{max-width:100%;min-height:44px;border:1px solid #7c99c5;border-radius:10px;padding:.55rem;background:#0d1931;color:white;font:inherit}
+.vibe-field input[aria-invalid="true"],.vibe-field select[aria-invalid="true"]{border-color:#ffa09b}
+.vibe-error{font-size:.82rem;color:#ffb7b2;margin:.1rem 0;min-height:1.2em}
 .vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
@@ -486,6 +489,27 @@ def render_html(page: WebPage) -> str:
             f' data-vibe-input="{index}"{limits_attrs}></div>'
         )
 
+    def string_field_markup(index: int, item: WebStringField) -> str:
+        name = f"vibe-string-{index}"
+        error_name = f"vibe-string-error-{index}"
+        label = f'<label for="{name}">{escape(item.label)}</label>'
+        if item.kind == "text":
+            control = (
+                f'<input type="text" id="{name}" data-vibe-string="{index}"'
+                f' aria-describedby="{error_name}" aria-invalid="false" autocomplete="off">'
+            )
+        else:
+            options = "".join(
+                f'<option value="{escape(choice, quote=True)}">{escape(choice)}</option>'
+                for choice in item.options
+            )
+            control = (
+                f'<select id="{name}" data-vibe-string="{index}"'
+                f' aria-describedby="{error_name}" aria-invalid="false">{options}</select>'
+            )
+        status = f'<p class="vibe-error" id="{error_name}" role="status" aria-live="polite"></p>'
+        return f'<div class="vibe-field">{label}{control}{status}</div>'
+
     texts = list(page.texts)
     text_scopes: list[str | None] = [None] * len(page.texts)
     text_props: list[dict[str, str]] = [{} for _ in page.texts]
@@ -501,6 +525,17 @@ def render_html(page: WebPage) -> str:
         field_markup(i, item.label, item.variable, page.bounds)
         for i, item in enumerate(page.inputs)
     )
+    string_fields: list[dict[str, object]] = [
+        {
+            "kind": item.kind, "variable": item.variable, "scope": None,
+            "minimum": item.minimum, "maximum": item.maximum, "options": list(item.options),
+        }
+        for item in page.text_fields
+    ]
+    page_string_fields = "\n".join(
+        string_field_markup(i, item) for i, item in enumerate(page.text_fields)
+    )
+    scope_text_states: dict[str, dict[str, str]] = {}
     scope_states: dict[str, dict[str, int]] = {}
     scope_bounds: dict[str, dict[str, tuple[int, int]]] = {}
     component_sections: list[str] = []
@@ -508,6 +543,7 @@ def render_html(page: WebPage) -> str:
         component = page.components[name]
         scope = f"instance_{instance_id}"
         scope_states[scope] = dict(component.state)
+        scope_text_states[scope] = dict(component.text_state)
         scope_bounds[scope] = dict(component.bounds)
         body: list[str] = []
         for value in component.texts:
@@ -521,6 +557,13 @@ def render_html(page: WebPage) -> str:
             inputs.append({"variable": item.variable, "scope": scope})
             local_bounds = component.bounds if item.variable in component.state else page.bounds
             body.append("      " + field_markup(index, item.label, item.variable, local_bounds))
+        for item in component.text_fields:
+            index = len(string_fields)
+            string_fields.append({
+                "kind": item.kind, "variable": item.variable, "scope": scope,
+                "minimum": item.minimum, "maximum": item.maximum, "options": list(item.options),
+            })
+            body.append("      " + string_field_markup(index, item))
         actions: list[str] = []
         for action in component.buttons:
             index = len(buttons)
@@ -541,10 +584,13 @@ def render_html(page: WebPage) -> str:
         )
     payload = {
         "state": page.state,
+        "text_state": page.text_state,
         "texts": texts,
         "buttons": buttons,
         "bounds": page.bounds,
         "inputs": inputs,
+        "string_fields": string_fields,
+        "scope_text_states": scope_text_states,
         "text_scopes": text_scopes,
         "text_props": text_props,
         "scope_states": scope_states,
@@ -576,6 +622,7 @@ def render_html(page: WebPage) -> str:
     </div>
     <div class="vibe-fields">
 {page_fields}
+{page_string_fields}
     </div>
     <div class="vibe-layout vibe-layout-{page.layout}">
 {component_markup}
