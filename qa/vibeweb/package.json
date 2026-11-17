@@ -1,0 +1,22 @@
+{
+  "name": "vibeweb-browser-qa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:react": "vite build --config vite.react.config.mjs",
+    "build:svelte": "vite build --config vite.svelte.config.mjs",
+    "build:baselines": "npm run build:react && npm run build:svelte",
+    "test:browser": "playwright test",
+    "bench": "node bench.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.1",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@vitejs/plugin-react": "6.3.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "svelte": "5.57.1",
+    "vite": "8.3.8"
+  }
+}
