@@ -153,6 +153,11 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if value.startswith("text:"):
                 page.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
                 pending_button = None
+            elif value.startswith("use "):
+                name = value[4:].strip()
+                if not _NAME.fullmatch(name) or len(page.uses) >= 64:
+                    raise WebSpecError(f"line {idx + 1}: invalid component use or use limit exceeded")
+                page.uses.append(name)
             else:
                 m = _BUTTON.fullmatch(value)
                 if not m:
@@ -171,9 +176,24 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             raise WebSpecError(f"line {idx + 1}: invalid indentation or unsupported construct")
     if pending_button:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
-    if not page.title or not page.heading or not page.state or not page.texts or not page.buttons:
-        raise WebSpecError("page requires title, heading, state, text, and a button")
-    for b in page.buttons:
+    if not page.title or not page.heading or not page.state:
+        raise WebSpecError("page requires title, heading, and state")
+    for name in page.uses:
+        if name not in page.components:
+            raise WebSpecError(f"unknown component {name!r}")
+    active_components = [page.components[name] for name in page.uses]
+    if not (page.texts or any(component.texts for component in active_components)):
+        raise WebSpecError("page requires at least one visible text")
+    if not (page.buttons or any(component.buttons for component in active_components)):
+        raise WebSpecError("page requires at least one visible button")
+    all_buttons = list(page.buttons)
+    all_texts = list(page.texts)
+    for component in page.components.values():
+        if not component.texts and not component.buttons:
+            raise WebSpecError(f"component {component.name!r} cannot be empty")
+        all_buttons.extend(component.buttons)
+        all_texts.extend(component.texts)
+    for b in all_buttons:
         if b.variable not in page.state:
             raise WebSpecError(f"button {b.label!r} references unknown state {b.variable!r}")
     for key, (lo, hi) in page.bounds.items():
@@ -181,7 +201,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             raise WebSpecError(f"bounds references unknown state {key!r}")
         if not (lo <= page.state[key] <= hi):
             raise WebSpecError(f"initial state {key} is outside bounds")
-    for value in page.texts:
+    for value in all_texts:
         for ref in _BINDING.findall(value):
             if ref not in page.state:
                 raise WebSpecError(f"text references unknown state {ref!r}")
