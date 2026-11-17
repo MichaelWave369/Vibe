@@ -303,7 +303,7 @@ def parse_source(source: str) -> Program:
     # Parse the bounded web-page block into Vibe's native AST, while preserving
     # the legacy parser behavior for every non-web spec.
     web_page = None
-    if re.search(r"(?m)^page\\s", source):
+    if re.search(r"(?m)^page\s", source):
         from .web import parse_web_source
 
         web_page, source = parse_web_source(source)
