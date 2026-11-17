@@ -1,0 +1,27 @@
+intent TypingPacks:
+  goal: "Offer bounded, custom-authored keyboard lesson packs with per-key mistakes and optional local practice history."
+  inputs:
+    lesson: string
+  outputs:
+    accuracy: number
+
+preserve:
+  readability = high
+  testability = high
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+page TypingPacks:
+  title: "Φ VibeWeb · Keyboard Practice Packs"
+  heading: "Keyboard Dojo · Lesson Packs"
+  typing:
+    progress: local
+    lesson "Double-Space Warmup" pack="Foundations" difficulty=beginner: "Precision matters.  Two spaces are welcome here."
+    lesson "Steady Rhythm" pack="Foundations" difficulty=intermediate: "Spaces, commas, and periods.  Keep a steady rhythm."
+    lesson "Symbol Sprint" pack="Symbols" difficulty=advanced: "Caps LOCK? No!  Symbols: @ # $ % & *; keep control."
+    lesson "Punctuation Drills" pack="Symbols" difficulty=intermediate: "Type (brackets), {braces}, and 42 + 17 = 59."
+
+emit web
