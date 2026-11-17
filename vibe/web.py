@@ -45,6 +45,35 @@ def _integer(text: str, line: int) -> int:
     return int(text)
 
 
+def _parse_use(text: str, line: int) -> tuple[str, dict[str, str]]:
+    """Parse a component use and bounded JSON-quoted string properties."""
+    match = re.fullmatch(r"use\\s+([A-Za-z_][A-Za-z0-9_]*)(.*)", text)
+    if not match:
+        raise WebSpecError(f"line {line}: expected use ComponentName [prop=\\\"value\\\"]")
+    name, rest = match.groups()
+    args: dict[str, str] = {}
+    decoder = json.JSONDecoder()
+    while rest.strip():
+        rest = rest.lstrip()
+        prop = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*", rest)
+        if prop is None or len(args) >= 16:
+            raise WebSpecError(f"line {line}: invalid component prop assignment")
+        key = prop.group(1)
+        if key in args:
+            raise WebSpecError(f"line {line}: duplicate component prop {key!r}")
+        try:
+            value, consumed = decoder.raw_decode(rest[prop.end():])
+        except json.JSONDecodeError as exc:
+            raise WebSpecError(f"line {line}: component prop must be a JSON-quoted string") from exc
+        if not isinstance(value, str) or len(value) > 4000:
+            raise WebSpecError(f"line {line}: component props must be bounded strings")
+        rest = rest[prop.end() + consumed:]
+        if rest and not rest[0].isspace():
+            raise WebSpecError(f"line {line}: separate props with spaces")
+        args[key] = value
+    return name, args
+
+
 def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
