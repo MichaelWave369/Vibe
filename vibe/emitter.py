@@ -42,6 +42,18 @@ class TypeScriptEmitter(EmitterBackend):
         return generate_typescript(ir)
 
 
+class WebEmitter(EmitterBackend):
+    def __init__(self) -> None:
+        super().__init__(target="web", extension=".html")
+
+    def emit(self, ir: IR) -> str:
+        page = ir.web_page
+        if page is None:
+            raise ValueError("emit web requires a typed page block")
+        from .web import render_html
+        return render_html(page)
+
+
 class JuliaEmitter(EmitterBackend):
     def __init__(self) -> None:
         super().__init__(target="julia", extension=".jl")
@@ -111,6 +123,7 @@ class StubEmitter(EmitterBackend):
 _BACKENDS = {
     "python": PythonEmitter(),
     "typescript": TypeScriptEmitter(),
+    "web": WebEmitter(),
     "julia": JuliaEmitter(),
     "compliance_report": ComplianceReportEmitter(),
     "snakemake": SnakemakeEmitter(),
