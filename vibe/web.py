@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField
+from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField, WebTyping
 from html import escape
 import json
 from pathlib import Path
@@ -152,7 +152,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 raise WebSpecError(f"line {pending_button[1]}: button missing action")
             pending_button = None
             current_component = None
-            if value in {"state:", "text_state:", "view:", "bounds:", "components:"}:
+            if value in {"state:", "text_state:", "view:", "bounds:", "components:", "typing:"}:
                 section = value[:-1]
                 continue
             section = ""
@@ -181,6 +181,15 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 page.persistence = policy
             else:
                 raise WebSpecError(f"line {idx + 1}: unsupported page field {value!r}")
+        elif n == 4 and section == "typing":
+            if page.typing is not None or not value.startswith("passage:"):
+                raise WebSpecError(f"line {idx + 1}: expected one typing passage")
+            phrase = _quoted(value.split(":", 1)[1].strip(), idx + 1)
+            if not 12 <= len(phrase) <= 240 or phrase != phrase.strip():
+                raise WebSpecError(f"line {idx + 1}: typing passage must be 12-240 chars without edge spaces")
+            if any(not (" " <= char <= "~") for char in phrase):
+                raise WebSpecError(f"line {idx + 1}: typing passage supports printable ASCII and spaces only")
+            page.typing = WebTyping(passage=phrase)
         elif n == 4 and section == "state":
             if ":" not in value:
                 raise WebSpecError(f"line {idx + 1}: expected `name: integer`")
@@ -310,7 +319,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         raise WebSpecError("page requires title and heading")
     if page.persistence != "none" and not page.submit_label:
         raise WebSpecError("persist local requires an explicit submit declaration")
-    if not (page.state or page.text_state or any(component.state or component.text_state for component in page.components.values())):
+    if not (page.state or page.text_state or page.typing or any(component.state or component.text_state for component in page.components.values())):
         raise WebSpecError("page requires page or component state")
     if len(page.uses) != len(page.use_props):
         raise WebSpecError("component use/prop count mismatch")
@@ -321,9 +330,9 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         if set(props) != expected:
             raise WebSpecError(f"component {name!r} requires exactly props {sorted(expected)}")
     active_components = [page.components[name] for name in page.uses]
-    if not (page.texts or any(component.texts for component in active_components)):
+    if not (page.texts or page.typing or any(component.texts for component in active_components)):
         raise WebSpecError("page requires at least one visible text")
-    if not (page.buttons or page.inputs or page.text_fields or any(component.buttons or component.inputs or component.text_fields for component in active_components)):
+    if not (page.buttons or page.inputs or page.text_fields or page.typing or any(component.buttons or component.inputs or component.text_fields for component in active_components)):
         raise WebSpecError("page requires at least one visible button or input")
 
     def check_text(template: str, allowed: set[str]) -> None:
