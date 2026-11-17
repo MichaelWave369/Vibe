@@ -255,10 +255,37 @@ _SCRIPT = r"""
 
 def render_html(page: WebPage) -> str:
     """Generate deterministic HTML with no framework/runtime dependencies."""
+    texts = list(page.texts)
+    buttons = list(page.buttons)
+    component_sections: list[str] = []
+    for name in page.uses:
+        component = page.components[name]
+        body: list[str] = []
+        for value in component.texts:
+            index = len(texts)
+            texts.append(value)
+            body.append(f'      <p data-vibe-text="{index}" aria-live="polite"></p>')
+        actions: list[str] = []
+        for action in component.buttons:
+            index = len(buttons)
+            buttons.append(action)
+            actions.append(f'        <button type="button" data-vibe-button="{index}">{escape(action.label)}</button>')
+        if actions:
+            body.append('      <div class="controls" role="group" aria-label="Component actions">')
+            body.extend(actions)
+            body.append("      </div>")
+        component_sections.append(
+            '    <section class="vibe-component" aria-label="' + escape(name, quote=True) + '">\\n'
+            + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\\n'
+            + '\\n'.join(body) + '\\n    </section>'
+        )
     payload = {
         "state": page.state,
-        "texts": page.texts,
-        "buttons": [vars(b) if hasattr(b, "__dict__") else {"label": b.label, "variable": b.variable, "operation": b.operation, "value": b.value} for b in page.buttons],
+        "texts": texts,
+        "buttons": [
+            {"label": b.label, "variable": b.variable, "operation": b.operation, "value": b.value}
+            for b in buttons
+        ],
         "bounds": page.bounds,
     }
     raw_json = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
