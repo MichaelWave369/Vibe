@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage, WebComponent
+from .ast import WebButton as Button, WebPage, WebComponent, WebInput
 from html import escape
 import json
 from pathlib import Path
@@ -74,6 +74,13 @@ def _parse_use(text: str, line: int) -> tuple[str, dict[str, str]]:
     return name, args
 
 
+def _parse_input(text: str, line: int) -> WebInput:
+    match = re.fullmatch(r'input\s+("(?:[^"\\]|\\.)*"):\s*([A-Za-z_][A-Za-z0-9_]*)', text)
+    if not match:
+        raise WebSpecError(f"line {line}: expected input \"Label\": state_name")
+    return WebInput(_quoted(match.group(1), line), match.group(2))
+
+
 def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
@@ -126,6 +133,11 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 page.title = _quoted(value.split(":", 1)[1].strip(), idx + 1)
             elif value.startswith("heading:"):
                 page.heading = _quoted(value.split(":", 1)[1].strip(), idx + 1)
+            elif value.startswith("layout:"):
+                mode = value.split(":", 1)[1].strip()
+                if mode not in {"stack", "grid"}:
+                    raise WebSpecError(f"line {idx + 1}: layout must be stack or grid")
+                page.layout = mode
             else:
                 raise WebSpecError(f"line {idx + 1}: unsupported page field {value!r}")
         elif n == 4 and section == "state":
@@ -186,6 +198,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 current_component.bounds[key] = (int(lower), int(upper))
             elif value.startswith("text:"):
                 current_component.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
+            elif value.startswith("input "):
+                current_component.inputs.append(_parse_input(value, idx + 1))
             else:
                 match = _BUTTON.fullmatch(value)
                 if not match:
@@ -206,6 +220,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if value.startswith("text:"):
                 page.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
                 pending_button = None
+            elif value.startswith("input "):
+                page.inputs.append(_parse_input(value, idx + 1))
             elif value.startswith("use "):
                 name, props = _parse_use(value, idx + 1)
                 if len(page.uses) >= 64:
@@ -245,8 +261,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     active_components = [page.components[name] for name in page.uses]
     if not (page.texts or any(component.texts for component in active_components)):
         raise WebSpecError("page requires at least one visible text")
-    if not (page.buttons or any(component.buttons for component in active_components)):
-        raise WebSpecError("page requires at least one visible button")
+    if not (page.buttons or page.inputs or any(component.buttons or component.inputs for component in active_components)):
+        raise WebSpecError("page requires at least one visible button or input")
 
     def check_text(template: str, allowed: set[str]) -> None:
         for ref in _BINDING.findall(template):
@@ -263,11 +279,14 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     for button in page.buttons:
         if button.variable not in page.state:
             raise WebSpecError(f"button {button.label!r} references unknown state {button.variable!r}")
+    for item in page.inputs:
+        if item.variable not in page.state:
+            raise WebSpecError(f"input {item.label!r} references unknown state {item.variable!r}")
     for template in page.texts:
         check_text(template, set(page.state))
 
     for component in page.components.values():
-        if not component.texts and not component.buttons:
+        if not component.texts and not component.buttons and not component.inputs:
             raise WebSpecError(f"component {component.name!r} cannot be empty")
         overlap = set(component.props) & (set(component.state) | set(page.state))
         if overlap:
@@ -281,6 +300,9 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         for button in component.buttons:
             if button.variable not in writable:
                 raise WebSpecError(f"button {button.label!r} references unknown state {button.variable!r}")
+        for item in component.inputs:
+            if item.variable not in writable:
+                raise WebSpecError(f"input {item.label!r} references unknown state {item.variable!r}")
         for template in component.texts:
             check_text(template, writable | set(component.props))
     core = "".join(raw[:start] + raw[end:])
