@@ -540,6 +540,121 @@ _SCRIPT = r"""
       });
     });
   }
+  if (config.submit_label) {
+    const form = document.getElementById('vibe-form');
+    const status = document.getElementById('vibe-form-status');
+    const snapshot = () => ({
+      version: 1,
+      page: config.page_id,
+      state: { ...state },
+      text_state: { ...textState },
+      scope_states: Object.fromEntries(
+        Object.entries(scopedStates).map(([scope, values]) => [scope, { ...values }])
+      ),
+      scope_text_states: Object.fromEntries(
+        Object.entries(scopedTextStates).map(([scope, values]) => [scope, { ...values }])
+      )
+    });
+    const hasExactKeys = (source, candidate) =>
+      candidate !== null && typeof candidate === 'object' && !Array.isArray(candidate) &&
+      Object.keys(source).length === Object.keys(candidate).length &&
+      Object.keys(source).every(key => owns(candidate, key));
+    const validNumbers = (source, candidate, bounds) =>
+      hasExactKeys(source, candidate) && Object.keys(source).every(key => {
+        const value = candidate[key];
+        const range = bounds[key];
+        return Number.isSafeInteger(value) &&
+          Math.abs(value) <= 999999999999 &&
+          (!range || (value >= range[0] && value <= range[1]));
+      });
+    const validTexts = (source, candidate, scope) =>
+      hasExactKeys(source, candidate) && Object.keys(source).every(key => {
+        const value = candidate[key];
+        if (typeof value !== 'string' || value.length > 4000) return false;
+        return config.string_fields
+          .filter(field => field.scope === scope && field.variable === key)
+          .every(field => field.kind === 'text'
+            ? Array.from(value).length >= field.minimum &&
+              Array.from(value).length <= field.maximum
+            : field.kind === 'select' && field.options.includes(value));
+      });
+    const validScopes = (source, candidate, bounds, textMode) =>
+      hasExactKeys(source, candidate) && Object.keys(source).every(scope =>
+        textMode
+          ? validTexts(source[scope], candidate[scope], scope)
+          : validNumbers(source[scope], candidate[scope], bounds[scope] || {})
+      );
+    const loadDraft = (draft) => {
+      if (!draft || draft.version !== 1 || draft.page !== config.page_id ||
+          !validNumbers(state, draft.state, config.bounds) ||
+          !validTexts(textState, draft.text_state, null) ||
+          !validScopes(scopedStates, draft.scope_states, config.scope_bounds, false) ||
+          !validScopes(scopedTextStates, draft.scope_text_states, {}, true)) {
+        return false;
+      }
+      Object.assign(state, draft.state);
+      Object.assign(textState, draft.text_state);
+      Object.keys(scopedStates).forEach(scope =>
+        Object.assign(scopedStates[scope], draft.scope_states[scope]));
+      Object.keys(scopedTextStates).forEach(scope =>
+        Object.assign(scopedTextStates[scope], draft.scope_text_states[scope]));
+      return true;
+    };
+    if (config.persistence === 'local') {
+      try {
+        const saved = window.localStorage.getItem(config.storage_key);
+        if (saved) {
+          if (saved.length > 65536 || !loadDraft(JSON.parse(saved))) {
+            status.textContent = 'Saved draft did not match this form and was ignored.';
+          } else {
+            status.textContent = 'Previous local draft restored.';
+          }
+        }
+      } catch (_error) {
+        status.textContent = 'Local draft unavailable. Nothing was restored.';
+      }
+    }
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const uncommittedText = Array.from(document.querySelectorAll('[data-vibe-string]'))
+        .some(node => {
+          const field = config.string_fields[Number(node.dataset.vibeString)];
+          const local = field.scope == null ? null : scopedTextStates[field.scope];
+          const target = local && owns(local, field.variable) ? local : textState;
+          return node.value !== target[field.variable];
+        });
+      const uncommittedNumbers = Array.from(document.querySelectorAll('[data-vibe-input]'))
+        .some(node => {
+          const field = config.inputs[Number(node.dataset.vibeInput)];
+          const local = field.scope == null ? null : scopedStates[field.scope];
+          const target = local && owns(local, field.variable) ? local : state;
+          return node.value !== String(target[field.variable]);
+        });
+      if (uncommittedText || uncommittedNumbers) {
+        status.textContent = 'Please correct or finish editing the highlighted fields.';
+        return;
+      }
+      const values = snapshot();
+      let saved = false;
+      if (config.persistence === 'local') {
+        try {
+          window.localStorage.setItem(config.storage_key, JSON.stringify(values));
+          saved = true;
+          status.textContent = 'Draft saved locally in this browser.';
+        } catch (_error) {
+          status.textContent = 'Local storage unavailable. Form data was not saved.';
+        }
+      } else {
+        status.textContent = 'Form submitted locally in this browser session.';
+      }
+      if (typeof CustomEvent === 'function' &&
+          typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('vibe:submit', {
+          detail: { page: config.page_id, saved, values }
+        }));
+      }
+    });
+  }
   render();
 })();
 """.strip()
