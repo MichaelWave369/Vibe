@@ -1,0 +1,26 @@
+intent TypingCourse:
+  goal: "Teach keyboard accuracy through graduated, exact-character lessons with local-only completion tracking."
+  inputs:
+    lesson: string
+  outputs:
+    accuracy: number
+
+preserve:
+  readability = high
+  testability = high
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+page TypingCourse:
+  title: "Φ VibeWeb · Keyboard Dojo Curriculum"
+  heading: "Keyboard Dojo · Training Grounds"
+  typing:
+    progress: local
+    lesson "Warmup" difficulty=beginner: "Precision matters.  Two spaces are welcome here."
+    lesson "Flow State" difficulty=intermediate: "Spaces, commas, and periods.  Keep a steady rhythm."
+    lesson "Symbol Sprint" difficulty=advanced: "Caps LOCK? No!  Symbols: @ # $ % & *; keep control."
+
+emit web
