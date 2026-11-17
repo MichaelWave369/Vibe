@@ -211,7 +211,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 if typing_passage is not None or len(typing_lessons) >= 12:
                     raise WebSpecError(f"line {idx + 1}: lessons cannot mix with a passage or exceed 12")
                 match = re.fullmatch(
-                    r'lesson\\s+("(?:[^"\\\\]|\\\\.)*")\\s+difficulty=(beginner|intermediate|advanced):\\s*("(?:[^"\\\\]|\\\\.)*")',
+                    r'lesson\s+("(?:[^"\\]|\\.)*")\s+difficulty=(beginner|intermediate|advanced):\s*("(?:[^"\\]|\\.)*")',
                     value,
                 )
                 if not match:
