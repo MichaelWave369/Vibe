@@ -318,6 +318,12 @@ _STYLE = """
 main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #40516c;border-radius:22px;background:#182238;box-shadow:0 20px 70px #0005}
 .tag{font-size:.74rem;text-transform:uppercase;letter-spacing:.18em;color:#a5cdfb;font-weight:800}h1{font-size:clamp(2rem,6vw,3rem);line-height:1.1;margin:.6rem 0 1rem}p{font-size:1.14rem;color:#dbe5f5;overflow-wrap:anywhere}
 .controls{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:1.8rem}button{border:1px solid #7c99c5;color:white;background:#30466e;padding:.8rem 1.2rem;border-radius:12px;font:inherit;cursor:pointer;min-height:44px}
+.vibe-page-grid{width:min(100%,980px)}
+.vibe-layout-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr));gap:1rem;align-items:start}
+.vibe-layout-grid .vibe-component{margin:0}
+.vibe-fields{display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0}.vibe-field{display:flex;flex-direction:column;gap:.35rem}
+.vibe-field label{font-size:.92rem;color:#dce8f8}.vibe-field input{max-width:100%;min-height:44px;border:1px solid #7c99c5;border-radius:10px;padding:.55rem;background:#0d1931;color:white;font:inherit}
+.vibe-field input:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
 .vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
@@ -371,6 +377,15 @@ _SCRIPT = r"""
 
 def render_html(page: WebPage) -> str:
     """Generate deterministic HTML with no framework/runtime dependencies."""
+    def field_markup(index: int, label: str, variable: str, bounds: dict[str, tuple[int, int]]) -> str:
+        limits = bounds.get(variable)
+        limits_attrs = f' min="{limits[0]}" max="{limits[1]}"' if limits else ""
+        return (
+            f'<div class="vibe-field"><label for="vibe-input-{index}">{escape(label)}</label>'
+            f'<input type="number" inputmode="numeric" step="1" id="vibe-input-{index}"'
+            f' data-vibe-input="{index}"{limits_attrs}></div>'
+        )
+
     texts = list(page.texts)
     text_scopes: list[str | None] = [None] * len(page.texts)
     text_props: list[dict[str, str]] = [{} for _ in page.texts]
@@ -379,6 +394,13 @@ def render_html(page: WebPage) -> str:
          "operation": action.operation, "value": action.value, "scope": None}
         for action in page.buttons
     ]
+    inputs: list[dict[str, str | None]] = [
+        {"variable": item.variable, "scope": None} for item in page.inputs
+    ]
+    page_fields = "\n".join(
+        field_markup(i, item.label, item.variable, page.bounds)
+        for i, item in enumerate(page.inputs)
+    )
     scope_states: dict[str, dict[str, int]] = {}
     scope_bounds: dict[str, dict[str, tuple[int, int]]] = {}
     component_sections: list[str] = []
@@ -394,6 +416,11 @@ def render_html(page: WebPage) -> str:
             text_scopes.append(scope)
             text_props.append(dict(props))
             body.append(f'      <p data-vibe-text="{index}" aria-live="polite"></p>')
+        for item in component.inputs:
+            index = len(inputs)
+            inputs.append({"variable": item.variable, "scope": scope})
+            local_bounds = component.bounds if item.variable in component.state else page.bounds
+            body.append("      " + field_markup(index, item.label, item.variable, local_bounds))
         actions: list[str] = []
         for action in component.buttons:
             index = len(buttons)
@@ -417,6 +444,7 @@ def render_html(page: WebPage) -> str:
         "texts": texts,
         "buttons": buttons,
         "bounds": page.bounds,
+        "inputs": inputs,
         "text_scopes": text_scopes,
         "text_props": text_props,
         "scope_states": scope_states,
@@ -428,6 +456,7 @@ def render_html(page: WebPage) -> str:
     text_elements = "\n".join(f'    <p data-vibe-text="{i}" aria-live="polite"></p>' for i, _ in enumerate(page.texts))
     controls = "\n".join(f'      <button type="button" data-vibe-button="{i}">{escape(b.label)}</button>' for i, b in enumerate(page.buttons))
     component_markup = "\n".join(component_sections)
+    grid_page_class = ' class="vibe-page-grid"' if page.layout == "grid" else ""
     return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -438,14 +467,19 @@ def render_html(page: WebPage) -> str:
   <style>{_STYLE}</style>
 </head>
 <body>
-  <main>
+  <main{grid_page_class}>
     <div class="tag">Φ VibeWeb · experimental v0</div>
     <h1>{escape(page.heading)}</h1>
 {text_elements}
     <div class="controls" role="group" aria-label="Page actions">
 {controls}
     </div>
+    <div class="vibe-fields">
+{page_fields}
+    </div>
+    <div class="vibe-layout vibe-layout-{page.layout}">
 {component_markup}
+    </div>
     <footer>Compiled from a .vibe intent. No React, Svelte, or client dependencies.</footer>
   </main>
   <script type="application/json" id="vibe-config">{safe_json}</script>
