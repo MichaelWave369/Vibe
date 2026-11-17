@@ -30,6 +30,8 @@ jobs:
         run: npm install --prefix qa/vibeweb --no-audit --no-fund
       - name: Build equivalent React/Svelte apps
         run: npm run build:baselines --prefix qa/vibeweb
+      - name: Verify generated pages are actually served over HTTP
+        run: node qa/vibeweb/check-server.mjs
       - name: Install headless Chromium and system dependencies
         run: npm exec --prefix qa/vibeweb -- playwright install --with-deps chromium
       - name: Chromium behavior, mobile and axe accessibility checks
