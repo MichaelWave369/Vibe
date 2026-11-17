@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage, WebComponent, WebInput
+from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField
 from html import escape
 import json
 from pathlib import Path
@@ -81,6 +81,33 @@ def _parse_input(text: str, line: int) -> WebInput:
     return WebInput(_quoted(match.group(1), line), match.group(2))
 
 
+def _parse_string_field(text: str, line: int) -> WebStringField:
+    head = re.fullmatch(r'(input_text|select)\s+("(?:[^"\\]|\\.)*"):\s*([A-Za-z_][A-Za-z0-9_]*)(.*)', text)
+    if head is None:
+        raise WebSpecError(f"line {line}: expected input_text/select \"Label\": state options")
+    kind, raw_label, variable, suffix = head.groups()
+    label = _quoted(raw_label, line)
+    if not label.strip():
+        raise WebSpecError(f"line {line}: field label must not be empty")
+    if kind == "input_text":
+        length = re.fullmatch(r"\s+min=(\d{1,3})\s+max=(\d{1,3})", suffix)
+        if not length:
+            raise WebSpecError(f"line {line}: input_text requires min=N max=N")
+        minimum, maximum = (int(x) for x in length.groups())
+        if not (0 <= minimum <= maximum <= 256) or maximum == 0:
+            raise WebSpecError(f"line {line}: invalid text length bounds")
+        return WebStringField(label, variable, "text", minimum, maximum)
+    choices = re.fullmatch(r'\s+options=("(?:[^"\\]|\\.)*")', suffix)
+    if not choices:
+        raise WebSpecError(f"line {line}: select requires options=\"A|B|C\"")
+    options = tuple(_quoted(choices.group(1), line).split("|"))
+    if not (2 <= len(options) <= 16) or len(set(options)) != len(options) or any(
+        not option.strip() or len(option) > 80 for option in options
+    ):
+        raise WebSpecError(f"line {line}: select options must be 2-16 distinct nonempty values")
+    return WebStringField(label, variable, "select", options=options)
+
+
 def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
@@ -125,7 +152,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 raise WebSpecError(f"line {pending_button[1]}: button missing action")
             pending_button = None
             current_component = None
-            if value in {"state:", "view:", "bounds:", "components:"}:
+            if value in {"state:", "text_state:", "view:", "bounds:", "components:"}:
                 section = value[:-1]
                 continue
             section = ""
@@ -147,6 +174,13 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if not _NAME.fullmatch(key) or key in page.state:
                 raise WebSpecError(f"line {idx + 1}: invalid or repeated state name")
             page.state[key] = _integer(number, idx + 1)
+        elif n == 4 and section == "text_state":
+            if ":" not in value:
+                raise WebSpecError(f"line {idx + 1}: expected name: \"string\"")
+            key, raw_text = (t.strip() for t in value.split(":", 1))
+            if not _NAME.fullmatch(key) or key in page.text_state or len(page.text_state) >= 64:
+                raise WebSpecError(f"line {idx + 1}: invalid or repeated string state name")
+            page.text_state[key] = _quoted(raw_text, idx + 1)
         elif n == 4 and section == "bounds":
             if ":" not in value:
                 raise WebSpecError(f"line {idx + 1}: expected `name: min..max`")
@@ -196,8 +230,18 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 if key in current_component.bounds or int(lower) > int(upper):
                     raise WebSpecError(f"line {idx + 1}: duplicate or invalid local bounds")
                 current_component.bounds[key] = (int(lower), int(upper))
+            elif value.startswith("text_state "):
+                match = re.fullmatch(r'text_state ([A-Za-z_][A-Za-z0-9_]*):\s*(.*)', value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected text_state name: \"string\"")
+                key, raw_text = match.groups()
+                if key in current_component.text_state or len(current_component.text_state) >= 32:
+                    raise WebSpecError(f"line {idx + 1}: duplicate local string state")
+                current_component.text_state[key] = _quoted(raw_text, idx + 1)
             elif value.startswith("text:"):
                 current_component.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
+            elif value.startswith("input_text ") or value.startswith("select "):
+                current_component.text_fields.append(_parse_string_field(value, idx + 1))
             elif value.startswith("input "):
                 current_component.inputs.append(_parse_input(value, idx + 1))
             else:
@@ -220,6 +264,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if value.startswith("text:"):
                 page.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
                 pending_button = None
+            elif value.startswith("input_text ") or value.startswith("select "):
+                page.text_fields.append(_parse_string_field(value, idx + 1))
             elif value.startswith("input "):
                 page.inputs.append(_parse_input(value, idx + 1))
             elif value.startswith("use "):
@@ -248,7 +294,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
     if not page.title or not page.heading:
         raise WebSpecError("page requires title and heading")
-    if not (page.state or any(component.state for component in page.components.values())):
+    if not (page.state or page.text_state or any(component.state or component.text_state for component in page.components.values())):
         raise WebSpecError("page requires page or component state")
     if len(page.uses) != len(page.use_props):
         raise WebSpecError("component use/prop count mismatch")
@@ -261,7 +307,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     active_components = [page.components[name] for name in page.uses]
     if not (page.texts or any(component.texts for component in active_components)):
         raise WebSpecError("page requires at least one visible text")
-    if not (page.buttons or page.inputs or any(component.buttons or component.inputs for component in active_components)):
+    if not (page.buttons or page.inputs or page.text_fields or any(component.buttons or component.inputs or component.text_fields for component in active_components)):
         raise WebSpecError("page requires at least one visible button or input")
 
     def check_text(template: str, allowed: set[str]) -> None:
@@ -271,6 +317,23 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         if "{" in _BINDING.sub("", template) or "}" in _BINDING.sub("", template):
             raise WebSpecError("unsupported text interpolation; use {state_name}")
 
+    def check_string_fields(fields: list[WebStringField], state: dict[str, str]) -> None:
+        for item in fields:
+            if item.variable not in state:
+                raise WebSpecError(f"string field {item.label!r} references unknown text state {item.variable!r}")
+            value = state[item.variable]
+            if item.kind == "text":
+                if not (item.minimum <= len(value) <= item.maximum):
+                    raise WebSpecError(f"initial text state {item.variable!r} violates length bounds")
+            elif item.kind == "select":
+                if value not in item.options:
+                    raise WebSpecError(f"initial selection {item.variable!r} is not an allowed option")
+            else:
+                raise WebSpecError(f"unsupported string field kind {item.kind!r}")
+
+    if set(page.state) & set(page.text_state):
+        raise WebSpecError("page numeric and text state names collide")
+    check_string_fields(page.text_fields, page.text_state)
     for key, (lo, hi) in page.bounds.items():
         if key not in page.state:
             raise WebSpecError(f"bounds references unknown state {key!r}")
@@ -283,14 +346,17 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         if item.variable not in page.state:
             raise WebSpecError(f"input {item.label!r} references unknown state {item.variable!r}")
     for template in page.texts:
-        check_text(template, set(page.state))
+        check_text(template, set(page.state) | set(page.text_state))
 
     for component in page.components.values():
-        if not component.texts and not component.buttons and not component.inputs:
+        if not component.texts and not component.buttons and not component.inputs and not component.text_fields:
             raise WebSpecError(f"component {component.name!r} cannot be empty")
-        overlap = set(component.props) & (set(component.state) | set(page.state))
+        overlap = set(component.props) & (set(component.state) | set(page.state) | set(component.text_state) | set(page.text_state))
         if overlap:
             raise WebSpecError(f"component prop collides with state: {sorted(overlap)}")
+        if set(component.state) & set(component.text_state):
+            raise WebSpecError("component numeric and text state names collide")
+        check_string_fields(component.text_fields, {**page.text_state, **component.text_state})
         for key, (lo, hi) in component.bounds.items():
             if key not in component.state:
                 raise WebSpecError(f"component bounds references unknown local state {key!r}")
@@ -304,7 +370,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if item.variable not in writable:
                 raise WebSpecError(f"input {item.label!r} references unknown state {item.variable!r}")
         for template in component.texts:
-            check_text(template, writable | set(component.props))
+            check_text(template, writable | set(component.text_state) | set(page.text_state) | set(component.props))
     core = "".join(raw[:start] + raw[end:])
     if len(re.findall(r"(?m)^emit web\s*$", core)) != 1:
         raise WebSpecError("a web page needs exactly one `emit web` declaration")
@@ -323,7 +389,10 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 .vibe-layout-grid .vibe-component{margin:0}
 .vibe-fields{display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0}.vibe-field{display:flex;flex-direction:column;gap:.35rem}
 .vibe-field label{font-size:.92rem;color:#dce8f8}.vibe-field input{max-width:100%;min-height:44px;border:1px solid #7c99c5;border-radius:10px;padding:.55rem;background:#0d1931;color:white;font:inherit}
-.vibe-field input:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
+.vibe-field input:focus-visible,.vibe-field select:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
+.vibe-field select{max-width:100%;min-height:44px;border:1px solid #7c99c5;border-radius:10px;padding:.55rem;background:#0d1931;color:white;font:inherit}
+.vibe-field input[aria-invalid="true"],.vibe-field select[aria-invalid="true"]{border-color:#ffa09b}
+.vibe-error{font-size:.82rem;color:#ffb7b2;margin:.1rem 0;min-height:1.2em}
 .vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
@@ -334,6 +403,11 @@ _SCRIPT = r"""
   'use strict';
   const config = JSON.parse(document.getElementById('vibe-config').textContent);
   const state = Object.assign(Object.create(null), config.state);
+  const textState = Object.assign(Object.create(null), config.text_state || {});
+  const scopedTextStates = Object.create(null);
+  Object.entries(config.scope_text_states || {}).forEach(([scope, values]) => {
+    scopedTextStates[scope] = Object.assign(Object.create(null), values);
+  });
   const scopedStates = Object.create(null);
   Object.entries(config.scope_states || {}).forEach(([scope, values]) => {
     scopedStates[scope] = Object.assign(Object.create(null), values);
@@ -346,11 +420,14 @@ _SCRIPT = r"""
       const scope = (config.text_scopes || [])[index];
       const props = (config.text_props || [])[index] || {};
       const local = scope == null ? null : scopedStates[scope];
+      const localText = scope == null ? null : scopedTextStates[scope];
       node.textContent = template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
         (_, key) => {
           if (owns(props, key)) return String(props[key]);
           if (local && owns(local, key)) return String(local[key]);
-          return String(state[key]);
+          if (localText && owns(localText, key)) return String(localText[key]);
+          if (owns(state, key)) return String(state[key]);
+          return String(textState[key]);
         });
     });
     if (config.inputs && config.inputs.length) {
@@ -359,6 +436,14 @@ _SCRIPT = r"""
         const local = field.scope == null ? null : scopedStates[field.scope];
         const target = local && owns(local, field.variable) ? local : state;
         node.value = String(target[field.variable]);
+      });
+    }
+    if (config.string_fields && config.string_fields.length) {
+      document.querySelectorAll('[data-vibe-string]').forEach((node) => {
+        const field = config.string_fields[Number(node.dataset.vibeString)];
+        const local = field.scope == null ? null : scopedTextStates[field.scope];
+        const target = local && owns(local, field.variable) ? local : textState;
+        node.value = target[field.variable];
       });
     }
   };
@@ -404,6 +489,40 @@ _SCRIPT = r"""
       });
     });
   }
+  if (config.string_fields && config.string_fields.length) {
+    document.querySelectorAll('[data-vibe-string]').forEach((node) => {
+      const index = Number(node.dataset.vibeString);
+      const field = config.string_fields[index];
+      const errorNode = document.getElementById('vibe-string-error-' + index);
+      const setError = (message) => {
+        errorNode.textContent = message;
+        node.setAttribute('aria-invalid', message ? 'true' : 'false');
+      };
+      node.addEventListener('change', () => {
+        const local = field.scope == null ? null : scopedTextStates[field.scope];
+        const target = local && owns(local, field.variable) ? local : textState;
+        const value = String(node.value);
+        if (field.kind === 'text') {
+          const length = Array.from(value).length;
+          if (length < field.minimum || length > field.maximum) {
+            setError('Enter ' + field.minimum + ' to ' + field.maximum + ' characters.');
+            return;
+          }
+        } else if (field.kind === 'select') {
+          if (!field.options.includes(value)) {
+            setError('Choose one of the available options.');
+            return;
+          }
+        } else {
+          setError('Unsupported field type.');
+          return;
+        }
+        target[field.variable] = value;
+        setError('');
+        render();
+      });
+    });
+  }
   render();
 })();
 """.strip()
@@ -420,6 +539,27 @@ def render_html(page: WebPage) -> str:
             f' data-vibe-input="{index}"{limits_attrs}></div>'
         )
 
+    def string_field_markup(index: int, item: WebStringField) -> str:
+        name = f"vibe-string-{index}"
+        error_name = f"vibe-string-error-{index}"
+        label = f'<label for="{name}">{escape(item.label)}</label>'
+        if item.kind == "text":
+            control = (
+                f'<input type="text" id="{name}" data-vibe-string="{index}"'
+                f' aria-describedby="{error_name}" aria-invalid="false" autocomplete="off">'
+            )
+        else:
+            options = "".join(
+                f'<option value="{escape(choice, quote=True)}">{escape(choice)}</option>'
+                for choice in item.options
+            )
+            control = (
+                f'<select id="{name}" data-vibe-string="{index}"'
+                f' aria-describedby="{error_name}" aria-invalid="false">{options}</select>'
+            )
+        status = f'<p class="vibe-error" id="{error_name}" role="status" aria-live="polite"></p>'
+        return f'<div class="vibe-field">{label}{control}{status}</div>'
+
     texts = list(page.texts)
     text_scopes: list[str | None] = [None] * len(page.texts)
     text_props: list[dict[str, str]] = [{} for _ in page.texts]
@@ -435,6 +575,17 @@ def render_html(page: WebPage) -> str:
         field_markup(i, item.label, item.variable, page.bounds)
         for i, item in enumerate(page.inputs)
     )
+    string_fields: list[dict[str, object]] = [
+        {
+            "kind": item.kind, "variable": item.variable, "scope": None,
+            "minimum": item.minimum, "maximum": item.maximum, "options": list(item.options),
+        }
+        for item in page.text_fields
+    ]
+    page_string_fields = "\n".join(
+        string_field_markup(i, item) for i, item in enumerate(page.text_fields)
+    )
+    scope_text_states: dict[str, dict[str, str]] = {}
     scope_states: dict[str, dict[str, int]] = {}
     scope_bounds: dict[str, dict[str, tuple[int, int]]] = {}
     component_sections: list[str] = []
@@ -442,6 +593,7 @@ def render_html(page: WebPage) -> str:
         component = page.components[name]
         scope = f"instance_{instance_id}"
         scope_states[scope] = dict(component.state)
+        scope_text_states[scope] = dict(component.text_state)
         scope_bounds[scope] = dict(component.bounds)
         body: list[str] = []
         for value in component.texts:
@@ -455,6 +607,13 @@ def render_html(page: WebPage) -> str:
             inputs.append({"variable": item.variable, "scope": scope})
             local_bounds = component.bounds if item.variable in component.state else page.bounds
             body.append("      " + field_markup(index, item.label, item.variable, local_bounds))
+        for item in component.text_fields:
+            index = len(string_fields)
+            string_fields.append({
+                "kind": item.kind, "variable": item.variable, "scope": scope,
+                "minimum": item.minimum, "maximum": item.maximum, "options": list(item.options),
+            })
+            body.append("      " + string_field_markup(index, item))
         actions: list[str] = []
         for action in component.buttons:
             index = len(buttons)
@@ -475,10 +634,13 @@ def render_html(page: WebPage) -> str:
         )
     payload = {
         "state": page.state,
+        "text_state": page.text_state,
         "texts": texts,
         "buttons": buttons,
         "bounds": page.bounds,
         "inputs": inputs,
+        "string_fields": string_fields,
+        "scope_text_states": scope_text_states,
         "text_scopes": text_scopes,
         "text_props": text_props,
         "scope_states": scope_states,
@@ -510,6 +672,7 @@ def render_html(page: WebPage) -> str:
     </div>
     <div class="vibe-fields">
 {page_fields}
+{page_string_fields}
     </div>
     <div class="vibe-layout vibe-layout-{page.layout}">
 {component_markup}

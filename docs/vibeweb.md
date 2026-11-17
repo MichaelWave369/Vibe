@@ -177,3 +177,42 @@ for end users, or data persistence yet. Grid layout is for the page's
 reused component sections only. The bridge verifier remains heuristic;
 the runtime test exercises generated JavaScript in a minimal simulated DOM,
 not a production browser compatibility suite.
+
+## Phase 3D: string state, text input, select controls, inline validation
+
+VibeWeb now supports bounded string state alongside existing integers.
+
+```yaml
+page FormStudio:
+  title: "Form Studio"
+  heading: "Hello, forms"
+  text_state:
+    display_name: "Visitor"
+    theme: "Teal"
+  view:
+    text: "Hello {display_name} in {theme}"
+    input_text "Display name": display_name min=2 max=24
+    select "Theme": theme options="Teal|Purple|Gold"
+emit web
+```
+
+Reusable components may declare their own `text_state name: "Visitor"` and
+use these controls with independent per-instance state. Global page string
+state is shared. String field validation checks initial state during
+compilation and checks changes at runtime. Invalid length or select values
+show a visible, `aria-describedby`-associated status and set `aria-invalid`;
+valid changes clear the status. Interpolation uses `textContent` and generated
+options/labels are HTML-escaped. The serialized configuration is escaped against
+script-tag injection.
+
+```bash
+vibec compile vibe/examples/web_text_forms.vibe --no-cache
+python -m vibe.web vibe/examples/web_text_forms.vibe --out dist-textforms
+node tests/web_string_forms_runtime_smoke.cjs dist-textforms/index.html
+```
+
+Limitations: this is not a general form submission system; no fetch/network
+actions, async validation, passwords, uploads, rich text, checkbox state, or
+persistent storage. The current `change` handler validates on committed edits.
+Native accessibility and cross-browser behavior need browser-level testing;
+our CI runtime uses a simulated DOM. The preservation bridge is heuristic.

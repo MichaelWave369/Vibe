@@ -161,6 +161,17 @@ class WebInput:
     variable: str
 
 
+@dataclass(frozen=True, slots=True)
+class WebStringField:
+    """Bounded text/select control with explicit validation rules."""
+    label: str
+    variable: str
+    kind: str
+    minimum: int = 0
+    maximum: int = 120
+    options: tuple[str, ...] = ()
+
+
 @dataclass(slots=True)
 class WebComponent:
     """Bounded reusable view fragment with optional per-instance state and string props."""
@@ -168,6 +179,8 @@ class WebComponent:
     texts: list[str] = field(default_factory=list)
     buttons: list[WebButton] = field(default_factory=list)
     inputs: list[WebInput] = field(default_factory=list)
+    text_fields: list[WebStringField] = field(default_factory=list)
+    text_state: dict[str, str] = field(default_factory=dict)
     props: list[str] = field(default_factory=list)
     state: dict[str, int] = field(default_factory=dict)
     bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
@@ -183,6 +196,8 @@ class WebPage:
     texts: list[str] = field(default_factory=list)
     buttons: list[WebButton] = field(default_factory=list)
     inputs: list[WebInput] = field(default_factory=list)
+    text_fields: list[WebStringField] = field(default_factory=list)
+    text_state: dict[str, str] = field(default_factory=dict)
     layout: str = "stack"
     bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
     components: dict[str, WebComponent] = field(default_factory=dict)
