@@ -477,3 +477,84 @@ def test_phase3e_standard_compiler_builds_local_draft(tmp_path):
     path.write_text(DRAFTS.read_text(encoding="utf-8"), encoding="utf-8")
     assert main(["compile", str(path), "--no-cache"]) == 0
     assert 'id="vibe-form-status"' in path.with_suffix(".html").read_text(encoding="utf-8")
+
+
+TYPING = Path("vibe/examples/web_typing_dojo.vibe")
+
+
+def test_typing_dojo_round_trip_native_compiler():
+    import re
+    from vibe.parser import parse_source
+    from vibe.ir import ast_to_ir, serialize_ir
+    from vibe.emitter import emit_code
+
+    source = TYPING.read_text(encoding="utf-8")
+    program = parse_source(source)
+    assert program.web_page is not None
+    assert program.web_page.typing is not None
+    passage = "Precision matters.  Two spaces are welcome here."
+    assert program.web_page.typing.passage == passage
+    assert program.web_page.state == {}
+    ir = ast_to_ir(program)
+    assert ir.web_page is not None
+    assert ir.web_page.typing is not None
+    assert ir.web_page.typing.passage == passage
+    serialized = serialize_ir(ir)
+    assert '"typing"' in serialized
+    assert '"passage_ref"' in serialized
+    html, backend = emit_code(ir)
+    assert backend.target == "web"
+    assert 'id="vibe-typing-input"' in html
+    assert 'id="vibe-typing-progress"' in html
+    assert 'id="vibe-typing-accuracy"' in html
+    assert "Two spaces are welcome here." in html
+    match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
+    assert match
+    config = json.loads(match.group(1))
+    assert config["typing"] == {"passage": passage}
+    assert html.count('id="vibe-typing"') == 1
+    assert html.count('id="vibe-typing-reset"') == 1
+
+
+def test_typing_grammar_rejects_unsafe_and_malformed_passages():
+    source = TYPING.read_text(encoding="utf-8")
+    with pytest.raises(WebSpecError, match="12-240"):
+        parse_web_source(source.replace("Precision matters.  Two spaces are welcome here.", "Short"))
+    with pytest.raises(WebSpecError, match="12-240"):
+        parse_web_source(source.replace("Precision matters.  Two spaces are welcome here.", " " * 15))
+    with pytest.raises(WebSpecError, match="printable ASCII"):
+        parse_web_source(source.replace("Precision matters.", "Precision ☃."))
+    with pytest.raises(WebSpecError, match="expected one typing passage"):
+        parse_web_source(source.replace('    passage: "Precision', '    passage: "Precision').replace(
+            'passage: "Precision matters.  Two spaces are welcome here."',
+            'passage: "Precision matters.  Two spaces are welcome here."\n    passage: "Another passage is not permitted"'
+        ))
+    with pytest.raises(WebSpecError, match="expected one typing passage"):
+        parse_web_source(source.replace('passage: "Precision matters.  Two spaces are welcome here."',
+                                        'script: "alert(1)"'))
+    with pytest.raises(WebSpecError, match="invalid indentation or unsupported construct"):
+        parse_web_source(source.replace('passage: "Precision matters.  Two spaces are welcome here."',
+                                        'passage: "Precision matters.  Two spaces are welcome here."\n      js: "bad"'))
+
+
+def test_typing_html_escapes_literal_script_attack():
+    source = TYPING.read_text(encoding="utf-8")
+    source = source.replace(
+        "Precision matters.  Two spaces are welcome here.",
+        "Enter </script><script>alert(1)</script> exactly."
+    )
+    page, _ = parse_web_source(source)
+    html = render_html(page)
+    assert "&lt;/script&gt;" in html
+    assert "<script>alert(1)</script>" not in html
+    assert r"\u003c/script\u003e" in html
+
+
+def test_typing_standard_vibec_compile(tmp_path):
+    from vibe.cli import main
+    source = tmp_path / "dojo.vibe"
+    source.write_text(TYPING.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["compile", str(source), "--no-cache"]) == 0
+    output = source.with_suffix(".html").read_text(encoding="utf-8")
+    assert "Keyboard dojo" in output
+    assert "vibe-typing-status" in output

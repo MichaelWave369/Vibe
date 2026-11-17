@@ -52,3 +52,17 @@ Dependencies are specified at known stable versions in package.json, but the
 initial QA harness uses `npm install` rather than a committed transitive
 lockfile. Record installed versions in CI and commit a lockfile for more
 reproducible future comparisons.
+
+## Native typing dojo application
+
+Phase 3G adds `vibe/examples/web_typing_dojo.vibe` and a real-browser
+Playwright suite under `tests/typing-dojo.spec.mjs`. The new tests operate
+on actual keystrokes and verify two-space passages, correction, completion
+and restart, plus axe and 360px mobile overflow. The existing React/Svelte
+benchmark intentionally remains the **counter-only** comparison; keyboard
+dojo results are not included in those framework performance figures.
+
+```bash
+python -m vibe.web vibe/examples/web_typing_dojo.vibe --out dist-qa-typing
+npm run test:browser --prefix qa/vibeweb
+```

@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField
+from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField, WebTyping
 from html import escape
 import json
 from pathlib import Path
@@ -152,7 +152,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 raise WebSpecError(f"line {pending_button[1]}: button missing action")
             pending_button = None
             current_component = None
-            if value in {"state:", "text_state:", "view:", "bounds:", "components:"}:
+            if value in {"state:", "text_state:", "view:", "bounds:", "components:", "typing:"}:
                 section = value[:-1]
                 continue
             section = ""
@@ -181,6 +181,15 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 page.persistence = policy
             else:
                 raise WebSpecError(f"line {idx + 1}: unsupported page field {value!r}")
+        elif n == 4 and section == "typing":
+            if page.typing is not None or not value.startswith("passage:"):
+                raise WebSpecError(f"line {idx + 1}: expected one typing passage")
+            phrase = _quoted(value.split(":", 1)[1].strip(), idx + 1)
+            if not 12 <= len(phrase) <= 240 or phrase != phrase.strip():
+                raise WebSpecError(f"line {idx + 1}: typing passage must be 12-240 chars without edge spaces")
+            if any(not (" " <= char <= "~") for char in phrase):
+                raise WebSpecError(f"line {idx + 1}: typing passage supports printable ASCII and spaces only")
+            page.typing = WebTyping(passage=phrase)
         elif n == 4 and section == "state":
             if ":" not in value:
                 raise WebSpecError(f"line {idx + 1}: expected `name: integer`")
@@ -310,7 +319,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         raise WebSpecError("page requires title and heading")
     if page.persistence != "none" and not page.submit_label:
         raise WebSpecError("persist local requires an explicit submit declaration")
-    if not (page.state or page.text_state or any(component.state or component.text_state for component in page.components.values())):
+    if not (page.state or page.text_state or page.typing or any(component.state or component.text_state for component in page.components.values())):
         raise WebSpecError("page requires page or component state")
     if len(page.uses) != len(page.use_props):
         raise WebSpecError("component use/prop count mismatch")
@@ -321,9 +330,9 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         if set(props) != expected:
             raise WebSpecError(f"component {name!r} requires exactly props {sorted(expected)}")
     active_components = [page.components[name] for name in page.uses]
-    if not (page.texts or any(component.texts for component in active_components)):
+    if not (page.texts or page.typing or any(component.texts for component in active_components)):
         raise WebSpecError("page requires at least one visible text")
-    if not (page.buttons or page.inputs or page.text_fields or any(component.buttons or component.inputs or component.text_fields for component in active_components)):
+    if not (page.buttons or page.inputs or page.text_fields or page.typing or any(component.buttons or component.inputs or component.text_fields for component in active_components)):
         raise WebSpecError("page requires at least one visible button or input")
 
     def check_text(template: str, allowed: set[str]) -> None:
@@ -411,6 +420,19 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 .vibe-error{font-size:.82rem;color:#ffb7b2;margin:.1rem 0;min-height:1.2em}
 .vibe-submit{margin-top:1.5rem;display:flex;flex-wrap:wrap;gap:.8rem;align-items:center}.vibe-submit p{font-size:.88rem;margin:0;min-height:1em}
 .vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
+.vibe-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+#vibe-typing{margin:1.6rem 0;padding:1.2rem;border:1px solid #5777a1;background:#111b2e;border-radius:14px}
+#vibe-typing h2{margin:.1rem 0 .5rem}
+.vibe-typing-passage{font:1.18rem/1.85 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.01em;white-space:pre-wrap;overflow-wrap:anywhere;padding:1rem;background:#0b1426;border:1px solid #40516c;border-radius:12px;margin:.8rem 0 1rem}
+.vibe-typing-passage .vibe-typing-correct{color:#8ef0b3;background:#153b30}
+.vibe-typing-passage .vibe-typing-wrong{color:#ffd1d1;background:#71313b;text-decoration:underline}
+#vibe-typing label{display:block;font-weight:600;margin:.8rem 0 .35rem}
+#vibe-typing-input{font:1rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;background:#0b1426;color:#f5f6fb;border:2px solid #7898c7;border-radius:10px;padding:.7rem;width:100%;resize:vertical;min-height:6rem}
+#vibe-typing-input:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
+#vibe-typing-progress{width:100%;height:1rem;accent-color:#8ef0b3}
+.vibe-typing-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin:1rem 0}
+.vibe-typing-metrics>div{background:#1a2943;padding:.55rem .8rem;border-radius:10px}
+.vibe-typing-metrics dt{font-size:.85rem;color:#bdd4f1}.vibe-typing-metrics dd{font-size:1.25rem;font-weight:750;margin:0}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
 """.strip()
@@ -655,6 +677,86 @@ _SCRIPT = r"""
       }
     });
   }
+  if (config.typing) {
+    // All passage text comes from a compiler-validated literal. No HTML injection.
+    const passage = Array.from(config.typing.passage);
+    const input = document.getElementById('vibe-typing-input');
+    const display = document.getElementById('vibe-typing-passage');
+    const progress = document.getElementById('vibe-typing-progress');
+    const accuracyNode = document.getElementById('vibe-typing-accuracy');
+    const wpmNode = document.getElementById('vibe-typing-wpm');
+    const errorNode = document.getElementById('vibe-typing-errors');
+    const elapsedNode = document.getElementById('vibe-typing-elapsed');
+    const status = document.getElementById('vibe-typing-status');
+    const reset = document.getElementById('vibe-typing-reset');
+    let startedAt = null;
+    let endedAt = null;
+    let timer = null;
+    const stopTimer = () => {
+      if (timer !== null) window.clearInterval(timer);
+      timer = null;
+    };
+    const update = () => {
+      const typed = Array.from(input.value).slice(0, passage.length);
+      const now = performance.now();
+      if (typed.length > 0 && startedAt === null) {
+        startedAt = now;
+        timer = window.setInterval(update, 250);
+      }
+      let correct = 0;
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < passage.length; i++) {
+        const char = document.createElement('span');
+        char.textContent = passage[i];
+        if (i < typed.length) {
+          if (typed[i] === passage[i]) {
+            char.className = 'vibe-typing-correct';
+            correct++;
+          } else {
+            char.className = 'vibe-typing-wrong';
+          }
+        }
+        fragment.appendChild(char);
+      }
+      display.replaceChildren(fragment);
+      const mistakes = typed.length - correct;
+      const complete = typed.length === passage.length && mistakes === 0;
+      if (complete && endedAt === null) {
+        endedAt = now;
+        input.disabled = true;
+        stopTimer();
+      }
+      if (typed.length === 0) {
+        startedAt = null;
+        endedAt = null;
+        stopTimer();
+      }
+      const elapsed = startedAt === null ? 0 :
+        Math.max(0, ((endedAt ?? now) - startedAt) / 1000);
+      const wpm = elapsed > 0 ? Math.round((correct / 5) * (60 / Math.max(1, elapsed))) : 0;
+      progress.value = typed.length;
+      accuracyNode.textContent = (typed.length ? Math.round(100 * correct / typed.length) : 100) + '%';
+      wpmNode.textContent = String(wpm);
+      errorNode.textContent = String(mistakes);
+      elapsedNode.textContent = elapsed.toFixed(1) + 's';
+      if (complete) status.textContent = 'Lesson complete! Great precision.';
+      else if (typed.length === passage.length) status.textContent = 'Fix the highlighted mistakes to finish.';
+      else if (mistakes) status.textContent = 'Mistakes highlighted. Backspace to correct.';
+      else if (typed.length) status.textContent = 'Keep going. Every space counts.';
+      else status.textContent = 'Ready to type.';
+    };
+    input.addEventListener('input', update);
+    reset.addEventListener('click', () => {
+      stopTimer();
+      startedAt = null;
+      endedAt = null;
+      input.value = '';
+      input.disabled = false;
+      update();
+      input.focus();
+    });
+    update();
+  }
   render();
 })();
 """.strip()
@@ -778,6 +880,7 @@ def render_html(page: WebPage) -> str:
         "scope_states": scope_states,
         "scope_bounds": scope_bounds,
         "page_id": page.name,
+        "typing": {"passage": page.typing.passage} if page.typing else None,
         "submit_label": page.submit_label,
         "persistence": page.persistence,
         "storage_key": f"vibeweb:draft:v1:{page.name}" if page.persistence == "local" else None,
@@ -788,6 +891,30 @@ def render_html(page: WebPage) -> str:
     text_elements = "\n".join(f'    <p data-vibe-text="{i}" aria-live="polite"></p>' for i, _ in enumerate(page.texts))
     controls = "\n".join(f'      <button type="button" data-vibe-button="{i}">{escape(b.label)}</button>' for i, b in enumerate(page.buttons))
     component_markup = "\n".join(component_sections)
+    typing_markup = ""
+    if page.typing is not None:
+        passage = page.typing.passage
+        typing_markup = f"""
+    <section id="vibe-typing" aria-label="Typing dojo">
+      <h2>Keyboard dojo</h2>
+      <p id="vibe-typing-guide">Type the passage exactly, including spaces and punctuation. Backspace can fix mistakes.</p>
+      <p id="vibe-typing-readable" class="vibe-visually-hidden">Passage to type: {escape(passage)}</p>
+      <div id="vibe-typing-passage" class="vibe-typing-passage" aria-hidden="true"></div>
+      <label for="vibe-typing-input">Type the lesson</label>
+      <textarea id="vibe-typing-input" rows="3" maxlength="{len(passage)}"
+        aria-describedby="vibe-typing-guide vibe-typing-readable" spellcheck="false"
+        autocomplete="off" autocapitalize="off"></textarea>
+      <label for="vibe-typing-progress">Typing progress</label>
+      <progress id="vibe-typing-progress" max="{len(passage)}" value="0"></progress>
+      <dl class="vibe-typing-metrics">
+        <div><dt>Accuracy</dt><dd id="vibe-typing-accuracy">100%</dd></div>
+        <div><dt>WPM</dt><dd id="vibe-typing-wpm">0</dd></div>
+        <div><dt>Errors</dt><dd id="vibe-typing-errors">0</dd></div>
+        <div><dt>Elapsed</dt><dd id="vibe-typing-elapsed">0.0s</dd></div>
+      </dl>
+      <button type="button" id="vibe-typing-reset">Restart lesson</button>
+      <p role="status" aria-live="polite" id="vibe-typing-status">Ready to type.</p>
+    </section>"""
     grid_page_class = ' class="vibe-page-grid"' if page.layout == "grid" else ""
     form_open = '<form id="vibe-form" novalidate>' if page.submit_label else ""
     form_close = '</form>' if page.submit_label else ""
@@ -821,6 +948,7 @@ def render_html(page: WebPage) -> str:
     <div class="vibe-layout vibe-layout-{page.layout}">
 {component_markup}
     </div>
+{typing_markup}
 {submit_markup}
 {form_close}
     <footer>Compiled from a .vibe intent. No React, Svelte, or client dependencies.</footer>

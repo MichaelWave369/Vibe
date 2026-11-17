@@ -7,6 +7,7 @@ try {
   for (const [path, marker] of [
     ["/dist-qa/index.html", "VibeWeb"],
     ["/dist-qa-instances/index.html", "Two counters. One language."],
+    ["/dist-qa-typing/index.html", "Keyboard Dojo · First Lesson"],
     ["/qa/vibeweb/dist-react/index.html", "React Counter Baseline"],
     ["/qa/vibeweb/dist-svelte/index.html", "Svelte Counter Baseline"],
   ]) {

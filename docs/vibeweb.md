@@ -267,3 +267,52 @@ Phase 3E does not implement remote submission, authentication, database
 storage, or cross-device synchronization. Validation and storage have a
 bounded simulated-DOM runtime smoke test. Browser-specific behavior and
 accessibility still need a real-browser test suite.
+
+## Phase 3G: native keyboard dojo typing exercise
+
+A VibeWeb page can now declare one bounded typing lesson directly in the
+native `.vibe` page AST. The lesson is lowered as a typed string SSA reference
+and compiled into dependency-free HTML/CSS/JavaScript:
+
+```yaml
+page TypingDojo:
+  title: "VibeWeb Keyboard Dojo"
+  heading: "Typing lesson"
+  typing:
+    passage: "Precision matters.  Two spaces are welcome here."
+emit web
+```
+
+`typing:` is an independent interactive page feature. Unlike form-specific
+examples, a typing-only page does not need artificial numeric page state,
+a view button, or a form submission. The compiler requires exactly one literal
+`passage:`, with 12–240 printable ASCII characters, no newline/control
+characters and no leading/trailing whitespace. Interior spaces, including
+double spaces, are preserved and checked exactly. Unsupported statements and
+additional passages fail at compilation. No user-provided JavaScript is
+executed.
+
+The generated browser page includes a native textarea for keyboard input,
+per-character correct/incorrect feedback, accessible instructions and
+progress, current accuracy, estimated WPM, a current-mistake count, elapsed
+time and a restart action. Characters are rendered with `textContent`.
+The stopwatch starts on the first input, stops upon fully correct completion
+and resets on restart. Backspace is supported. No data is stored or sent.
+
+**Metrics are coaching estimates, not certified competitive scores.**
+Accuracy is the percentage of *currently entered* characters matching the
+lesson (corrected mistakes no longer count). WPM is matching characters
+divided by five, scaled to elapsed time with a one-second minimum denominator.
+The exercise has no cumulative error penalty, paste prevention, selectable
+lessons, multiplayer, accounts or leaderboard. Non-ASCII and IME lesson
+content are not supported in this initial slice.
+
+```bash
+vibec compile vibe/examples/web_typing_dojo.vibe --no-cache
+python -m vibe.web vibe/examples/web_typing_dojo.vibe --out dist-typing
+```
+
+`qa/vibeweb/tests/typing-dojo.spec.mjs` exercises actual Chromium keyboard
+entry, including exact double-space matching, mistakes, Backspace, completion,
+restart, mobile overflow, and an automated axe WCAG A/AA scan. Automated
+accessibility testing does not replace manual screen reader and device testing.

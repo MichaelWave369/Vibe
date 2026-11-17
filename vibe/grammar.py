@@ -48,9 +48,10 @@ delegate_max_depth <- 'max_depth:' WS? NUMBER NEWLINE
 delegate_stop_when <- 'stop_when:' WS? TYPE NEWLINE
 page_block      <- 'page' WS IDENT ':' NEWLINE INDENT page_field+ DEDENT
 # Bounded title, heading, layout, state, bounds, components and view fields.
-# View/component items allow `input "Label": number`, `input_text "Label": text min=N max=N`, and `select "Label": text options="A|B"`.
+# View/component items allow numeric inputs, bounded text inputs, and select controls.
+# Optional page typing section uses one `passage: "literal"` field (bounded printable ASCII).
 # The strict indentation/action parser is implemented in vibe.web.
-page_field      <- 'title:' WS STRING / 'heading:' WS STRING / 'layout:' WS IDENT / 'submit:' WS STRING / 'persist:' WS IDENT / 'state:' / 'bounds:' / 'components:' / 'view:'
+page_field      <- 'title:' WS STRING / 'heading:' WS STRING / 'layout:' WS IDENT / 'submit:' WS STRING / 'persist:' WS IDENT / 'state:' / 'bounds:' / 'components:' / 'typing:' / 'view:'
 emit_stmt       <- 'emit' WS IDENT NEWLINE?
 
 experimental_block <- tesla_block / agentora_block / agentception_block
