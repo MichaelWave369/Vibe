@@ -186,6 +186,12 @@ class WebComponent:
     bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class WebTyping:
+    """Single bounded, literal typing exercise, with no executable source."""
+    passage: str
+
+
 @dataclass(slots=True)
 class WebPage:
     """Page syntax node with no arbitrary script evaluation."""
@@ -205,6 +211,7 @@ class WebPage:
     components: dict[str, WebComponent] = field(default_factory=dict)
     uses: list[str] = field(default_factory=list)
     use_props: list[dict[str, str]] = field(default_factory=list)
+    typing: WebTyping | None = None
 
 
 @dataclass(slots=True)
