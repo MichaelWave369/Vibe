@@ -82,3 +82,21 @@ npm run test:browser --prefix qa/vibeweb
 
 The existing React/Svelte performance benchmark still covers only the
 original bounded counter. It does not imply typing-game framework parity.
+
+## Phase 3I: source-authored lesson packs and practice-history tests
+
+`vibe/examples/web_typing_packs.vibe` specifies bounded, named packs
+directly in Vibe source. The Chromium suite in
+`tests/typing-packs.spec.mjs` covers pack and difficulty filtering, missing
+combinations, QWERTY-style trouble keys, historical attempt accuracy,
+in-browser storage and clearing, old-record compatibility, and axe/mobile
+checks.
+
+```bash
+python -m vibe.web vibe/examples/web_typing_packs.vibe --out dist-qa-packs
+npm run test:browser --prefix qa/vibeweb
+```
+
+The existing React/Svelte benchmark still covers the bounded counter only.
+These additional typing features are not yet subject to equivalent
+cross-framework benchmark tasks.
