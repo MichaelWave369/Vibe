@@ -165,6 +165,20 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 if mode not in {"stack", "grid"}:
                     raise WebSpecError(f"line {idx + 1}: layout must be stack or grid")
                 page.layout = mode
+            elif value.startswith("submit:"):
+                if page.submit_label:
+                    raise WebSpecError(f"line {idx + 1}: duplicate submit declaration")
+                label = _quoted(value.split(":", 1)[1].strip(), idx + 1)
+                if not label.strip() or len(label) > 80:
+                    raise WebSpecError(f"line {idx + 1}: submit label must be 1-80 characters")
+                page.submit_label = label
+            elif value.startswith("persist:"):
+                if page.persistence != "none":
+                    raise WebSpecError(f"line {idx + 1}: duplicate persistence declaration")
+                policy = value.split(":", 1)[1].strip()
+                if policy not in {"local"}:
+                    raise WebSpecError(f"line {idx + 1}: persist currently supports only local")
+                page.persistence = policy
             else:
                 raise WebSpecError(f"line {idx + 1}: unsupported page field {value!r}")
         elif n == 4 and section == "state":
@@ -294,6 +308,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
     if not page.title or not page.heading:
         raise WebSpecError("page requires title and heading")
+    if page.persistence != "none" and not page.submit_label:
+        raise WebSpecError("persist local requires an explicit submit declaration")
     if not (page.state or page.text_state or any(component.state or component.text_state for component in page.components.values())):
         raise WebSpecError("page requires page or component state")
     if len(page.uses) != len(page.use_props):
@@ -393,6 +409,7 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 .vibe-field select{max-width:100%;min-height:44px;border:1px solid #7c99c5;border-radius:10px;padding:.55rem;background:#0d1931;color:white;font:inherit}
 .vibe-field input[aria-invalid="true"],.vibe-field select[aria-invalid="true"]{border-color:#ffa09b}
 .vibe-error{font-size:.82rem;color:#ffb7b2;margin:.1rem 0;min-height:1.2em}
+.vibe-submit{margin-top:1.5rem;display:flex;flex-wrap:wrap;gap:.8rem;align-items:center}.vibe-submit p{font-size:.88rem;margin:0;min-height:1em}
 .vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
@@ -523,6 +540,121 @@ _SCRIPT = r"""
       });
     });
   }
+  if (config.submit_label) {
+    const form = document.getElementById('vibe-form');
+    const status = document.getElementById('vibe-form-status');
+    const snapshot = () => ({
+      version: 1,
+      page: config.page_id,
+      state: { ...state },
+      text_state: { ...textState },
+      scope_states: Object.fromEntries(
+        Object.entries(scopedStates).map(([scope, values]) => [scope, { ...values }])
+      ),
+      scope_text_states: Object.fromEntries(
+        Object.entries(scopedTextStates).map(([scope, values]) => [scope, { ...values }])
+      )
+    });
+    const hasExactKeys = (source, candidate) =>
+      candidate !== null && typeof candidate === 'object' && !Array.isArray(candidate) &&
+      Object.keys(source).length === Object.keys(candidate).length &&
+      Object.keys(source).every(key => owns(candidate, key));
+    const validNumbers = (source, candidate, bounds) =>
+      hasExactKeys(source, candidate) && Object.keys(source).every(key => {
+        const value = candidate[key];
+        const range = bounds[key];
+        return Number.isSafeInteger(value) &&
+          Math.abs(value) <= 999999999999 &&
+          (!range || (value >= range[0] && value <= range[1]));
+      });
+    const validTexts = (source, candidate, scope) =>
+      hasExactKeys(source, candidate) && Object.keys(source).every(key => {
+        const value = candidate[key];
+        if (typeof value !== 'string' || value.length > 4000) return false;
+        return config.string_fields
+          .filter(field => field.scope === scope && field.variable === key)
+          .every(field => field.kind === 'text'
+            ? Array.from(value).length >= field.minimum &&
+              Array.from(value).length <= field.maximum
+            : field.kind === 'select' && field.options.includes(value));
+      });
+    const validScopes = (source, candidate, bounds, textMode) =>
+      hasExactKeys(source, candidate) && Object.keys(source).every(scope =>
+        textMode
+          ? validTexts(source[scope], candidate[scope], scope)
+          : validNumbers(source[scope], candidate[scope], bounds[scope] || {})
+      );
+    const loadDraft = (draft) => {
+      if (!draft || draft.version !== 1 || draft.page !== config.page_id ||
+          !validNumbers(state, draft.state, config.bounds) ||
+          !validTexts(textState, draft.text_state, null) ||
+          !validScopes(scopedStates, draft.scope_states, config.scope_bounds, false) ||
+          !validScopes(scopedTextStates, draft.scope_text_states, {}, true)) {
+        return false;
+      }
+      Object.assign(state, draft.state);
+      Object.assign(textState, draft.text_state);
+      Object.keys(scopedStates).forEach(scope =>
+        Object.assign(scopedStates[scope], draft.scope_states[scope]));
+      Object.keys(scopedTextStates).forEach(scope =>
+        Object.assign(scopedTextStates[scope], draft.scope_text_states[scope]));
+      return true;
+    };
+    if (config.persistence === 'local') {
+      try {
+        const saved = window.localStorage.getItem(config.storage_key);
+        if (saved) {
+          if (saved.length > 65536 || !loadDraft(JSON.parse(saved))) {
+            status.textContent = 'Saved draft did not match this form and was ignored.';
+          } else {
+            status.textContent = 'Previous local draft restored.';
+          }
+        }
+      } catch (_error) {
+        status.textContent = 'Local draft unavailable. Nothing was restored.';
+      }
+    }
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const uncommittedText = Array.from(document.querySelectorAll('[data-vibe-string]'))
+        .some(node => {
+          const field = config.string_fields[Number(node.dataset.vibeString)];
+          const local = field.scope == null ? null : scopedTextStates[field.scope];
+          const target = local && owns(local, field.variable) ? local : textState;
+          return node.value !== target[field.variable];
+        });
+      const uncommittedNumbers = Array.from(document.querySelectorAll('[data-vibe-input]'))
+        .some(node => {
+          const field = config.inputs[Number(node.dataset.vibeInput)];
+          const local = field.scope == null ? null : scopedStates[field.scope];
+          const target = local && owns(local, field.variable) ? local : state;
+          return node.value !== String(target[field.variable]);
+        });
+      if (uncommittedText || uncommittedNumbers) {
+        status.textContent = 'Please correct or finish editing the highlighted fields.';
+        return;
+      }
+      const values = snapshot();
+      let saved = false;
+      if (config.persistence === 'local') {
+        try {
+          window.localStorage.setItem(config.storage_key, JSON.stringify(values));
+          saved = true;
+          status.textContent = 'Draft saved locally in this browser.';
+        } catch (_error) {
+          status.textContent = 'Local storage unavailable. Form data was not saved.';
+        }
+      } else {
+        status.textContent = 'Form submitted locally in this browser session.';
+      }
+      if (typeof CustomEvent === 'function' &&
+          typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('vibe:submit', {
+          detail: { page: config.page_id, saved, values }
+        }));
+      }
+    });
+  }
   render();
 })();
 """.strip()
@@ -645,6 +777,10 @@ def render_html(page: WebPage) -> str:
         "text_props": text_props,
         "scope_states": scope_states,
         "scope_bounds": scope_bounds,
+        "page_id": page.name,
+        "submit_label": page.submit_label,
+        "persistence": page.persistence,
+        "storage_key": f"vibeweb:draft:v1:{page.name}" if page.persistence == "local" else None,
     }
     raw_json = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     safe_json = (raw_json.replace("&", "\\u0026").replace("<", "\\u003c")
@@ -653,6 +789,13 @@ def render_html(page: WebPage) -> str:
     controls = "\n".join(f'      <button type="button" data-vibe-button="{i}">{escape(b.label)}</button>' for i, b in enumerate(page.buttons))
     component_markup = "\n".join(component_sections)
     grid_page_class = ' class="vibe-page-grid"' if page.layout == "grid" else ""
+    form_open = '<form id="vibe-form" novalidate>' if page.submit_label else ""
+    form_close = '</form>' if page.submit_label else ""
+    submit_markup = (
+        '<div class="vibe-submit"><button type="submit">' + escape(page.submit_label) +
+        '</button><p id="vibe-form-status" role="status" aria-live="polite"></p></div>'
+        if page.submit_label else ""
+    )
     return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -666,6 +809,7 @@ def render_html(page: WebPage) -> str:
   <main{grid_page_class}>
     <div class="tag">Φ VibeWeb · experimental v0</div>
     <h1>{escape(page.heading)}</h1>
+{form_open}
 {text_elements}
     <div class="controls" role="group" aria-label="Page actions">
 {controls}
@@ -677,6 +821,8 @@ def render_html(page: WebPage) -> str:
     <div class="vibe-layout vibe-layout-{page.layout}">
 {component_markup}
     </div>
+{submit_markup}
+{form_close}
     <footer>Compiled from a .vibe intent. No React, Svelte, or client dependencies.</footer>
   </main>
   <script type="application/json" id="vibe-config">{safe_json}</script>

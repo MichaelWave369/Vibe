@@ -199,6 +199,8 @@ class WebPage:
     text_fields: list[WebStringField] = field(default_factory=list)
     text_state: dict[str, str] = field(default_factory=dict)
     layout: str = "stack"
+    submit_label: str = ""
+    persistence: str = "none"
     bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
     components: dict[str, WebComponent] = field(default_factory=dict)
     uses: list[str] = field(default_factory=list)
