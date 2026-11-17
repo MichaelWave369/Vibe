@@ -1,0 +1,48 @@
+name: VibeWeb Phase 3F browser QA and baseline measurements
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install native Vibe compiler
+        run: python -m pip install -e .
+      - name: Compile VibeWeb reference applications
+        run: |
+          python -m vibe.web vibe/examples/web_instances.vibe --out dist-qa-instances
+          python -m vibe.web vibe/examples/web_drafts.vibe --out dist-qa
+      - name: Install QA dependencies
+        run: npm install --prefix qa/vibeweb --no-audit --no-fund
+      - name: Build equivalent React/Svelte apps
+        run: npm run build:baselines --prefix qa/vibeweb
+      - name: Install headless Chromium and system dependencies
+        run: npm exec --prefix qa/vibeweb -- playwright install --with-deps chromium
+      - name: Chromium behavior, mobile and axe accessibility checks
+        run: npm run test:browser --prefix qa/vibeweb
+      - name: Collect exploratory load and interaction measurements
+        run: npm run bench --prefix qa/vibeweb
+      - name: Upload browser traces and benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibeweb-phase3f-browser-qa
+          if-no-files-found: warn
+          path: |
+            qa/vibeweb/reports/
+            qa/vibeweb/test-results/
+            qa/vibeweb/playwright-report/
