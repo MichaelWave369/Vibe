@@ -230,38 +230,59 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             raise WebSpecError(f"line {idx + 1}: invalid indentation or unsupported construct")
     if pending_button:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
-    if not page.title or not page.heading or not page.state:
-        raise WebSpecError("page requires title, heading, and state")
-    for name in page.uses:
+    if not page.title or not page.heading:
+        raise WebSpecError("page requires title and heading")
+    if not (page.state or any(component.state for component in page.components.values())):
+        raise WebSpecError("page requires page or component state")
+    if len(page.uses) != len(page.use_props):
+        raise WebSpecError("component use/prop count mismatch")
+    for name, props in zip(page.uses, page.use_props):
         if name not in page.components:
             raise WebSpecError(f"unknown component {name!r}")
+        expected = set(page.components[name].props)
+        if set(props) != expected:
+            raise WebSpecError(f"component {name!r} requires exactly props {sorted(expected)}")
     active_components = [page.components[name] for name in page.uses]
     if not (page.texts or any(component.texts for component in active_components)):
         raise WebSpecError("page requires at least one visible text")
     if not (page.buttons or any(component.buttons for component in active_components)):
         raise WebSpecError("page requires at least one visible button")
-    all_buttons = list(page.buttons)
-    all_texts = list(page.texts)
-    for component in page.components.values():
-        if not component.texts and not component.buttons:
-            raise WebSpecError(f"component {component.name!r} cannot be empty")
-        all_buttons.extend(component.buttons)
-        all_texts.extend(component.texts)
-    for b in all_buttons:
-        if b.variable not in page.state:
-            raise WebSpecError(f"button {b.label!r} references unknown state {b.variable!r}")
+
+    def check_text(template: str, allowed: set[str]) -> None:
+        for ref in _BINDING.findall(template):
+            if ref not in allowed:
+                raise WebSpecError(f"text references unknown state or prop {ref!r}")
+        if "{" in _BINDING.sub("", template) or "}" in _BINDING.sub("", template):
+            raise WebSpecError("unsupported text interpolation; use {state_name}")
+
     for key, (lo, hi) in page.bounds.items():
         if key not in page.state:
             raise WebSpecError(f"bounds references unknown state {key!r}")
         if not (lo <= page.state[key] <= hi):
             raise WebSpecError(f"initial state {key} is outside bounds")
-    for value in all_texts:
-        for ref in _BINDING.findall(value):
-            if ref not in page.state:
-                raise WebSpecError(f"text references unknown state {ref!r}")
-        # Deny malformed variable expressions instead of silently rendering them.
-        if "{" in _BINDING.sub("", value) or "}" in _BINDING.sub("", value):
-            raise WebSpecError("unsupported text interpolation; use {state_name}")
+    for button in page.buttons:
+        if button.variable not in page.state:
+            raise WebSpecError(f"button {button.label!r} references unknown state {button.variable!r}")
+    for template in page.texts:
+        check_text(template, set(page.state))
+
+    for component in page.components.values():
+        if not component.texts and not component.buttons:
+            raise WebSpecError(f"component {component.name!r} cannot be empty")
+        overlap = set(component.props) & (set(component.state) | set(page.state))
+        if overlap:
+            raise WebSpecError(f"component prop collides with state: {sorted(overlap)}")
+        for key, (lo, hi) in component.bounds.items():
+            if key not in component.state:
+                raise WebSpecError(f"component bounds references unknown local state {key!r}")
+            if not (lo <= component.state[key] <= hi):
+                raise WebSpecError(f"component initial state {key!r} outside bounds")
+        writable = set(component.state) | set(page.state)
+        for button in component.buttons:
+            if button.variable not in writable:
+                raise WebSpecError(f"button {button.label!r} references unknown state {button.variable!r}")
+        for template in component.texts:
+            check_text(template, writable | set(component.props))
     core = "".join(raw[:start] + raw[end:])
     if len(re.findall(r"(?m)^emit web\s*$", core)) != 1:
         raise WebSpecError("a web page needs exactly one `emit web` declaration")
