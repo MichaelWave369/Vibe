@@ -80,3 +80,27 @@ The HTML target is deterministic and deliberately bypasses the multi-candidate
 synthesis pipeline, so `--with-tests` and `--refine` are not supported yet.
 The preservation bridge is heuristic. Passing its gate is not a proof of
 browser behavior, comprehensive security, or accessibility compliance.
+
+
+## Phase 3A: reusable components (experimental)
+
+A VibeWeb `page` can now declare bounded, reusable components under
+`components:`, then instantiate them with `use ComponentName` in `view:`.
+The same component can be used repeatedly. Every instance reads and updates
+the enclosing page's **shared** state; text bindings and integer-only button
+actions remain validated before emission.
+
+Example: `vibe/examples/web_components.vibe` declares `CounterCard` once
+and uses it twice, alongside a separate reset component.
+
+```bash
+vibec compile vibe/examples/web_components.vibe --no-cache
+python -m vibe.web vibe/examples/web_components.vibe --out dist-components
+```
+
+The core parser, typed AST/IR, emitter, standalone build, and web tests all
+support component declarations. This slice does **not** yet support component
+props, isolated instance state, arbitrary DOM structure, styling parameters,
+routing, or input controls. Components currently render after any direct
+page text/buttons, in the order of their `use` declarations. This is a
+bounded reuse mechanism, not framework feature parity.
