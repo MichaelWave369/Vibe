@@ -100,3 +100,17 @@ npm run test:browser --prefix qa/vibeweb
 The existing React/Svelte benchmark still covers the bounded counter only.
 These additional typing features are not yet subject to equivalent
 cross-framework benchmark tasks.
+
+## Phase 3J: native playground browser checks
+
+The Playwright config now launches a second local-only Python server at
+`http://127.0.0.1:4320/`, alongside the existing static QA server. The
+`tests/playground.spec.mjs` suite verifies that real compiler output
+appears in a sandboxed iframe, editable source is compiled and diagnosed,
+HTML/report views render, generated HTML can be downloaded, dangerous
+source strings do not turn into DOM markup, and the 360px editor layout
+passes automated axe checks.
+
+No new React/Svelte benchmark claims are made. The playground is a
+developer tool, not a public code-execution website. Use
+`python -m vibe.playground --port 4320` locally.
