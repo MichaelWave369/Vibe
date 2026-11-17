@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field, fields
 from typing import Literal
 
-from .ast import Program, WebPage, WebButton
+from .ast import Program, WebPage, WebButton, WebComponent
 
 DEFAULT_EPSILON_FLOOR = 0.02
 DEFAULT_MEASUREMENT_SAFE_RATIO = 0.85
@@ -132,6 +132,13 @@ class IRWebButton:
 
 
 @dataclass(slots=True)
+class IRWebComponent:
+    name_ref: str
+    text_refs: list[str]
+    buttons: list[IRWebButton]
+
+
+@dataclass(slots=True)
 class IRWebPage:
     name_ref: str
     title_ref: str
@@ -140,6 +147,8 @@ class IRWebPage:
     bounds_refs: dict[str, tuple[str, str]]
     text_refs: list[str]
     buttons: list[IRWebButton]
+    components: dict[str, IRWebComponent] = field(default_factory=dict)
+    uses_refs: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -296,6 +305,23 @@ class IR:
                 )
                 for b in p.buttons
             ],
+            components={
+                name: WebComponent(
+                    name=str(self._value(component.name_ref).data),
+                    texts=[str(self._value(ref).data) for ref in component.text_refs],
+                    buttons=[
+                        WebButton(
+                            label=str(self._value(btn.label_ref).data),
+                            variable=str(self._value(btn.variable_ref).data),
+                            operation=str(self._value(btn.operation_ref).data),
+                            value=int(self._value(btn.value_ref).data),
+                        )
+                        for btn in component.buttons
+                    ],
+                )
+                for name, component in p.components.items()
+            },
+            uses=[str(self._value(ref).data) for ref in p.uses_refs],
         )
 
     @property
