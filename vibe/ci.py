@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import re
 from pathlib import Path
 
 from .emitter import emit_code
@@ -78,8 +79,22 @@ def _load_source_with_package_defaults(path: Path) -> str:
 
 def run_file_check(path: Path, *, backend: str, fallback_backend: str | None, with_proofs: bool, with_tests: bool) -> FileCheckResult:
     source = _load_source_with_package_defaults(path)
-    ir = ast_to_ir(parse_source(source))
-    emitted_code, emit_backend = emit_code(ir)
+    # VibeWeb is a bounded sidecar grammar until web nodes land in the core IR.
+    # Dispatch before the legacy parser sees the otherwise-unknown page block.
+    is_web = bool(re.search(r"(?m)^emit web[ \\t]*$", source))
+    if is_web:
+        from .web import parse_web_source, render_html
+
+        page, core_source = parse_web_source(source)
+        ir = ast_to_ir(parse_source(core_source))
+        if page.name != ir.intent_name:
+            raise ValueError(f"VibeWeb page {page.name!r} must match intent {ir.intent_name!r}")
+        emitted_code = render_html(page)
+        target_name = "web"
+    else:
+        ir = ast_to_ir(parse_source(source))
+        emitted_code, emit_backend = emit_code(ir)
+        target_name = emit_backend.target
     result = verify(ir, emitted_code, backend=backend, fallback_backend=fallback_backend)
 
     proof_path: str | None = None
@@ -90,17 +105,17 @@ def run_file_check(path: Path, *, backend: str, fallback_backend: str | None, wi
             ir,
             result,
             emitted_blocked=not result.passed,
-            notes=["ci bridge-check proof artifact"],
+            notes=(["ci bridge-check proof artifact", "VibeWeb uses a bounded sidecar grammar; verification is heuristic, not full web equivalence"] if is_web else ["ci bridge-check proof artifact"]),
         )
         pp = default_proof_path(path)
         write_proof_artifact(pp, artifact)
         proof_path = str(pp)
 
     generated_test_files: list[str] = []
-    if with_tests:
+    if with_tests and not is_web:
         suite = generate_intent_guided_tests(
             ir=ir,
-            output_path=path.with_suffix(f".{emit_backend.target}"),
+            output_path=path.with_suffix(f".{target_name}"),
             emitted_code=emitted_code,
             candidate_id="ci.candidate.1",
         )
