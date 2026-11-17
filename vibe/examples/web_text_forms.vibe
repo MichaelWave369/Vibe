@@ -1,0 +1,47 @@
+intent FormStudio:
+  goal: "Compile typed text and selection controls with visible validation and isolated component state."
+  inputs:
+    step: number
+  outputs:
+    total: number
+
+preserve:
+  readability = high
+  testability = high
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+page FormStudio:
+  title: "Φ VibeWeb · Form Studio"
+  heading: "Reactive text forms and select controls"
+  layout: grid
+  state:
+    total: 0
+  bounds:
+    total: 0..369
+  text_state:
+    display_name: "Mikey"
+    theme: "Teal"
+  components:
+    component ProfileCard:
+      prop caption: string
+      text_state name: "Visitor"
+      text_state mood: "Calm"
+      text: "{caption}: {name} / {mood} · Welcome {display_name} · Total {total}"
+      input_text "Card name": name min=2 max=24
+      select "Card mood": mood options="Calm|Focused|Playful"
+      button "Increase total":
+        action: total += 1
+  view:
+    text: "Hello {display_name}! Theme: {theme}. Total: {total}"
+    input_text "Display name": display_name min=2 max=24
+    select "Theme": theme options="Teal|Purple|Gold"
+    use ProfileCard caption="Alpha"
+    use ProfileCard caption="Beta"
+    button "Reset total":
+      action: total = 0
+
+emit web
