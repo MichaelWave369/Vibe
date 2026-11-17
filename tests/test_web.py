@@ -558,3 +558,98 @@ def test_typing_standard_vibec_compile(tmp_path):
     output = source.with_suffix(".html").read_text(encoding="utf-8")
     assert "Keyboard dojo" in output
     assert "vibe-typing-status" in output
+
+
+COURSE = Path("vibe/examples/web_typing_course.vibe")
+
+
+def test_typing_curriculum_native_ir_and_render():
+    import re
+    from vibe.parser import parse_source
+    from vibe.ir import ast_to_ir, serialize_ir
+    from vibe.emitter import emit_code
+
+    program = parse_source(COURSE.read_text(encoding="utf-8"))
+    assert program.web_page is not None and program.web_page.typing is not None
+    typing = program.web_page.typing
+    assert typing.passage == ""
+    assert typing.progress == "local"
+    assert [lesson.name for lesson in typing.lessons] == ["Warmup", "Flow State", "Symbol Sprint"]
+    assert [lesson.difficulty for lesson in typing.lessons] == [
+        "beginner", "intermediate", "advanced"
+    ]
+    assert "matters.  Two" in typing.lessons[0].passage
+    ir = ast_to_ir(program)
+    assert ir.web_page is not None and ir.web_page.typing == typing
+    serialized = serialize_ir(ir)
+    assert '"lessons"' in serialized and '"progress_ref"' in serialized
+    html, backend = emit_code(ir)
+    assert backend.target == "web"
+    assert 'id="vibe-typing-lesson"' in html
+    assert 'id="vibe-typing-difficulty"' in html
+    assert 'id="vibe-typing-clear"' in html
+    assert 'id="vibe-typing-save-status"' in html
+    match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
+    assert match
+    config = json.loads(match.group(1))
+    assert config["typing"]["progress"] == "local"
+    assert config["typing"]["storage_key"] == "vibeweb:typing:v1:TypingCourse"
+    assert len(config["typing"]["lessons"]) == 3
+    assert [entry["difficulty"] for entry in config["typing"]["lessons"]] == [
+        "beginner", "intermediate", "advanced"
+    ]
+
+
+def test_typing_course_validation_rejects_unsupported_declarations():
+    original = COURSE.read_text(encoding="utf-8")
+    with pytest.raises(WebSpecError, match="duplicate typing lesson"):
+        parse_web_source(original.replace('lesson "Flow State"', 'lesson "Warmup"'))
+    with pytest.raises(WebSpecError, match="expected lesson"):
+        parse_web_source(original.replace('difficulty=beginner', 'difficulty=wizard'))
+    with pytest.raises(WebSpecError, match="12-240"):
+        parse_web_source(original.replace(
+            "Spaces, commas, and periods.  Keep a steady rhythm.", "Short"
+        ))
+    with pytest.raises(WebSpecError, match="at least two lessons"):
+        parse_web_source(original.replace(
+            '    lesson "Flow State" difficulty=intermediate: "Spaces, commas, and periods.  Keep a steady rhythm."\n', ""
+        ).replace(
+            '    lesson "Symbol Sprint" difficulty=advanced: "Caps LOCK? No!  Symbols: @ # $ % & *; keep control."\n', ""
+        ))
+    with pytest.raises(WebSpecError, match="cannot mix"):
+        parse_web_source(original.replace(
+            '    lesson "Warmup"', '    passage: "Precision matters.  Two spaces are welcome here."\n    lesson "Warmup"'
+        ))
+    with pytest.raises(WebSpecError, match="supports one local declaration"):
+        parse_web_source(original.replace("progress: local", "progress: cloud"))
+    with pytest.raises(WebSpecError, match="supports one local declaration"):
+        parse_web_source(original.replace("progress: local", "progress: local\n    progress: local"))
+    with pytest.raises(WebSpecError, match="duplicate typing section"):
+        parse_web_source(original.replace("  typing:\n", "  typing:\n  typing:\n"))
+
+
+def test_typing_course_progress_opt_in_and_html_safety():
+    source = COURSE.read_text(encoding="utf-8")
+    without = source.replace("    progress: local\n", "")
+    page, _ = parse_web_source(without)
+    html = render_html(page)
+    assert 'id="vibe-typing-clear"' not in html
+    assert '"storage_key":null' in html or '"progress":"none"' in html
+    source = source.replace(
+        "Caps LOCK? No!  Symbols: @ # $ % & *; keep control.",
+        "Type </script><script>alert(1)</script> literally."
+    )
+    page, _ = parse_web_source(source)
+    html = render_html(page)
+    assert "<script>alert(1)</script>" not in html
+    assert r"\u003c/script\u003e" in html
+
+
+def test_typing_course_vibec_native_compile(tmp_path):
+    from vibe.cli import main
+    spec = tmp_path / "course.vibe"
+    spec.write_text(COURSE.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["compile", str(spec), "--no-cache"]) == 0
+    html = spec.with_suffix(".html").read_text(encoding="utf-8")
+    assert 'id="vibe-typing-lesson"' in html
+    assert '"progress":"local"' in html

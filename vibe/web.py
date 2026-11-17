@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField, WebTyping
+from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField, WebTyping, WebTypingLesson
 from html import escape
 import json
 from pathlib import Path
@@ -108,6 +108,13 @@ def _parse_string_field(text: str, line: int) -> WebStringField:
     return WebStringField(label, variable, "select", options=options)
 
 
+def _validate_typing_passage(phrase: str, line: int) -> None:
+    if not 12 <= len(phrase) <= 240 or phrase != phrase.strip():
+        raise WebSpecError(f"line {line}: typing passage must be 12-240 chars without edge spaces")
+    if any(not (" " <= char <= "~") for char in phrase):
+        raise WebSpecError(f"line {line}: typing passage supports printable ASCII and spaces only")
+
+
 def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
@@ -139,6 +146,10 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     section = ""
     pending_button: tuple[str, int] | None = None
     current_component: WebComponent | None = None
+    typing_seen = False
+    typing_passage: str | None = None
+    typing_lessons: list[WebTypingLesson] = []
+    typing_progress = "none"
     for idx in range(start + 1, end):
         line = raw[idx].rstrip("\r\n")
         if not line.strip() or line.lstrip().startswith("#"):
@@ -153,6 +164,10 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             pending_button = None
             current_component = None
             if value in {"state:", "text_state:", "view:", "bounds:", "components:", "typing:"}:
+                if value == "typing:":
+                    if typing_seen:
+                        raise WebSpecError(f"line {idx + 1}: duplicate typing section")
+                    typing_seen = True
                 section = value[:-1]
                 continue
             section = ""
@@ -182,14 +197,35 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             else:
                 raise WebSpecError(f"line {idx + 1}: unsupported page field {value!r}")
         elif n == 4 and section == "typing":
-            if page.typing is not None or not value.startswith("passage:"):
-                raise WebSpecError(f"line {idx + 1}: expected one typing passage")
-            phrase = _quoted(value.split(":", 1)[1].strip(), idx + 1)
-            if not 12 <= len(phrase) <= 240 or phrase != phrase.strip():
-                raise WebSpecError(f"line {idx + 1}: typing passage must be 12-240 chars without edge spaces")
-            if any(not (" " <= char <= "~") for char in phrase):
-                raise WebSpecError(f"line {idx + 1}: typing passage supports printable ASCII and spaces only")
-            page.typing = WebTyping(passage=phrase)
+            if value.startswith("progress:"):
+                if typing_progress != "none" or value.split(":", 1)[1].strip() != "local":
+                    raise WebSpecError(f"line {idx + 1}: progress supports one local declaration")
+                typing_progress = "local"
+            elif value.startswith("passage:"):
+                if typing_passage is not None or typing_lessons:
+                    raise WebSpecError(f"line {idx + 1}: expected one typing passage or named lessons")
+                phrase = _quoted(value.split(":", 1)[1].strip(), idx + 1)
+                _validate_typing_passage(phrase, idx + 1)
+                typing_passage = phrase
+            elif value.startswith("lesson "):
+                if typing_passage is not None or len(typing_lessons) >= 12:
+                    raise WebSpecError(f"line {idx + 1}: lessons cannot mix with a passage or exceed 12")
+                match = re.fullmatch(
+                    r'lesson\s+("(?:[^"\\]|\\.)*")\s+difficulty=(beginner|intermediate|advanced):\s*("(?:[^"\\]|\\.)*")',
+                    value,
+                )
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected lesson \"Name\" difficulty=beginner: \"passage\"")
+                name = _quoted(match.group(1), idx + 1)
+                phrase = _quoted(match.group(3), idx + 1)
+                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{1,39}", name):
+                    raise WebSpecError(f"line {idx + 1}: lesson name must be 2-40 simple characters")
+                if any(item.name == name for item in typing_lessons):
+                    raise WebSpecError(f"line {idx + 1}: duplicate typing lesson name")
+                _validate_typing_passage(phrase, idx + 1)
+                typing_lessons.append(WebTypingLesson(name, match.group(2), phrase))
+            else:
+                raise WebSpecError(f"line {idx + 1}: expected one typing passage or named lessons")
         elif n == 4 and section == "state":
             if ":" not in value:
                 raise WebSpecError(f"line {idx + 1}: expected `name: integer`")
@@ -315,6 +351,14 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             raise WebSpecError(f"line {idx + 1}: invalid indentation or unsupported construct")
     if pending_button:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
+    if typing_seen:
+        if typing_passage is None and len(typing_lessons) < 2:
+            raise WebSpecError("typing curriculum needs at least two lessons, or one passage")
+        page.typing = WebTyping(
+            passage=typing_passage or "",
+            lessons=tuple(typing_lessons),
+            progress=typing_progress,
+        )
     if not page.title or not page.heading:
         raise WebSpecError("page requires title and heading")
     if page.persistence != "none" and not page.submit_label:
@@ -430,6 +474,11 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 #vibe-typing-input{font:1rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;background:#0b1426;color:#f5f6fb;border:2px solid #7898c7;border-radius:10px;padding:.7rem;width:100%;resize:vertical;min-height:6rem}
 #vibe-typing-input:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
 #vibe-typing-progress{width:100%;height:1rem;accent-color:#8ef0b3}
+.vibe-typing-curriculum{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:1rem;margin:1rem 0}
+.vibe-typing-curriculum select{width:100%;min-height:44px;background:#0b1426;color:#f5f6fb;border:1px solid #7898c7;border-radius:10px;padding:.5rem;font:inherit}
+.vibe-typing-curriculum select:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
+.vibe-typing-saved{margin-top:1rem;border-top:1px solid #465d80;padding-top:.8rem}
+.vibe-typing-saved p{font-size:.9rem;margin:.4rem 0}
 .vibe-typing-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin:1rem 0}
 .vibe-typing-metrics>div{background:#1a2943;padding:.55rem .8rem;border-radius:10px}
 .vibe-typing-metrics dt{font-size:.85rem;color:#bdd4f1}.vibe-typing-metrics dd{font-size:1.25rem;font-weight:750;margin:0}
@@ -678,10 +727,15 @@ _SCRIPT = r"""
     });
   }
   if (config.typing) {
-    // All passage text comes from a compiler-validated literal. No HTML injection.
-    const passage = Array.from(config.typing.passage);
+    // All passages are bounded, compiler-validated literals.
+    const lessons = config.typing.lessons || [
+      { name: 'First Lesson', difficulty: 'beginner', passage: config.typing.passage }
+    ];
+    const difficultySelect = document.getElementById('vibe-typing-difficulty');
+    const lessonSelect = document.getElementById('vibe-typing-lesson');
     const input = document.getElementById('vibe-typing-input');
     const display = document.getElementById('vibe-typing-passage');
+    const readable = document.getElementById('vibe-typing-readable');
     const progress = document.getElementById('vibe-typing-progress');
     const accuracyNode = document.getElementById('vibe-typing-accuracy');
     const wpmNode = document.getElementById('vibe-typing-wpm');
@@ -689,12 +743,69 @@ _SCRIPT = r"""
     const elapsedNode = document.getElementById('vibe-typing-elapsed');
     const status = document.getElementById('vibe-typing-status');
     const reset = document.getElementById('vibe-typing-reset');
+    const savedMode = config.typing.progress === 'local';
+    const storageKey = config.typing.storage_key;
+    const saveStatus = savedMode ? document.getElementById('vibe-typing-save-status') : null;
+    const completionNode = savedMode ? document.getElementById('vibe-typing-completed') : null;
+    const bestNode = savedMode ? document.getElementById('vibe-typing-best') : null;
+    const clearButton = savedMode ? document.getElementById('vibe-typing-clear') : null;
+    let selected = 0;
+    let passage = Array.from(lessons[0].passage);
     let startedAt = null;
     let endedAt = null;
     let timer = null;
+    let completed = Object.create(null);
     const stopTimer = () => {
       if (timer !== null) window.clearInterval(timer);
       timer = null;
+    };
+    const validSaved = (record) => {
+      if (!record || typeof record !== 'object' || Array.isArray(record) ||
+          record.version !== 1 || record.page !== config.page_id ||
+          !record.completed || typeof record.completed !== 'object' ||
+          Array.isArray(record.completed)) return false;
+      const names = new Set(lessons.map(item => item.name));
+      return Object.entries(record.completed).every(([name, value]) =>
+        names.has(name) && value && typeof value === 'object' &&
+        Object.keys(value).length === 1 && Number.isSafeInteger(value.bestWpm) &&
+        value.bestWpm >= 0 && value.bestWpm <= 5000);
+    };
+    const showSaved = () => {
+      if (!savedMode) return;
+      const total = Object.keys(completed).length;
+      completionNode.textContent = total + ' of ' + lessons.length + ' lessons completed';
+      const record = completed[lessons[selected].name];
+      bestNode.textContent = 'Best WPM for ' + lessons[selected].name + ': ' +
+        (record ? record.bestWpm : 'not yet recorded');
+    };
+    if (savedMode) {
+      try {
+        const raw = window.localStorage.getItem(storageKey);
+        if (raw) {
+          if (raw.length > 8192) throw Error('oversized progress');
+          const record = JSON.parse(raw);
+          if (!validSaved(record)) throw Error('incompatible progress');
+          completed = Object.assign(Object.create(null), record.completed);
+          saveStatus.textContent = 'Previous lesson progress restored.';
+        }
+      } catch (_error) {
+        saveStatus.textContent = 'Saved progress unavailable or incompatible; starting fresh.';
+      }
+    }
+    const recordCompletion = (wpm) => {
+      if (!savedMode) return;
+      const name = lessons[selected].name;
+      const previous = completed[name];
+      completed[name] = { bestWpm: Math.max(previous ? previous.bestWpm : 0, wpm) };
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify({
+          version: 1, page: config.page_id, completed
+        }));
+        saveStatus.textContent = 'Lesson progress saved in this browser.';
+      } catch (_error) {
+        saveStatus.textContent = 'Browser storage unavailable; progress was not saved.';
+      }
+      showSaved();
     };
     const update = () => {
       const typed = Array.from(input.value).slice(0, passage.length);
@@ -712,16 +823,15 @@ _SCRIPT = r"""
           if (typed[i] === passage[i]) {
             char.className = 'vibe-typing-correct';
             correct++;
-          } else {
-            char.className = 'vibe-typing-wrong';
-          }
+          } else char.className = 'vibe-typing-wrong';
         }
         fragment.appendChild(char);
       }
       display.replaceChildren(fragment);
       const mistakes = typed.length - correct;
       const complete = typed.length === passage.length && mistakes === 0;
-      if (complete && endedAt === null) {
+      const firstCompletion = complete && endedAt === null;
+      if (firstCompletion) {
         endedAt = now;
         input.disabled = true;
         stopTimer();
@@ -744,18 +854,62 @@ _SCRIPT = r"""
       else if (mistakes) status.textContent = 'Mistakes highlighted. Backspace to correct.';
       else if (typed.length) status.textContent = 'Keep going. Every space counts.';
       else status.textContent = 'Ready to type.';
+      if (firstCompletion) recordCompletion(wpm);
     };
-    input.addEventListener('input', update);
-    reset.addEventListener('click', () => {
+    const startLesson = (index) => {
       stopTimer();
+      selected = index;
+      passage = Array.from(lessons[index].passage);
       startedAt = null;
       endedAt = null;
-      input.value = '';
       input.disabled = false;
+      input.value = '';
+      input.maxLength = passage.length;
+      progress.max = passage.length;
+      readable.textContent = 'Passage to type: ' + lessons[index].passage;
+      if (lessonSelect) lessonSelect.value = String(index);
       update();
+      showSaved();
+    };
+    if (lessonSelect) {
+      const filterLessons = () => {
+        const difficulty = difficultySelect.value;
+        const candidates = lessons.map((item, index) => ({ ...item, index }))
+          .filter(item => difficulty === 'all' || item.difficulty === difficulty);
+        const options = candidates.map(item => {
+          const option = document.createElement('option');
+          option.value = String(item.index);
+          option.textContent = item.name + ' (' + item.difficulty + ')';
+          return option;
+        });
+        lessonSelect.replaceChildren(...options);
+        if (candidates.length) {
+          const next = candidates.some(item => item.index === selected) ?
+            selected : candidates[0].index;
+          startLesson(next);
+        }
+      };
+      difficultySelect.addEventListener('change', filterLessons);
+      lessonSelect.addEventListener('change', () => startLesson(Number(lessonSelect.value)));
+    }
+    input.addEventListener('input', update);
+    reset.addEventListener('click', () => {
+      startLesson(selected);
       input.focus();
     });
-    update();
+    if (clearButton) {
+      clearButton.addEventListener('click', () => {
+        completed = Object.create(null);
+        try {
+          window.localStorage.removeItem(storageKey);
+          saveStatus.textContent = 'Saved lesson progress cleared.';
+        } catch (_error) {
+          saveStatus.textContent = 'Storage unavailable; saved progress could not be cleared.';
+        }
+        showSaved();
+      });
+    }
+    startLesson(0);
   }
   render();
 })();
@@ -866,6 +1020,24 @@ def render_html(page: WebPage) -> str:
             + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\n'
             + '\n'.join(body) + '\n    </section>'
         )
+    typing_config = None
+    if page.typing:
+        if page.typing.lessons:
+            typing_config = {
+                "lessons": [
+                    {"name": lesson.name, "difficulty": lesson.difficulty, "passage": lesson.passage}
+                    for lesson in page.typing.lessons
+                ],
+                "progress": page.typing.progress,
+                "storage_key": f"vibeweb:typing:v1:{page.name}" if page.typing.progress == "local" else None,
+            }
+        else:
+            typing_config = {"passage": page.typing.passage}
+            if page.typing.progress == "local":
+                typing_config.update({
+                    "progress": "local",
+                    "storage_key": f"vibeweb:typing:v1:{page.name}",
+                })
     payload = {
         "state": page.state,
         "text_state": page.text_state,
@@ -880,7 +1052,7 @@ def render_html(page: WebPage) -> str:
         "scope_states": scope_states,
         "scope_bounds": scope_bounds,
         "page_id": page.name,
-        "typing": {"passage": page.typing.passage} if page.typing else None,
+        "typing": typing_config,
         "submit_label": page.submit_label,
         "persistence": page.persistence,
         "storage_key": f"vibeweb:draft:v1:{page.name}" if page.persistence == "local" else None,
@@ -893,11 +1065,40 @@ def render_html(page: WebPage) -> str:
     component_markup = "\n".join(component_sections)
     typing_markup = ""
     if page.typing is not None:
-        passage = page.typing.passage
+        lessons = page.typing.lessons
+        passage = lessons[0].passage if lessons else page.typing.passage
+        curriculum_markup = ""
+        if lessons:
+            lesson_choices = "".join(
+                f'<option value="{i}">{escape(lesson.name)} ({escape(lesson.difficulty)})</option>'
+                for i, lesson in enumerate(lessons)
+            )
+            curriculum_markup = f"""
+      <div class="vibe-typing-curriculum">
+        <div><label for="vibe-typing-difficulty">Difficulty</label>
+          <select id="vibe-typing-difficulty">
+            <option value="all">All difficulties</option>
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select></div>
+        <div><label for="vibe-typing-lesson">Lesson</label>
+          <select id="vibe-typing-lesson">{lesson_choices}</select></div>
+      </div>"""
+        progress_markup = ""
+        if page.typing.progress == "local":
+            progress_markup = """
+      <div class="vibe-typing-saved">
+        <p id="vibe-typing-completed">0 lessons completed</p>
+        <p id="vibe-typing-best">Best WPM: not yet recorded</p>
+        <button type="button" id="vibe-typing-clear">Clear saved progress</button>
+        <p id="vibe-typing-save-status" role="status" aria-live="polite"></p>
+      </div>"""
         typing_markup = f"""
     <section id="vibe-typing" aria-label="Typing dojo">
       <h2>Keyboard dojo</h2>
       <p id="vibe-typing-guide">Type the passage exactly, including spaces and punctuation. Backspace can fix mistakes.</p>
+{curriculum_markup}
       <p id="vibe-typing-readable" class="vibe-visually-hidden">Passage to type: {escape(passage)}</p>
       <div id="vibe-typing-passage" class="vibe-typing-passage" aria-hidden="true"></div>
       <label for="vibe-typing-input">Type the lesson</label>
@@ -914,6 +1115,7 @@ def render_html(page: WebPage) -> str:
       </dl>
       <button type="button" id="vibe-typing-reset">Restart lesson</button>
       <p role="status" aria-live="polite" id="vibe-typing-status">Ready to type.</p>
+{progress_markup}
     </section>"""
     grid_page_class = ' class="vibe-page-grid"' if page.layout == "grid" else ""
     form_open = '<form id="vibe-form" novalidate>' if page.submit_label else ""

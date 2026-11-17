@@ -40,6 +40,8 @@ jobs:
         run: node tests/web_draft_runtime_smoke.cjs dist-drafts/index.html
       - name: Compile native keyboard dojo page
         run: python -m vibe.web vibe/examples/web_typing_dojo.vibe --out dist-typing
+      - name: Compile VibeWeb typing curriculum
+        run: python -m vibe.web vibe/examples/web_typing_course.vibe --out dist-course
       - name: Upload static artifact
         uses: actions/upload-artifact@v4
         with:
