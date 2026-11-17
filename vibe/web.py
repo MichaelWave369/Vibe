@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage
+from .ast import WebButton as Button, WebPage, WebComponent
 from html import escape
 import json
 from pathlib import Path
@@ -24,6 +24,7 @@ _BINDING = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _ACTION = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*(\+=|-=|=)\s*(-?\d+)$")
 _PAGE = re.compile(r"^page ([A-Za-z_][A-Za-z0-9_]*):$")
 _BUTTON = re.compile(r'^button\s+("(?:[^"\\]|\\.)*"):$')
+_COMPONENT = re.compile(r"^component ([A-Za-z_][A-Za-z0-9_]*):$")
 
 
 def _quoted(text: str, line: int) -> str:
@@ -74,6 +75,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     page = WebPage(name=name)
     section = ""
     pending_button: tuple[str, int] | None = None
+    current_component: WebComponent | None = None
     for idx in range(start + 1, end):
         line = raw[idx].rstrip("\r\n")
         if not line.strip() or line.lstrip().startswith("#"):
@@ -83,8 +85,11 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         if n % 2:
             raise WebSpecError(f"line {idx + 1}: indent with multiples of two spaces")
         if n == 2:
+            if pending_button:
+                raise WebSpecError(f"line {pending_button[1]}: button missing action")
             pending_button = None
-            if value in {"state:", "view:", "bounds:"}:
+            current_component = None
+            if value in {"state:", "view:", "bounds:", "components:"}:
                 section = value[:-1]
                 continue
             section = ""
