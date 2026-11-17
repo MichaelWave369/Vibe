@@ -1,0 +1,41 @@
+intent InstanceLab:
+  goal: "Demonstrate independent component state and reusable string props with shared page totals."
+  inputs:
+    step: number
+  outputs:
+    total: number
+
+preserve:
+  readability = high
+  testability = high
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+page InstanceLab:
+  title: "Φ VibeWeb · Independent Component Instances"
+  heading: "Two counters. One language."
+  state:
+    total: 0
+  bounds:
+    total: 0..369
+  components:
+    component CounterCard:
+      prop label: string
+      state count: 0
+      bounds count: 0..9
+      text: "{label}: {count} clicks. Shared total: {total}"
+      button "Increment local":
+        action: count += 1
+      button "Increment total":
+        action: total += 1
+  view:
+    text: "Shared total across cards: {total}"
+    use CounterCard label="Alpha"
+    use CounterCard label="Beta"
+    button "Reset shared total":
+      action: total = 0
+
+emit web
