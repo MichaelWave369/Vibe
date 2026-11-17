@@ -316,3 +316,56 @@ python -m vibe.web vibe/examples/web_typing_dojo.vibe --out dist-typing
 entry, including exact double-space matching, mistakes, Backspace, completion,
 restart, mobile overflow, and an automated axe WCAG A/AA scan. Automated
 accessibility testing does not replace manual screen reader and device testing.
+
+## Phase 3H: multi-lesson typing curriculum and opt-in progress
+
+A typing section may contain one legacy `passage:` (backward-compatible) or
+**2–12** named lessons, each with an explicit difficulty level:
+
+```yaml
+page TypingCourse:
+  title: "Keyboard Dojo"
+  heading: "Training Grounds"
+  typing:
+    progress: local
+    lesson "Warmup" difficulty=beginner: "Precision matters.  Two spaces are welcome here."
+    lesson "Flow State" difficulty=intermediate: "Spaces, commas, and periods.  Keep a steady rhythm."
+    lesson "Symbol Sprint" difficulty=advanced: "Caps LOCK? No!  Symbols: @ # $ % & *; keep control."
+emit web
+```
+
+Lessons are statically declared in Vibe, lowered through the typed AST/SSA IR
+and rendered in a native HTML dropdown. The difficulty dropdown filters which
+lessons can be selected. Choosing another lesson resets its typing timer,
+accuracy, progress, text field, completion state, and character highlighting.
+The original single-passage `typing: passage:` source remains supported.
+
+Lesson names are unique, bounded plain strings (2–40 characters). All passages
+are 12–240 printable ASCII characters with no leading/trailing whitespace,
+and interior double spaces are preserved and tested exactly. The only levels
+are beginner, intermediate, and advanced. The compiler fails on mixed
+`passage:` and named lessons, duplicate lesson names, unknown levels,
+malformed declarations, invalid text or excessive lesson counts.
+
+**Local progress is optional and off by default.** A Vibe page must declare
+`progress: local` to activate it. On a *fully correct completion*, the runtime
+stores only a mapping from lesson names to best estimated WPM in the same
+origin's `localStorage`, under `vibeweb:typing:v1:<page>`. Raw keystrokes,
+typed text, mistakes, full passages, and the elapsed-time history are not
+saved. The record is loaded only after a bounded schema/page/name/value
+check; malformed or incompatible records are ignored. The user can clear
+these saved records using a visible **Clear saved progress** button. No data
+is transmitted to a server, encrypted, synchronized, or backed up. Scripts
+on the same origin can read this storage; it must not hold secrets.
+
+```bash
+vibec compile vibe/examples/web_typing_course.vibe --no-cache
+python -m vibe.web vibe/examples/web_typing_course.vibe --out dist-course
+```
+
+Playwright tests perform real keystrokes, selection, course-completion,
+reload, record clearing, malformed-storage checks, mobile-overflow checks
+and an automated axe WCAG A/AA scan. WPM is a training approximation;
+accuracy reflects currently correct characters rather than historical errors.
+No anti-paste checks, global leaderboard, user accounts, customizable drills,
+Unicode/IME curriculum, progress export or cross-browser certification yet.
