@@ -49,8 +49,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
     Unsupported constructs fail closed. The returned core source uses the
-    existing typescript target only to pass through the normal Vibe parser;
-    final output is produced by this web emitter, not the TS emitter.
+    existing TypeScript target solely for legacy parsing compatibility;
+    Vibe's native parser records the page AST and the web emitter produces HTML.
     """
     raw = source.splitlines(keepends=True)
     start = None
