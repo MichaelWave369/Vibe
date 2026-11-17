@@ -403,6 +403,11 @@ _SCRIPT = r"""
   'use strict';
   const config = JSON.parse(document.getElementById('vibe-config').textContent);
   const state = Object.assign(Object.create(null), config.state);
+  const textState = Object.assign(Object.create(null), config.text_state || {});
+  const scopedTextStates = Object.create(null);
+  Object.entries(config.scope_text_states || {}).forEach(([scope, values]) => {
+    scopedTextStates[scope] = Object.assign(Object.create(null), values);
+  });
   const scopedStates = Object.create(null);
   Object.entries(config.scope_states || {}).forEach(([scope, values]) => {
     scopedStates[scope] = Object.assign(Object.create(null), values);
@@ -415,11 +420,14 @@ _SCRIPT = r"""
       const scope = (config.text_scopes || [])[index];
       const props = (config.text_props || [])[index] || {};
       const local = scope == null ? null : scopedStates[scope];
+      const localText = scope == null ? null : scopedTextStates[scope];
       node.textContent = template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
         (_, key) => {
           if (owns(props, key)) return String(props[key]);
           if (local && owns(local, key)) return String(local[key]);
-          return String(state[key]);
+          if (localText && owns(localText, key)) return String(localText[key]);
+          if (owns(state, key)) return String(state[key]);
+          return String(textState[key]);
         });
     });
     if (config.inputs && config.inputs.length) {
@@ -428,6 +436,14 @@ _SCRIPT = r"""
         const local = field.scope == null ? null : scopedStates[field.scope];
         const target = local && owns(local, field.variable) ? local : state;
         node.value = String(target[field.variable]);
+      });
+    }
+    if (config.string_fields && config.string_fields.length) {
+      document.querySelectorAll('[data-vibe-string]').forEach((node) => {
+        const field = config.string_fields[Number(node.dataset.vibeString)];
+        const local = field.scope == null ? null : scopedTextStates[field.scope];
+        const target = local && owns(local, field.variable) ? local : textState;
+        node.value = target[field.variable];
       });
     }
   };
@@ -469,6 +485,40 @@ _SCRIPT = r"""
         target[field.variable] = bounds
           ? Math.max(bounds[0], Math.min(bounds[1], parsed))
           : parsed;
+        render();
+      });
+    });
+  }
+  if (config.string_fields && config.string_fields.length) {
+    document.querySelectorAll('[data-vibe-string]').forEach((node) => {
+      const index = Number(node.dataset.vibeString);
+      const field = config.string_fields[index];
+      const errorNode = document.getElementById('vibe-string-error-' + index);
+      const setError = (message) => {
+        errorNode.textContent = message;
+        node.setAttribute('aria-invalid', message ? 'true' : 'false');
+      };
+      node.addEventListener('change', () => {
+        const local = field.scope == null ? null : scopedTextStates[field.scope];
+        const target = local && owns(local, field.variable) ? local : textState;
+        const value = String(node.value);
+        if (field.kind === 'text') {
+          const length = Array.from(value).length;
+          if (length < field.minimum || length > field.maximum) {
+            setError('Enter ' + field.minimum + ' to ' + field.maximum + ' characters.');
+            return;
+          }
+        } else if (field.kind === 'select') {
+          if (!field.options.includes(value)) {
+            setError('Choose one of the available options.');
+            return;
+          }
+        } else {
+          setError('Unsupported field type.');
+          return;
+        }
+        target[field.variable] = value;
+        setError('');
         render();
       });
     });
