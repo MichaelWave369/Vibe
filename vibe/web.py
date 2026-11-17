@@ -353,6 +353,14 @@ _SCRIPT = r"""
           return String(state[key]);
         });
     });
+    if (config.inputs && config.inputs.length) {
+      document.querySelectorAll('[data-vibe-input]').forEach((node) => {
+        const field = config.inputs[Number(node.dataset.vibeInput)];
+        const local = field.scope == null ? null : scopedStates[field.scope];
+        const target = local && owns(local, field.variable) ? local : state;
+        node.value = String(target[field.variable]);
+      });
+    }
   };
   document.querySelectorAll('[data-vibe-button]').forEach((node) => {
     node.addEventListener('click', () => {
@@ -370,6 +378,32 @@ _SCRIPT = r"""
       render();
     });
   });
+  if (config.inputs && config.inputs.length) {
+    document.querySelectorAll('[data-vibe-input]').forEach((node) => {
+      node.addEventListener('change', () => {
+        const field = config.inputs[Number(node.dataset.vibeInput)];
+        const local = field.scope == null ? null : scopedStates[field.scope];
+        const target = local && owns(local, field.variable) ? local : state;
+        const raw = String(node.value).trim();
+        if (!/^-?\d{1,12}$/.test(raw)) {
+          node.value = String(target[field.variable]);
+          return;
+        }
+        const parsed = Number(raw);
+        if (!Number.isSafeInteger(parsed)) {
+          node.value = String(target[field.variable]);
+          return;
+        }
+        const bounds = target === state
+          ? config.bounds[field.variable]
+          : config.scope_bounds[field.scope][field.variable];
+        target[field.variable] = bounds
+          ? Math.max(bounds[0], Math.min(bounds[1], parsed))
+          : parsed;
+        render();
+      });
+    });
+  }
   render();
 })();
 """.strip()
