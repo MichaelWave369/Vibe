@@ -97,3 +97,66 @@ def test_standard_vibec_compile_web(tmp_path):
     html = source.with_suffix(".html").read_text(encoding="utf-8")
     assert "data-vibe-button" in html
     assert "Count: {count}" in html
+
+
+COMPONENTS = Path("vibe/examples/web_components.vibe")
+
+
+def test_reusable_components_roundtrip_and_shared_state():
+    import re
+    from vibe.parser import parse_source
+    from vibe.ir import ast_to_ir, serialize_ir
+    from vibe.emitter import emit_code
+
+    source = COMPONENTS.read_text(encoding="utf-8")
+    program = parse_source(source)
+    assert program.web_page is not None
+    assert program.web_page.uses == ["CounterCard", "CounterCard", "ResetCard"]
+    assert set(program.web_page.components) == {"CounterCard", "ResetCard"}
+
+    ir = ast_to_ir(program)
+    assert ir.module.web_page is not None
+    assert len(ir.module.web_page.components) == 2
+    assert ir.web_page is not None
+    assert ir.web_page.uses == program.web_page.uses
+    assert "CounterCard" in serialize_ir(ir)
+
+    html, backend = emit_code(ir)
+    assert backend.target == "web"
+    assert html.count('class="vibe-component"') == 3
+    assert html.count("Shared count:") == 1
+    match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
+    assert match is not None
+    config = json.loads(match.group(1))
+    assert config["state"] == {"count": 3}
+    assert config["texts"].count("Shared count: {count}") == 2
+    assert [button["variable"] for button in config["buttons"]] == ["count", "count", "count"]
+    assert config["buttons"][2]["operation"] == "="
+
+
+def test_component_references_fail_closed():
+    source = COMPONENTS.read_text(encoding="utf-8").replace("use ResetCard", "use MissingCard")
+    with pytest.raises(WebSpecError, match="unknown component"):
+        parse_web_source(source)
+
+
+def test_component_state_binding_fails_closed():
+    source = COMPONENTS.read_text(encoding="utf-8").replace("Shared count: {count}", "Shared count: {password}")
+    with pytest.raises(WebSpecError, match="unknown state"):
+        parse_web_source(source)
+
+
+def test_component_action_safety():
+    source = COMPONENTS.read_text(encoding="utf-8").replace("count += 1", "eval(window.bad())")
+    with pytest.raises(WebSpecError, match="only integer state assignments"):
+        parse_web_source(source)
+
+
+def test_compiler_emits_reusable_components(tmp_path):
+    from vibe.cli import main
+
+    source = tmp_path / "components.vibe"
+    source.write_text(COMPONENTS.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["compile", str(source), "--no-cache"]) == 0
+    html = source.with_suffix(".html").read_text(encoding="utf-8")
+    assert html.count('class="vibe-component"') == 3
