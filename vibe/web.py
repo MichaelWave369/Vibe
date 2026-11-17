@@ -231,7 +231,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                     raise WebSpecError(f"line {idx + 1}: duplicate or invalid local bounds")
                 current_component.bounds[key] = (int(lower), int(upper))
             elif value.startswith("text_state "):
-                match = re.fullmatch(r'text_state ([A-Za-z_][A-Za-z0-9_]*):\\s*(.*)', value)
+                match = re.fullmatch(r'text_state ([A-Za-z_][A-Za-z0-9_]*):\s*(.*)', value)
                 if not match:
                     raise WebSpecError(f"line {idx + 1}: expected text_state name: \"string\"")
                 key, raw_text = match.groups()
@@ -294,7 +294,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
     if not page.title or not page.heading:
         raise WebSpecError("page requires title and heading")
-    if not (page.state or any(component.state for component in page.components.values())):
+    if not (page.state or page.text_state or any(component.state or component.text_state for component in page.components.values())):
         raise WebSpecError("page requires page or component state")
     if len(page.uses) != len(page.use_props):
         raise WebSpecError("component use/prop count mismatch")
@@ -307,7 +307,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     active_components = [page.components[name] for name in page.uses]
     if not (page.texts or any(component.texts for component in active_components)):
         raise WebSpecError("page requires at least one visible text")
-    if not (page.buttons or page.inputs or any(component.buttons or component.inputs for component in active_components)):
+    if not (page.buttons or page.inputs or page.text_fields or any(component.buttons or component.inputs or component.text_fields for component in active_components)):
         raise WebSpecError("page requires at least one visible button or input")
 
     def check_text(template: str, allowed: set[str]) -> None:
@@ -317,6 +317,23 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         if "{" in _BINDING.sub("", template) or "}" in _BINDING.sub("", template):
             raise WebSpecError("unsupported text interpolation; use {state_name}")
 
+    def check_string_fields(fields: list[WebStringField], state: dict[str, str]) -> None:
+        for item in fields:
+            if item.variable not in state:
+                raise WebSpecError(f"string field {item.label!r} references unknown text state {item.variable!r}")
+            value = state[item.variable]
+            if item.kind == "text":
+                if not (item.minimum <= len(value) <= item.maximum):
+                    raise WebSpecError(f"initial text state {item.variable!r} violates length bounds")
+            elif item.kind == "select":
+                if value not in item.options:
+                    raise WebSpecError(f"initial selection {item.variable!r} is not an allowed option")
+            else:
+                raise WebSpecError(f"unsupported string field kind {item.kind!r}")
+
+    if set(page.state) & set(page.text_state):
+        raise WebSpecError("page numeric and text state names collide")
+    check_string_fields(page.text_fields, page.text_state)
     for key, (lo, hi) in page.bounds.items():
         if key not in page.state:
             raise WebSpecError(f"bounds references unknown state {key!r}")
@@ -329,14 +346,17 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         if item.variable not in page.state:
             raise WebSpecError(f"input {item.label!r} references unknown state {item.variable!r}")
     for template in page.texts:
-        check_text(template, set(page.state))
+        check_text(template, set(page.state) | set(page.text_state))
 
     for component in page.components.values():
-        if not component.texts and not component.buttons and not component.inputs:
+        if not component.texts and not component.buttons and not component.inputs and not component.text_fields:
             raise WebSpecError(f"component {component.name!r} cannot be empty")
-        overlap = set(component.props) & (set(component.state) | set(page.state))
+        overlap = set(component.props) & (set(component.state) | set(page.state) | set(component.text_state) | set(page.text_state))
         if overlap:
             raise WebSpecError(f"component prop collides with state: {sorted(overlap)}")
+        if set(component.state) & set(component.text_state):
+            raise WebSpecError("component numeric and text state names collide")
+        check_string_fields(component.text_fields, {**page.text_state, **component.text_state})
         for key, (lo, hi) in component.bounds.items():
             if key not in component.state:
                 raise WebSpecError(f"component bounds references unknown local state {key!r}")
@@ -350,7 +370,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if item.variable not in writable:
                 raise WebSpecError(f"input {item.label!r} references unknown state {item.variable!r}")
         for template in component.texts:
-            check_text(template, writable | set(component.props))
+            check_text(template, writable | set(component.text_state) | set(page.text_state) | set(component.props))
     core = "".join(raw[:start] + raw[end:])
     if len(re.findall(r"(?m)^emit web\s*$", core)) != 1:
         raise WebSpecError("a web page needs exactly one `emit web` declaration")
