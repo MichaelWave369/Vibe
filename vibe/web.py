@@ -211,19 +211,24 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 if typing_passage is not None or len(typing_lessons) >= 12:
                     raise WebSpecError(f"line {idx + 1}: lessons cannot mix with a passage or exceed 12")
                 match = re.fullmatch(
-                    r'lesson\s+("(?:[^"\\]|\\.)*")\s+difficulty=(beginner|intermediate|advanced):\s*("(?:[^"\\]|\\.)*")',
+                    r'lesson\s+("(?:[^"\\]|\\.)*")(?:\s+pack=("(?:[^"\\]|\\.)*"))?\s+difficulty=(beginner|intermediate|advanced):\s*("(?:[^"\\]|\\.)*")',
                     value,
                 )
                 if not match:
                     raise WebSpecError(f"line {idx + 1}: expected lesson \"Name\" difficulty=beginner: \"passage\"")
                 name = _quoted(match.group(1), idx + 1)
-                phrase = _quoted(match.group(3), idx + 1)
+                pack = _quoted(match.group(2), idx + 1) if match.group(2) else "Core"
+                phrase = _quoted(match.group(4), idx + 1)
+                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{1,39}", pack):
+                    raise WebSpecError(f"line {idx + 1}: pack name must be 2-40 simple characters")
+                if pack not in {item.pack for item in typing_lessons} and len({item.pack for item in typing_lessons}) >= 8:
+                    raise WebSpecError(f"line {idx + 1}: at most eight lesson packs are allowed")
                 if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{1,39}", name):
                     raise WebSpecError(f"line {idx + 1}: lesson name must be 2-40 simple characters")
                 if any(item.name == name for item in typing_lessons):
                     raise WebSpecError(f"line {idx + 1}: duplicate typing lesson name")
                 _validate_typing_passage(phrase, idx + 1)
-                typing_lessons.append(WebTypingLesson(name, match.group(2), phrase))
+                typing_lessons.append(WebTypingLesson(name, match.group(3), phrase, pack))
             else:
                 raise WebSpecError(f"line {idx + 1}: expected one typing passage or named lessons")
         elif n == 4 and section == "state":
