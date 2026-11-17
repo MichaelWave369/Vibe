@@ -160,12 +160,36 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         elif n == 6 and section == "components" and current_component is not None:
             if pending_button:
                 raise WebSpecError(f"line {pending_button[1]}: button missing action")
-            if value.startswith("text:"):
+            if value.startswith("prop "):
+                match = re.fullmatch(r"prop ([A-Za-z_][A-Za-z0-9_]*): string", value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected prop name: string")
+                prop_name = match.group(1)
+                if prop_name in current_component.props or len(current_component.props) >= 16:
+                    raise WebSpecError(f"line {idx + 1}: duplicate prop or prop limit exceeded")
+                current_component.props.append(prop_name)
+            elif value.startswith("state "):
+                match = re.fullmatch(r"state ([A-Za-z_][A-Za-z0-9_]*):\\s*(-?\\d{1,12})", value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected state name: integer")
+                key, number = match.groups()
+                if key in current_component.state or len(current_component.state) >= 32:
+                    raise WebSpecError(f"line {idx + 1}: duplicate local state or state limit exceeded")
+                current_component.state[key] = int(number)
+            elif value.startswith("bounds "):
+                match = re.fullmatch(r"bounds ([A-Za-z_][A-Za-z0-9_]*):\\s*(-?\\d{1,12})\\.\\.(-?\\d{1,12})", value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected bounds name: min..max")
+                key, lower, upper = match.groups()
+                if key in current_component.bounds or int(lower) > int(upper):
+                    raise WebSpecError(f"line {idx + 1}: duplicate or invalid local bounds")
+                current_component.bounds[key] = (int(lower), int(upper))
+            elif value.startswith("text:"):
                 current_component.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
             else:
                 match = _BUTTON.fullmatch(value)
                 if not match:
-                    raise WebSpecError(f"line {idx + 1}: expected component text or button")
+                    raise WebSpecError(f"line {idx + 1}: expected prop, state, bounds, component text or button")
                 pending_button = (_quoted(match.group(1), idx + 1), idx + 1)
         elif n == 8 and section == "components" and current_component is not None and pending_button:
             if not value.startswith("action:"):
@@ -183,10 +207,11 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 page.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
                 pending_button = None
             elif value.startswith("use "):
-                name = value[4:].strip()
-                if not _NAME.fullmatch(name) or len(page.uses) >= 64:
-                    raise WebSpecError(f"line {idx + 1}: invalid component use or use limit exceeded")
+                name, props = _parse_use(value, idx + 1)
+                if len(page.uses) >= 64:
+                    raise WebSpecError(f"line {idx + 1}: component use limit exceeded")
                 page.uses.append(name)
+                page.use_props.append(props)
             else:
                 m = _BUTTON.fullmatch(value)
                 if not m:
