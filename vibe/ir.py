@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field, fields
 from typing import Literal
 
-from .ast import Program, WebPage, WebButton, WebComponent
+from .ast import Program, WebPage, WebButton, WebComponent, WebInput
 
 DEFAULT_EPSILON_FLOOR = 0.02
 DEFAULT_MEASUREMENT_SAFE_RATIO = 0.85
@@ -132,10 +132,17 @@ class IRWebButton:
 
 
 @dataclass(slots=True)
+class IRWebInput:
+    label_ref: str
+    variable_ref: str
+
+
+@dataclass(slots=True)
 class IRWebComponent:
     name_ref: str
     text_refs: list[str]
     buttons: list[IRWebButton]
+    inputs: list[IRWebInput] = field(default_factory=list)
     props_refs: list[str] = field(default_factory=list)
     state_refs: dict[str, str] = field(default_factory=dict)
     bounds_refs: dict[str, tuple[str, str]] = field(default_factory=dict)
@@ -150,6 +157,8 @@ class IRWebPage:
     bounds_refs: dict[str, tuple[str, str]]
     text_refs: list[str]
     buttons: list[IRWebButton]
+    layout_ref: str | None = None
+    inputs: list[IRWebInput] = field(default_factory=list)
     components: dict[str, IRWebComponent] = field(default_factory=dict)
     uses_refs: list[str] = field(default_factory=list)
     use_prop_refs: list[dict[str, str]] = field(default_factory=list)
@@ -300,6 +309,8 @@ class IR:
                 for name, (lo, hi) in p.bounds_refs.items()
             },
             texts=[str(self._value(ref).data) for ref in p.text_refs],
+            layout=str(self._value(p.layout_ref).data) if p.layout_ref else "stack",
+            inputs=[WebInput(str(self._value(i.label_ref).data), str(self._value(i.variable_ref).data)) for i in p.inputs],
             buttons=[
                 WebButton(
                     label=str(self._value(b.label_ref).data),
@@ -313,6 +324,7 @@ class IR:
                 name: WebComponent(
                     name=str(self._value(component.name_ref).data),
                     texts=[str(self._value(ref).data) for ref in component.text_refs],
+                    inputs=[WebInput(str(self._value(i.label_ref).data), str(self._value(i.variable_ref).data)) for i in component.inputs],
                     props=[str(self._value(ref).data) for ref in component.props_refs],
                     state={key: int(self._value(ref).data) for key, ref in component.state_refs.items()},
                     bounds={
@@ -637,6 +649,12 @@ def ast_to_ir(program: Program) -> IR:
             value_ref=b.const("number", "literal", float(button.value)),
         )
 
+    def web_input_refs(item: WebInput) -> IRWebInput:
+        return IRWebInput(
+            label_ref=b.const("string", "literal", item.label),
+            variable_ref=b.const("symbol", "identifier", item.variable),
+        )
+
     web_page_ir = None
     if program.web_page is not None:
         p = program.web_page
@@ -650,11 +668,14 @@ def ast_to_ir(program: Program) -> IR:
                 for k, (lo, hi) in p.bounds.items()
             },
             text_refs=[b.const("string", "literal", value) for value in p.texts],
+            layout_ref=b.const("symbol", "literal", p.layout),
+            inputs=[web_input_refs(item) for item in p.inputs],
             buttons=[web_button_refs(button) for button in p.buttons],
             components={
                 name: IRWebComponent(
                     name_ref=b.const("symbol", "identifier", component.name),
                     text_refs=[b.const("string", "literal", text) for text in component.texts],
+                    inputs=[web_input_refs(item) for item in component.inputs],
                     props_refs=[b.const("symbol", "identifier", key) for key in component.props],
                     state_refs={key: b.const("number", "literal", float(value)) for key, value in component.state.items()},
                     bounds_refs={
@@ -898,6 +919,10 @@ def validate_ir(ir: IR) -> None:
         refs.extend([page.name_ref, page.title_ref, page.heading_ref])
         refs.extend(page.state_refs.values())
         refs.extend(page.text_refs)
+        if page.layout_ref:
+            refs.append(page.layout_ref)
+        for item in page.inputs:
+            refs.extend([item.label_ref, item.variable_ref])
         for low_ref, high_ref in page.bounds_refs.values():
             refs.extend([low_ref, high_ref])
         for button in page.buttons:
@@ -908,6 +933,8 @@ def validate_ir(ir: IR) -> None:
         for component in page.components.values():
             refs.append(component.name_ref)
             refs.extend(component.text_refs)
+            for item in component.inputs:
+                refs.extend([item.label_ref, item.variable_ref])
             refs.extend(component.props_refs)
             refs.extend(component.state_refs.values())
             for low_ref, high_ref in component.bounds_refs.values():
@@ -939,8 +966,9 @@ def serialize_ir(ir: IR) -> str:
         "emit_target_ref": ir.module.emit_target_ref,
         "web_page": (
             {
-                **{k: v for k, v in _obj_dict(ir.module.web_page).items() if k not in {"buttons", "components"}},
+                **{k: v for k, v in _obj_dict(ir.module.web_page).items() if k not in {"buttons", "inputs", "components"}},
                 "buttons": [_obj_dict(button) for button in ir.module.web_page.buttons],
+                "inputs": [_obj_dict(item) for item in ir.module.web_page.inputs],
                 "components": {
                     name: {
                         "name_ref": component.name_ref,
@@ -949,6 +977,7 @@ def serialize_ir(ir: IR) -> str:
                         "state_refs": component.state_refs,
                         "bounds_refs": component.bounds_refs,
                         "buttons": [_obj_dict(button) for button in component.buttons],
+                        "inputs": [_obj_dict(item) for item in component.inputs],
                     }
                     for name, component in ir.module.web_page.components.items()
                 },

@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage, WebComponent
+from .ast import WebButton as Button, WebPage, WebComponent, WebInput
 from html import escape
 import json
 from pathlib import Path
@@ -74,6 +74,13 @@ def _parse_use(text: str, line: int) -> tuple[str, dict[str, str]]:
     return name, args
 
 
+def _parse_input(text: str, line: int) -> WebInput:
+    match = re.fullmatch(r'input\s+("(?:[^"\\]|\\.)*"):\s*([A-Za-z_][A-Za-z0-9_]*)', text)
+    if not match:
+        raise WebSpecError(f"line {line}: expected input \"Label\": state_name")
+    return WebInput(_quoted(match.group(1), line), match.group(2))
+
+
 def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
@@ -126,6 +133,11 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 page.title = _quoted(value.split(":", 1)[1].strip(), idx + 1)
             elif value.startswith("heading:"):
                 page.heading = _quoted(value.split(":", 1)[1].strip(), idx + 1)
+            elif value.startswith("layout:"):
+                mode = value.split(":", 1)[1].strip()
+                if mode not in {"stack", "grid"}:
+                    raise WebSpecError(f"line {idx + 1}: layout must be stack or grid")
+                page.layout = mode
             else:
                 raise WebSpecError(f"line {idx + 1}: unsupported page field {value!r}")
         elif n == 4 and section == "state":
@@ -186,6 +198,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 current_component.bounds[key] = (int(lower), int(upper))
             elif value.startswith("text:"):
                 current_component.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
+            elif value.startswith("input "):
+                current_component.inputs.append(_parse_input(value, idx + 1))
             else:
                 match = _BUTTON.fullmatch(value)
                 if not match:
@@ -206,6 +220,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if value.startswith("text:"):
                 page.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
                 pending_button = None
+            elif value.startswith("input "):
+                page.inputs.append(_parse_input(value, idx + 1))
             elif value.startswith("use "):
                 name, props = _parse_use(value, idx + 1)
                 if len(page.uses) >= 64:
@@ -245,8 +261,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     active_components = [page.components[name] for name in page.uses]
     if not (page.texts or any(component.texts for component in active_components)):
         raise WebSpecError("page requires at least one visible text")
-    if not (page.buttons or any(component.buttons for component in active_components)):
-        raise WebSpecError("page requires at least one visible button")
+    if not (page.buttons or page.inputs or any(component.buttons or component.inputs for component in active_components)):
+        raise WebSpecError("page requires at least one visible button or input")
 
     def check_text(template: str, allowed: set[str]) -> None:
         for ref in _BINDING.findall(template):
@@ -263,11 +279,14 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     for button in page.buttons:
         if button.variable not in page.state:
             raise WebSpecError(f"button {button.label!r} references unknown state {button.variable!r}")
+    for item in page.inputs:
+        if item.variable not in page.state:
+            raise WebSpecError(f"input {item.label!r} references unknown state {item.variable!r}")
     for template in page.texts:
         check_text(template, set(page.state))
 
     for component in page.components.values():
-        if not component.texts and not component.buttons:
+        if not component.texts and not component.buttons and not component.inputs:
             raise WebSpecError(f"component {component.name!r} cannot be empty")
         overlap = set(component.props) & (set(component.state) | set(page.state))
         if overlap:
@@ -281,6 +300,9 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         for button in component.buttons:
             if button.variable not in writable:
                 raise WebSpecError(f"button {button.label!r} references unknown state {button.variable!r}")
+        for item in component.inputs:
+            if item.variable not in writable:
+                raise WebSpecError(f"input {item.label!r} references unknown state {item.variable!r}")
         for template in component.texts:
             check_text(template, writable | set(component.props))
     core = "".join(raw[:start] + raw[end:])
@@ -296,6 +318,12 @@ _STYLE = """
 main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #40516c;border-radius:22px;background:#182238;box-shadow:0 20px 70px #0005}
 .tag{font-size:.74rem;text-transform:uppercase;letter-spacing:.18em;color:#a5cdfb;font-weight:800}h1{font-size:clamp(2rem,6vw,3rem);line-height:1.1;margin:.6rem 0 1rem}p{font-size:1.14rem;color:#dbe5f5;overflow-wrap:anywhere}
 .controls{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:1.8rem}button{border:1px solid #7c99c5;color:white;background:#30466e;padding:.8rem 1.2rem;border-radius:12px;font:inherit;cursor:pointer;min-height:44px}
+.vibe-page-grid{width:min(100%,980px)}
+.vibe-layout-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr));gap:1rem;align-items:start}
+.vibe-layout-grid .vibe-component{margin:0}
+.vibe-fields{display:flex;flex-wrap:wrap;gap:1rem;margin:1rem 0}.vibe-field{display:flex;flex-direction:column;gap:.35rem}
+.vibe-field label{font-size:.92rem;color:#dce8f8}.vibe-field input{max-width:100%;min-height:44px;border:1px solid #7c99c5;border-radius:10px;padding:.55rem;background:#0d1931;color:white;font:inherit}
+.vibe-field input:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
 .vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
@@ -325,6 +353,14 @@ _SCRIPT = r"""
           return String(state[key]);
         });
     });
+    if (config.inputs && config.inputs.length) {
+      document.querySelectorAll('[data-vibe-input]').forEach((node) => {
+        const field = config.inputs[Number(node.dataset.vibeInput)];
+        const local = field.scope == null ? null : scopedStates[field.scope];
+        const target = local && owns(local, field.variable) ? local : state;
+        node.value = String(target[field.variable]);
+      });
+    }
   };
   document.querySelectorAll('[data-vibe-button]').forEach((node) => {
     node.addEventListener('click', () => {
@@ -342,6 +378,32 @@ _SCRIPT = r"""
       render();
     });
   });
+  if (config.inputs && config.inputs.length) {
+    document.querySelectorAll('[data-vibe-input]').forEach((node) => {
+      node.addEventListener('change', () => {
+        const field = config.inputs[Number(node.dataset.vibeInput)];
+        const local = field.scope == null ? null : scopedStates[field.scope];
+        const target = local && owns(local, field.variable) ? local : state;
+        const raw = String(node.value).trim();
+        if (!/^-?\d{1,12}$/.test(raw)) {
+          node.value = String(target[field.variable]);
+          return;
+        }
+        const parsed = Number(raw);
+        if (!Number.isSafeInteger(parsed)) {
+          node.value = String(target[field.variable]);
+          return;
+        }
+        const bounds = target === state
+          ? config.bounds[field.variable]
+          : config.scope_bounds[field.scope][field.variable];
+        target[field.variable] = bounds
+          ? Math.max(bounds[0], Math.min(bounds[1], parsed))
+          : parsed;
+        render();
+      });
+    });
+  }
   render();
 })();
 """.strip()
@@ -349,6 +411,15 @@ _SCRIPT = r"""
 
 def render_html(page: WebPage) -> str:
     """Generate deterministic HTML with no framework/runtime dependencies."""
+    def field_markup(index: int, label: str, variable: str, bounds: dict[str, tuple[int, int]]) -> str:
+        limits = bounds.get(variable)
+        limits_attrs = f' min="{limits[0]}" max="{limits[1]}"' if limits else ""
+        return (
+            f'<div class="vibe-field"><label for="vibe-input-{index}">{escape(label)}</label>'
+            f'<input type="number" inputmode="numeric" step="1" id="vibe-input-{index}"'
+            f' data-vibe-input="{index}"{limits_attrs}></div>'
+        )
+
     texts = list(page.texts)
     text_scopes: list[str | None] = [None] * len(page.texts)
     text_props: list[dict[str, str]] = [{} for _ in page.texts]
@@ -357,6 +428,13 @@ def render_html(page: WebPage) -> str:
          "operation": action.operation, "value": action.value, "scope": None}
         for action in page.buttons
     ]
+    inputs: list[dict[str, str | None]] = [
+        {"variable": item.variable, "scope": None} for item in page.inputs
+    ]
+    page_fields = "\n".join(
+        field_markup(i, item.label, item.variable, page.bounds)
+        for i, item in enumerate(page.inputs)
+    )
     scope_states: dict[str, dict[str, int]] = {}
     scope_bounds: dict[str, dict[str, tuple[int, int]]] = {}
     component_sections: list[str] = []
@@ -372,6 +450,11 @@ def render_html(page: WebPage) -> str:
             text_scopes.append(scope)
             text_props.append(dict(props))
             body.append(f'      <p data-vibe-text="{index}" aria-live="polite"></p>')
+        for item in component.inputs:
+            index = len(inputs)
+            inputs.append({"variable": item.variable, "scope": scope})
+            local_bounds = component.bounds if item.variable in component.state else page.bounds
+            body.append("      " + field_markup(index, item.label, item.variable, local_bounds))
         actions: list[str] = []
         for action in component.buttons:
             index = len(buttons)
@@ -395,6 +478,7 @@ def render_html(page: WebPage) -> str:
         "texts": texts,
         "buttons": buttons,
         "bounds": page.bounds,
+        "inputs": inputs,
         "text_scopes": text_scopes,
         "text_props": text_props,
         "scope_states": scope_states,
@@ -406,6 +490,7 @@ def render_html(page: WebPage) -> str:
     text_elements = "\n".join(f'    <p data-vibe-text="{i}" aria-live="polite"></p>' for i, _ in enumerate(page.texts))
     controls = "\n".join(f'      <button type="button" data-vibe-button="{i}">{escape(b.label)}</button>' for i, b in enumerate(page.buttons))
     component_markup = "\n".join(component_sections)
+    grid_page_class = ' class="vibe-page-grid"' if page.layout == "grid" else ""
     return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -416,14 +501,19 @@ def render_html(page: WebPage) -> str:
   <style>{_STYLE}</style>
 </head>
 <body>
-  <main>
+  <main{grid_page_class}>
     <div class="tag">Φ VibeWeb · experimental v0</div>
     <h1>{escape(page.heading)}</h1>
 {text_elements}
     <div class="controls" role="group" aria-label="Page actions">
 {controls}
     </div>
+    <div class="vibe-fields">
+{page_fields}
+    </div>
+    <div class="vibe-layout vibe-layout-{page.layout}">
 {component_markup}
+    </div>
     <footer>Compiled from a .vibe intent. No React, Svelte, or client dependencies.</footer>
   </main>
   <script type="application/json" id="vibe-config">{safe_json}</script>

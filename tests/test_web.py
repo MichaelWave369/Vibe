@@ -246,3 +246,72 @@ def test_standard_compiler_builds_instance_page(tmp_path):
     path.write_text(INSTANCES.read_text(encoding="utf-8"), encoding="utf-8")
     assert main(["compile", str(path), "--no-cache"]) == 0
     assert "scope_states" in path.with_suffix(".html").read_text(encoding="utf-8")
+
+
+FORM_GRID = Path("vibe/examples/web_forms_grid.vibe")
+
+
+def test_phase3c_layout_and_inputs_roundtrip():
+    import re
+    from vibe.parser import parse_source
+    from vibe.ir import ast_to_ir, serialize_ir
+    from vibe.emitter import emit_code
+
+    source = FORM_GRID.read_text(encoding="utf-8")
+    program = parse_source(source)
+    assert program.web_page is not None
+    assert program.web_page.layout == "grid"
+    assert program.web_page.inputs[0].variable == "shared"
+    assert program.web_page.components["MeterCard"].inputs[0].variable == "meter"
+    ir = ast_to_ir(program)
+    assert ir.web_page is not None
+    assert ir.web_page.layout == "grid"
+    assert ir.web_page.components["MeterCard"].inputs[0].variable == "meter"
+    assert '"layout_ref"' in serialize_ir(ir)
+    html, backend = emit_code(ir)
+    assert backend.target == "web"
+    assert 'class="vibe-layout vibe-layout-grid"' in html
+    assert html.count('type="number"') == 3
+    assert html.count('data-vibe-input=') == 3
+    assert 'for="vibe-input-1"' in html
+    config_match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
+    assert config_match
+    config = json.loads(config_match.group(1))
+    assert config["inputs"] == [
+        {"variable": "shared", "scope": None},
+        {"variable": "meter", "scope": "instance_0"},
+        {"variable": "meter", "scope": "instance_1"},
+    ]
+
+
+def test_phase3c_input_bindings_fail_closed():
+    source = FORM_GRID.read_text(encoding="utf-8")
+    with pytest.raises(WebSpecError, match="unknown state"):
+        parse_web_source(source.replace('input "Set shared value": shared', 'input "Set shared value": missing'))
+    with pytest.raises(WebSpecError, match="unknown state"):
+        parse_web_source(source.replace('input "Set meter value": meter', 'input "Set meter value": missing'))
+    with pytest.raises(WebSpecError, match="expected input"):
+        parse_web_source(source.replace('input "Set shared value": shared', 'input "Set shared value": shared()'))
+    with pytest.raises(WebSpecError, match="layout must be stack or grid"):
+        parse_web_source(source.replace("layout: grid", "layout: javascript"))
+
+
+def test_phase3c_input_label_escaped():
+    source = FORM_GRID.read_text(encoding="utf-8").replace(
+        'input "Set shared value": shared', 'input "<img src=x onerror=alert(1)>": shared'
+    )
+    page, _ = parse_web_source(source)
+    html = render_html(page)
+    assert '&lt;img src=x onerror=alert(1)&gt;' in html
+    assert '<img src=x onerror=alert(1)>' not in html
+
+
+def test_phase3c_standard_compiler_emits_grid(tmp_path):
+    from vibe.cli import main
+
+    path = tmp_path / "forms.vibe"
+    path.write_text(FORM_GRID.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["compile", str(path), "--no-cache"]) == 0
+    html = path.with_suffix(".html").read_text(encoding="utf-8")
+    assert "vibe-layout-grid" in html
+    assert 'data-vibe-input="2"' in html

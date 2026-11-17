@@ -26,6 +26,10 @@ jobs:
         run: python -m vibe.web vibe/examples/web_instances.vibe --out dist-instances
       - name: Exercise generated JavaScript runtime
         run: node tests/web_runtime_smoke.cjs dist-instances/index.html
+      - name: Compile reactive forms and grid laboratory
+        run: python -m vibe.web vibe/examples/web_forms_grid.vibe --out dist-forms
+      - name: Exercise generated form input runtime
+        run: node tests/web_forms_runtime_smoke.cjs dist-forms/index.html
       - name: Upload static artifact
         uses: actions/upload-artifact@v4
         with:

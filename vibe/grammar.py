@@ -47,9 +47,10 @@ delegate_inherits <- 'inherits:' WS? TYPE NEWLINE
 delegate_max_depth <- 'max_depth:' WS? NUMBER NEWLINE
 delegate_stop_when <- 'stop_when:' WS? TYPE NEWLINE
 page_block      <- 'page' WS IDENT ':' NEWLINE INDENT page_field+ DEDENT
-# Bounded title, heading, state, bounds, and view fields.
+# Bounded title, heading, layout, state, bounds, components and view fields.
+# View/component items also allow `input "Label": variable`.
 # The strict indentation/action parser is implemented in vibe.web.
-page_field      <- 'title:' WS STRING / 'heading:' WS STRING / 'state:' / 'bounds:' / 'view:'
+page_field      <- 'title:' WS STRING / 'heading:' WS STRING / 'layout:' WS IDENT / 'state:' / 'bounds:' / 'components:' / 'view:'
 emit_stmt       <- 'emit' WS IDENT NEWLINE?
 
 experimental_block <- tesla_block / agentora_block / agentception_block

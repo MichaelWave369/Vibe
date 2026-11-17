@@ -144,3 +144,36 @@ number/boolean/object props, computed expressions, slot trees, nested components
 per-instance storage, asynchronous effects, or arbitrary DOM structures yet.
 The standard bridge remains a bounded heuristic check; the Node smoke test
 covers one generated-runtime example, not all browsers.
+
+## Phase 3C: responsive layouts and numeric forms (experimental)
+
+VibeWeb pages now support `layout: stack` (the default) or `layout: grid`.
+Grid layouts create responsive CSS grid columns for reusable component
+instances. The renderer uses semantic native HTML inputs and labels.
+
+Both the page `view:` and reusable component definitions can contain:
+
+```yaml
+input "Set shared value": shared
+```
+
+The bound variable must be declared writable integer state. For component
+instances, local state is resolved first, and page state remains shared.
+Input values are parsed as bounded decimal integers on `change`, clamped to
+any declared state bounds, and rendered back into labels and inputs.
+Invalid/empty/noninteger input is rejected and the prior state restored.
+Native labels are associated with unique input IDs; page and component
+labels are HTML-escaped.
+
+```bash
+vibec compile vibe/examples/web_forms_grid.vibe --no-cache
+python -m vibe.web vibe/examples/web_forms_grid.vibe --out dist-forms
+node tests/web_forms_runtime_smoke.cjs dist-forms/index.html
+```
+
+Current limitations: only numeric integer inputs, no freeform text state,
+checkboxes, select controls, submit/network operations, validation messages
+for end users, or data persistence yet. Grid layout is for the page's
+reused component sections only. The bridge verifier remains heuristic;
+the runtime test exercises generated JavaScript in a minimal simulated DOM,
+not a production browser compatibility suite.

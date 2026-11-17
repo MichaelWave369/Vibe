@@ -1,0 +1,44 @@
+intent FormGrid:
+  goal: "Show responsive reusable cards with validated integer form inputs."
+  inputs:
+    step: number
+  outputs:
+    shared: number
+
+preserve:
+  readability = high
+  testability = high
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+page FormGrid:
+  title: "Φ VibeWeb · Forms and Grid"
+  heading: "VibeWeb reactive form lab"
+  layout: grid
+  state:
+    shared: 3
+  bounds:
+    shared: 0..369
+  components:
+    component MeterCard:
+      prop label: string
+      state meter: 2
+      bounds meter: 0..20
+      text: "{label}: {meter} · Shared: {shared}"
+      input "Set meter value": meter
+      button "Increase meter":
+        action: meter += 1
+      button "Increase shared":
+        action: shared += 1
+  view:
+    text: "Shared value: {shared}"
+    input "Set shared value": shared
+    use MeterCard label="Alpha"
+    use MeterCard label="Beta"
+    button "Reset shared":
+      action: shared = 0
+
+emit web
