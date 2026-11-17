@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
-import re
 from pathlib import Path
 
 from .emitter import emit_code
@@ -81,7 +80,7 @@ def run_file_check(path: Path, *, backend: str, fallback_backend: str | None, wi
     source = _load_source_with_package_defaults(path)
     # VibeWeb is a bounded sidecar grammar until web nodes land in the core IR.
     # Dispatch before the legacy parser sees the otherwise-unknown page block.
-    is_web = bool(re.search(r"(?m)^emit web[ \\t]*$", source))
+    is_web = any(line.strip() == "emit web" for line in source.splitlines())
     if is_web:
         from .web import parse_web_source, render_html
 
