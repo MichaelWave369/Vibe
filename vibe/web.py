@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage, WebComponent, WebInput
+from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField
 from html import escape
 import json
 from pathlib import Path
@@ -81,6 +81,33 @@ def _parse_input(text: str, line: int) -> WebInput:
     return WebInput(_quoted(match.group(1), line), match.group(2))
 
 
+def _parse_string_field(text: str, line: int) -> WebStringField:
+    head = re.fullmatch(r'(input_text|select)\s+("(?:[^"\\]|\\.)*"):\s*([A-Za-z_][A-Za-z0-9_]*)(.*)', text)
+    if head is None:
+        raise WebSpecError(f"line {line}: expected input_text/select \"Label\": state options")
+    kind, raw_label, variable, suffix = head.groups()
+    label = _quoted(raw_label, line)
+    if not label.strip():
+        raise WebSpecError(f"line {line}: field label must not be empty")
+    if kind == "input_text":
+        length = re.fullmatch(r"\s+min=(\d{1,3})\s+max=(\d{1,3})", suffix)
+        if not length:
+            raise WebSpecError(f"line {line}: input_text requires min=N max=N")
+        minimum, maximum = (int(x) for x in length.groups())
+        if not (0 <= minimum <= maximum <= 256) or maximum == 0:
+            raise WebSpecError(f"line {line}: invalid text length bounds")
+        return WebStringField(label, variable, "text", minimum, maximum)
+    choices = re.fullmatch(r'\s+options=("(?:[^"\\]|\\.)*")', suffix)
+    if not choices:
+        raise WebSpecError(f"line {line}: select requires options=\"A|B|C\"")
+    options = tuple(_quoted(choices.group(1), line).split("|"))
+    if not (2 <= len(options) <= 16) or len(set(options)) != len(options) or any(
+        not option.strip() or len(option) > 80 for option in options
+    ):
+        raise WebSpecError(f"line {line}: select options must be 2-16 distinct nonempty values")
+    return WebStringField(label, variable, "select", options=options)
+
+
 def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
@@ -125,7 +152,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 raise WebSpecError(f"line {pending_button[1]}: button missing action")
             pending_button = None
             current_component = None
-            if value in {"state:", "view:", "bounds:", "components:"}:
+            if value in {"state:", "text_state:", "view:", "bounds:", "components:"}:
                 section = value[:-1]
                 continue
             section = ""
@@ -147,6 +174,13 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if not _NAME.fullmatch(key) or key in page.state:
                 raise WebSpecError(f"line {idx + 1}: invalid or repeated state name")
             page.state[key] = _integer(number, idx + 1)
+        elif n == 4 and section == "text_state":
+            if ":" not in value:
+                raise WebSpecError(f"line {idx + 1}: expected name: \"string\"")
+            key, raw_text = (t.strip() for t in value.split(":", 1))
+            if not _NAME.fullmatch(key) or key in page.text_state or len(page.text_state) >= 64:
+                raise WebSpecError(f"line {idx + 1}: invalid or repeated string state name")
+            page.text_state[key] = _quoted(raw_text, idx + 1)
         elif n == 4 and section == "bounds":
             if ":" not in value:
                 raise WebSpecError(f"line {idx + 1}: expected `name: min..max`")
@@ -196,8 +230,18 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 if key in current_component.bounds or int(lower) > int(upper):
                     raise WebSpecError(f"line {idx + 1}: duplicate or invalid local bounds")
                 current_component.bounds[key] = (int(lower), int(upper))
+            elif value.startswith("text_state "):
+                match = re.fullmatch(r'text_state ([A-Za-z_][A-Za-z0-9_]*):\\s*(.*)', value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected text_state name: \"string\"")
+                key, raw_text = match.groups()
+                if key in current_component.text_state or len(current_component.text_state) >= 32:
+                    raise WebSpecError(f"line {idx + 1}: duplicate local string state")
+                current_component.text_state[key] = _quoted(raw_text, idx + 1)
             elif value.startswith("text:"):
                 current_component.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
+            elif value.startswith("input_text ") or value.startswith("select "):
+                current_component.text_fields.append(_parse_string_field(value, idx + 1))
             elif value.startswith("input "):
                 current_component.inputs.append(_parse_input(value, idx + 1))
             else:
@@ -220,6 +264,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if value.startswith("text:"):
                 page.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
                 pending_button = None
+            elif value.startswith("input_text ") or value.startswith("select "):
+                page.text_fields.append(_parse_string_field(value, idx + 1))
             elif value.startswith("input "):
                 page.inputs.append(_parse_input(value, idx + 1))
             elif value.startswith("use "):
