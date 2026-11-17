@@ -1,0 +1,23 @@
+intent TypingDojo:
+  goal: "Provide an exact-character keyboard typing exercise with visible accuracy and timing feedback."
+  inputs:
+    lesson: text
+  outputs:
+    accuracy: number
+
+preserve:
+  readability = high
+  testability = high
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+page TypingDojo:
+  title: "Φ VibeWeb · Keyboard Dojo"
+  heading: "Keyboard Dojo · First Lesson"
+  typing:
+    passage: "Precision matters.  Two spaces are welcome here."
+
+emit web
