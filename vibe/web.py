@@ -165,6 +165,20 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 if mode not in {"stack", "grid"}:
                     raise WebSpecError(f"line {idx + 1}: layout must be stack or grid")
                 page.layout = mode
+            elif value.startswith("submit:"):
+                if page.submit_label:
+                    raise WebSpecError(f"line {idx + 1}: duplicate submit declaration")
+                label = _quoted(value.split(":", 1)[1].strip(), idx + 1)
+                if not label.strip() or len(label) > 80:
+                    raise WebSpecError(f"line {idx + 1}: submit label must be 1-80 characters")
+                page.submit_label = label
+            elif value.startswith("persist:"):
+                if page.persistence != "none":
+                    raise WebSpecError(f"line {idx + 1}: duplicate persistence declaration")
+                policy = value.split(":", 1)[1].strip()
+                if policy not in {"local"}:
+                    raise WebSpecError(f"line {idx + 1}: persist currently supports only local")
+                page.persistence = policy
             else:
                 raise WebSpecError(f"line {idx + 1}: unsupported page field {value!r}")
         elif n == 4 and section == "state":
@@ -294,6 +308,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
     if not page.title or not page.heading:
         raise WebSpecError("page requires title and heading")
+    if page.persistence != "none" and not page.submit_label:
+        raise WebSpecError("persist local requires an explicit submit declaration")
     if not (page.state or page.text_state or any(component.state or component.text_state for component in page.components.values())):
         raise WebSpecError("page requires page or component state")
     if len(page.uses) != len(page.use_props):
