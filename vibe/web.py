@@ -117,6 +117,36 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if lo > hi:
                 raise WebSpecError(f"line {idx + 1}: minimum exceeds maximum")
             page.bounds[key] = (lo, hi)
+        elif n == 4 and section == "components":
+            if pending_button:
+                raise WebSpecError(f"line {pending_button[1]}: button missing action")
+            match = _COMPONENT.fullmatch(value)
+            if not match:
+                raise WebSpecError(f"line {idx + 1}: expected component Name:")
+            name = match.group(1)
+            if name in page.components or len(page.components) >= 32:
+                raise WebSpecError(f"line {idx + 1}: repeated component or component limit exceeded")
+            current_component = WebComponent(name=name)
+            page.components[name] = current_component
+        elif n == 6 and section == "components" and current_component is not None:
+            if pending_button:
+                raise WebSpecError(f"line {pending_button[1]}: button missing action")
+            if value.startswith("text:"):
+                current_component.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
+            else:
+                match = _BUTTON.fullmatch(value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected component text or button")
+                pending_button = (_quoted(match.group(1), idx + 1), idx + 1)
+        elif n == 8 and section == "components" and current_component is not None and pending_button:
+            if not value.startswith("action:"):
+                raise WebSpecError(f"line {idx + 1}: expected action")
+            match = _ACTION.fullmatch(value.split(":", 1)[1].strip())
+            if not match:
+                raise WebSpecError(f"line {idx + 1}: only integer state assignments supported")
+            variable, operation, amount = match.groups()
+            current_component.buttons.append(Button(pending_button[0], variable, operation, int(amount)))
+            pending_button = None
         elif n == 4 and section == "view":
             if pending_button:
                 raise WebSpecError(f"line {pending_button[1]}: button missing action")
