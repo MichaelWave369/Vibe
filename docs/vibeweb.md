@@ -104,3 +104,43 @@ props, isolated instance state, arbitrary DOM structure, styling parameters,
 routing, or input controls. Components currently render after any direct
 page text/buttons, in the order of their `use` declarations. This is a
 bounded reuse mechanism, not framework feature parity.
+
+## Phase 3B: isolated instance state and string props (experimental)
+
+Reusable components can now declare required string props and bounded local
+integer state. Multiple `use` instances each get separate local state; they
+can still read or update shared page state.
+
+```yaml
+components:
+  component CounterCard:
+    prop label: string
+    state count: 0
+    bounds count: 0..9
+    text: "{label}: {count}"
+    button "Increment":
+      action: count += 1
+view:
+  use CounterCard label="Alpha"
+  use CounterCard label="Beta"
+```
+
+The actual full example is `vibe/examples/web_instances.vibe`:
+
+```bash
+vibec compile vibe/examples/web_instances.vibe --no-cache
+python -m vibe.web vibe/examples/web_instances.vibe --out dist-instances
+node tests/web_runtime_smoke.cjs dist-instances/index.html
+```
+
+Props are **required JSON-quoted strings**, are read-only, and cannot shadow
+local or page state. Component-local integer state is independent for each
+rendered instance. Local actions resolve local state first; actions targeting
+page state remain shared. All interpolation is rendered using `textContent`,
+and HTML output escapes serialized JSON to prevent script breakouts.
+
+These are deliberate restrictions, not general JavaScript support. No
+number/boolean/object props, computed expressions, slot trees, nested components,
+per-instance storage, asynchronous effects, or arbitrary DOM structures yet.
+The standard bridge remains a bounded heuristic check; the Node smoke test
+covers one generated-runtime example, not all browsers.
