@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field, fields
 from typing import Literal
 
-from .ast import Program
+from .ast import Program, WebPage, WebButton
 
 DEFAULT_EPSILON_FLOOR = 0.02
 DEFAULT_MEASUREMENT_SAFE_RATIO = 0.85
@@ -124,6 +124,25 @@ class IRSigilTemporalSequence:
 
 
 @dataclass(slots=True)
+class IRWebButton:
+    label_ref: str
+    variable_ref: str
+    operation_ref: str
+    value_ref: str
+
+
+@dataclass(slots=True)
+class IRWebPage:
+    name_ref: str
+    title_ref: str
+    heading_ref: str
+    state_refs: dict[str, str]
+    bounds_refs: dict[str, tuple[str, str]]
+    text_refs: list[str]
+    buttons: list[IRWebButton]
+
+
+@dataclass(slots=True)
 class IRModule:
     module_name: str
     vibe_version_ref: str | None
@@ -188,6 +207,7 @@ class IRModule:
     genomics_target_metadata: dict[str, object] = field(default_factory=dict)
     metadata_privacy_summary: dict[str, object] = field(default_factory=dict)
     workflow_provenance_metadata: dict[str, object] = field(default_factory=dict)
+    web_page: IRWebPage | None = None
 
 
 @dataclass(slots=True)
@@ -250,6 +270,33 @@ class IR:
     @property
     def emit_target(self) -> str:
         return str(self._value(self.module.emit_target_ref).data)
+
+    @property
+    def web_page(self) -> WebPage | None:
+        """Reconstruct the validated page from typed SSA references."""
+        p = self.module.web_page
+        if p is None:
+            return None
+        return WebPage(
+            name=str(self._value(p.name_ref).data),
+            title=str(self._value(p.title_ref).data),
+            heading=str(self._value(p.heading_ref).data),
+            state={name: int(self._value(ref).data) for name, ref in p.state_refs.items()},
+            bounds={
+                name: (int(self._value(lo).data), int(self._value(hi).data))
+                for name, (lo, hi) in p.bounds_refs.items()
+            },
+            texts=[str(self._value(ref).data) for ref in p.text_refs],
+            buttons=[
+                WebButton(
+                    label=str(self._value(b.label_ref).data),
+                    variable=str(self._value(b.variable_ref).data),
+                    operation=str(self._value(b.operation_ref).data),
+                    value=int(self._value(b.value_ref).data),
+                )
+                for b in p.buttons
+            ],
+        )
 
     @property
     def tesla_victory_layer(self) -> bool:
@@ -542,8 +589,33 @@ def ast_to_ir(program: Program) -> IR:
     enums_refs = [b.const("named", "type_ref", v) for v in program.enums]
     interfaces_refs = [b.const("named", "type_ref", v) for v in program.interfaces]
 
+    web_page_ir = None
+    if program.web_page is not None:
+        p = program.web_page
+        web_page_ir = IRWebPage(
+            name_ref=b.const("symbol", "identifier", p.name),
+            title_ref=b.const("string", "literal", p.title),
+            heading_ref=b.const("string", "literal", p.heading),
+            state_refs={k: b.const("number", "literal", float(v)) for k, v in p.state.items()},
+            bounds_refs={
+                k: (b.const("number", "literal", float(lo)), b.const("number", "literal", float(hi)))
+                for k, (lo, hi) in p.bounds.items()
+            },
+            text_refs=[b.const("string", "literal", value) for value in p.texts],
+            buttons=[
+                IRWebButton(
+                    label_ref=b.const("string", "literal", button.label),
+                    variable_ref=b.const("symbol", "identifier", button.variable),
+                    operation_ref=b.const("symbol", "literal", button.operation),
+                    value_ref=b.const("number", "literal", float(button.value)),
+                )
+                for button in p.buttons
+            ],
+        )
+
     module = IRModule(
         module_name=program.intent.name,
+        web_page=web_page_ir,
         vibe_version_ref=vibe_version_ref,
         imports_refs=imports_refs,
         modules_refs=modules_refs,
@@ -762,6 +834,16 @@ def validate_ir(ir: IR) -> None:
         refs.append(seq.name_ref)
         refs.extend(seq.step_refs)
 
+    if ir.module.web_page is not None:
+        page = ir.module.web_page
+        refs.extend([page.name_ref, page.title_ref, page.heading_ref])
+        refs.extend(page.state_refs.values())
+        refs.extend(page.text_refs)
+        for low_ref, high_ref in page.bounds_refs.values():
+            refs.extend([low_ref, high_ref])
+        for button in page.buttons:
+            refs.extend([button.label_ref, button.variable_ref, button.operation_ref, button.value_ref])
+
     for ref in refs:
         if ref not in ir.module.values:
             raise ValueError(f"IR validation error: undefined SSA reference `{ref}`")
@@ -784,6 +866,13 @@ def serialize_ir(ir: IR) -> str:
         "constraints": [_obj_dict(c) for c in ir.module.constraints],
         "bridge_settings": [_obj_dict(b) for b in ir.module.bridge_settings],
         "emit_target_ref": ir.module.emit_target_ref,
+        "web_page": (
+            {
+                **{k: v for k, v in _obj_dict(ir.module.web_page).items() if k != "buttons"},
+                "buttons": [_obj_dict(button) for button in ir.module.web_page.buttons],
+            }
+            if ir.module.web_page is not None else None
+        ),
         "tesla_layer": _obj_dict(ir.module.tesla_layer) if ir.module.tesla_layer else None,
         "agentora": (
             {"agents": [_obj_dict(a) for a in ir.module.agentora.agents]} if ir.module.agentora else None
