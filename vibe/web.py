@@ -677,6 +677,86 @@ _SCRIPT = r"""
       }
     });
   }
+  if (config.typing) {
+    // All passage text comes from a compiler-validated literal. No HTML injection.
+    const passage = Array.from(config.typing.passage);
+    const input = document.getElementById('vibe-typing-input');
+    const display = document.getElementById('vibe-typing-passage');
+    const progress = document.getElementById('vibe-typing-progress');
+    const accuracyNode = document.getElementById('vibe-typing-accuracy');
+    const wpmNode = document.getElementById('vibe-typing-wpm');
+    const errorNode = document.getElementById('vibe-typing-errors');
+    const elapsedNode = document.getElementById('vibe-typing-elapsed');
+    const status = document.getElementById('vibe-typing-status');
+    const reset = document.getElementById('vibe-typing-reset');
+    let startedAt = null;
+    let endedAt = null;
+    let timer = null;
+    const stopTimer = () => {
+      if (timer !== null) window.clearInterval(timer);
+      timer = null;
+    };
+    const update = () => {
+      const typed = Array.from(input.value).slice(0, passage.length);
+      const now = performance.now();
+      if (typed.length > 0 && startedAt === null) {
+        startedAt = now;
+        timer = window.setInterval(update, 250);
+      }
+      let correct = 0;
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < passage.length; i++) {
+        const char = document.createElement('span');
+        char.textContent = passage[i];
+        if (i < typed.length) {
+          if (typed[i] === passage[i]) {
+            char.className = 'vibe-typing-correct';
+            correct++;
+          } else {
+            char.className = 'vibe-typing-wrong';
+          }
+        }
+        fragment.appendChild(char);
+      }
+      display.replaceChildren(fragment);
+      const mistakes = typed.length - correct;
+      const complete = typed.length === passage.length && mistakes === 0;
+      if (complete && endedAt === null) {
+        endedAt = now;
+        input.disabled = true;
+        stopTimer();
+      }
+      if (typed.length === 0) {
+        startedAt = null;
+        endedAt = null;
+        stopTimer();
+      }
+      const elapsed = startedAt === null ? 0 :
+        Math.max(0, ((endedAt ?? now) - startedAt) / 1000);
+      const wpm = elapsed > 0 ? Math.round((correct / 5) * (60 / Math.max(1, elapsed))) : 0;
+      progress.value = typed.length;
+      accuracyNode.textContent = (typed.length ? Math.round(100 * correct / typed.length) : 100) + '%';
+      wpmNode.textContent = String(wpm);
+      errorNode.textContent = String(mistakes);
+      elapsedNode.textContent = elapsed.toFixed(1) + 's';
+      if (complete) status.textContent = 'Lesson complete! Great precision.';
+      else if (typed.length === passage.length) status.textContent = 'Fix the highlighted mistakes to finish.';
+      else if (mistakes) status.textContent = 'Mistakes highlighted. Backspace to correct.';
+      else if (typed.length) status.textContent = 'Keep going. Every space counts.';
+      else status.textContent = 'Ready to type.';
+    };
+    input.addEventListener('input', update);
+    reset.addEventListener('click', () => {
+      stopTimer();
+      startedAt = null;
+      endedAt = null;
+      input.value = '';
+      input.disabled = false;
+      update();
+      input.focus();
+    });
+    update();
+  }
   render();
 })();
 """.strip()
