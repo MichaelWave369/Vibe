@@ -727,10 +727,15 @@ _SCRIPT = r"""
     });
   }
   if (config.typing) {
-    // All passage text comes from a compiler-validated literal. No HTML injection.
-    const passage = Array.from(config.typing.passage);
+    // All passages are bounded, compiler-validated literals.
+    const lessons = config.typing.lessons || [
+      { name: 'First Lesson', difficulty: 'beginner', passage: config.typing.passage }
+    ];
+    const difficultySelect = document.getElementById('vibe-typing-difficulty');
+    const lessonSelect = document.getElementById('vibe-typing-lesson');
     const input = document.getElementById('vibe-typing-input');
     const display = document.getElementById('vibe-typing-passage');
+    const readable = document.getElementById('vibe-typing-readable');
     const progress = document.getElementById('vibe-typing-progress');
     const accuracyNode = document.getElementById('vibe-typing-accuracy');
     const wpmNode = document.getElementById('vibe-typing-wpm');
@@ -738,12 +743,69 @@ _SCRIPT = r"""
     const elapsedNode = document.getElementById('vibe-typing-elapsed');
     const status = document.getElementById('vibe-typing-status');
     const reset = document.getElementById('vibe-typing-reset');
+    const savedMode = config.typing.progress === 'local';
+    const storageKey = config.typing.storage_key;
+    const saveStatus = savedMode ? document.getElementById('vibe-typing-save-status') : null;
+    const completionNode = savedMode ? document.getElementById('vibe-typing-completed') : null;
+    const bestNode = savedMode ? document.getElementById('vibe-typing-best') : null;
+    const clearButton = savedMode ? document.getElementById('vibe-typing-clear') : null;
+    let selected = 0;
+    let passage = Array.from(lessons[0].passage);
     let startedAt = null;
     let endedAt = null;
     let timer = null;
+    let completed = Object.create(null);
     const stopTimer = () => {
       if (timer !== null) window.clearInterval(timer);
       timer = null;
+    };
+    const validSaved = (record) => {
+      if (!record || typeof record !== 'object' || Array.isArray(record) ||
+          record.version !== 1 || record.page !== config.page_id ||
+          !record.completed || typeof record.completed !== 'object' ||
+          Array.isArray(record.completed)) return false;
+      const names = new Set(lessons.map(item => item.name));
+      return Object.entries(record.completed).every(([name, value]) =>
+        names.has(name) && value && typeof value === 'object' &&
+        Object.keys(value).length === 1 && Number.isSafeInteger(value.bestWpm) &&
+        value.bestWpm >= 0 && value.bestWpm <= 5000);
+    };
+    const showSaved = () => {
+      if (!savedMode) return;
+      const total = Object.keys(completed).length;
+      completionNode.textContent = total + ' of ' + lessons.length + ' lessons completed';
+      const record = completed[lessons[selected].name];
+      bestNode.textContent = 'Best WPM for ' + lessons[selected].name + ': ' +
+        (record ? record.bestWpm : 'not yet recorded');
+    };
+    if (savedMode) {
+      try {
+        const raw = window.localStorage.getItem(storageKey);
+        if (raw) {
+          if (raw.length > 8192) throw Error('oversized progress');
+          const record = JSON.parse(raw);
+          if (!validSaved(record)) throw Error('incompatible progress');
+          completed = Object.assign(Object.create(null), record.completed);
+          saveStatus.textContent = 'Previous lesson progress restored.';
+        }
+      } catch (_error) {
+        saveStatus.textContent = 'Saved progress unavailable or incompatible; starting fresh.';
+      }
+    }
+    const recordCompletion = (wpm) => {
+      if (!savedMode) return;
+      const name = lessons[selected].name;
+      const previous = completed[name];
+      completed[name] = { bestWpm: Math.max(previous ? previous.bestWpm : 0, wpm) };
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify({
+          version: 1, page: config.page_id, completed
+        }));
+        saveStatus.textContent = 'Lesson progress saved in this browser.';
+      } catch (_error) {
+        saveStatus.textContent = 'Browser storage unavailable; progress was not saved.';
+      }
+      showSaved();
     };
     const update = () => {
       const typed = Array.from(input.value).slice(0, passage.length);
@@ -761,16 +823,15 @@ _SCRIPT = r"""
           if (typed[i] === passage[i]) {
             char.className = 'vibe-typing-correct';
             correct++;
-          } else {
-            char.className = 'vibe-typing-wrong';
-          }
+          } else char.className = 'vibe-typing-wrong';
         }
         fragment.appendChild(char);
       }
       display.replaceChildren(fragment);
       const mistakes = typed.length - correct;
       const complete = typed.length === passage.length && mistakes === 0;
-      if (complete && endedAt === null) {
+      const firstCompletion = complete && endedAt === null;
+      if (firstCompletion) {
         endedAt = now;
         input.disabled = true;
         stopTimer();
@@ -793,18 +854,62 @@ _SCRIPT = r"""
       else if (mistakes) status.textContent = 'Mistakes highlighted. Backspace to correct.';
       else if (typed.length) status.textContent = 'Keep going. Every space counts.';
       else status.textContent = 'Ready to type.';
+      if (firstCompletion) recordCompletion(wpm);
     };
-    input.addEventListener('input', update);
-    reset.addEventListener('click', () => {
+    const startLesson = (index) => {
       stopTimer();
+      selected = index;
+      passage = Array.from(lessons[index].passage);
       startedAt = null;
       endedAt = null;
-      input.value = '';
       input.disabled = false;
+      input.value = '';
+      input.maxLength = passage.length;
+      progress.max = passage.length;
+      readable.textContent = 'Passage to type: ' + lessons[index].passage;
+      if (lessonSelect) lessonSelect.value = String(index);
       update();
+      showSaved();
+    };
+    if (lessonSelect) {
+      const filterLessons = () => {
+        const difficulty = difficultySelect.value;
+        const candidates = lessons.map((item, index) => ({ ...item, index }))
+          .filter(item => difficulty === 'all' || item.difficulty === difficulty);
+        const options = candidates.map(item => {
+          const option = document.createElement('option');
+          option.value = String(item.index);
+          option.textContent = item.name + ' (' + item.difficulty + ')';
+          return option;
+        });
+        lessonSelect.replaceChildren(...options);
+        if (candidates.length) {
+          const next = candidates.some(item => item.index === selected) ?
+            selected : candidates[0].index;
+          startLesson(next);
+        }
+      };
+      difficultySelect.addEventListener('change', filterLessons);
+      lessonSelect.addEventListener('change', () => startLesson(Number(lessonSelect.value)));
+    }
+    input.addEventListener('input', update);
+    reset.addEventListener('click', () => {
+      startLesson(selected);
       input.focus();
     });
-    update();
+    if (clearButton) {
+      clearButton.addEventListener('click', () => {
+        completed = Object.create(null);
+        try {
+          window.localStorage.removeItem(storageKey);
+          saveStatus.textContent = 'Saved lesson progress cleared.';
+        } catch (_error) {
+          saveStatus.textContent = 'Storage unavailable; saved progress could not be cleared.';
+        }
+        showSaved();
+      });
+    }
+    startLesson(0);
   }
   render();
 })();
