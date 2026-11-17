@@ -222,7 +222,11 @@ def test_component_local_state_bounds_and_bindings_fail_closed():
     with pytest.raises(WebSpecError, match="unknown state or prop"):
         parse_web_source(source.replace("{label}: {count}", "{unknown}: {count}"))
     with pytest.raises(WebSpecError, match="collides with state"):
-        parse_web_source(source.replace("prop label: string", "prop count: string"))
+        parse_web_source(
+            source.replace("prop label: string", "prop count: string")
+                  .replace('label="Alpha"', 'count="Alpha"')
+                  .replace('label="Beta"', 'count="Beta"')
+        )
     with pytest.raises(WebSpecError, match="only integer state assignments"):
         parse_web_source(source.replace("action: count += 1", "action: count += total"))
 
