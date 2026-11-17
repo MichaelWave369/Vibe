@@ -1,0 +1,39 @@
+intent ComponentLab:
+  goal: "Render reusable interactive components with shared bounded state."
+  inputs:
+    step: number
+  outputs:
+    count: number
+
+preserve:
+  readability = high
+  testability = high
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+page ComponentLab:
+  title: "Φ VibeWeb · Component Laboratory"
+  heading: "Reusable components, shared state"
+  state:
+    count: 3
+  bounds:
+    count: 0..369
+  components:
+    component CounterCard:
+      text: "Shared count: {count}"
+      button "Increase":
+        action: count += 1
+    component ResetCard:
+      text: "Reset the same shared counter from any component."
+      button "Reset count":
+        action: count = 0
+  view:
+    text: "Two CounterCard instances below share one reactive counter."
+    use CounterCard
+    use CounterCard
+    use ResetCard
+
+emit web
