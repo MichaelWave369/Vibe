@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = fileURLToPath(new URL("../../", import.meta.url));
+const root = path.resolve(fileURLToPath(new URL("../../", import.meta.url)));
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
