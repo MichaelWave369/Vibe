@@ -420,6 +420,19 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 .vibe-error{font-size:.82rem;color:#ffb7b2;margin:.1rem 0;min-height:1.2em}
 .vibe-submit{margin-top:1.5rem;display:flex;flex-wrap:wrap;gap:.8rem;align-items:center}.vibe-submit p{font-size:.88rem;margin:0;min-height:1em}
 .vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
+.vibe-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+#vibe-typing{margin:1.6rem 0;padding:1.2rem;border:1px solid #5777a1;background:#111b2e;border-radius:14px}
+#vibe-typing h2{margin:.1rem 0 .5rem}
+.vibe-typing-passage{font:1.18rem/1.85 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.01em;white-space:pre-wrap;overflow-wrap:anywhere;padding:1rem;background:#0b1426;border:1px solid #40516c;border-radius:12px;margin:.8rem 0 1rem}
+.vibe-typing-passage .vibe-typing-correct{color:#8ef0b3;background:#153b30}
+.vibe-typing-passage .vibe-typing-wrong{color:#ffd1d1;background:#71313b;text-decoration:underline}
+#vibe-typing label{display:block;font-weight:600;margin:.8rem 0 .35rem}
+#vibe-typing-input{font:1rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;background:#0b1426;color:#f5f6fb;border:2px solid #7898c7;border-radius:10px;padding:.7rem;width:100%;resize:vertical;min-height:6rem}
+#vibe-typing-input:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
+#vibe-typing-progress{width:100%;height:1rem;accent-color:#8ef0b3}
+.vibe-typing-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin:1rem 0}
+.vibe-typing-metrics>div{background:#1a2943;padding:.55rem .8rem;border-radius:10px}
+.vibe-typing-metrics dt{font-size:.85rem;color:#bdd4f1}.vibe-typing-metrics dd{font-size:1.25rem;font-weight:750;margin:0}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
 """.strip()
@@ -787,6 +800,7 @@ def render_html(page: WebPage) -> str:
         "scope_states": scope_states,
         "scope_bounds": scope_bounds,
         "page_id": page.name,
+        "typing": {"passage": page.typing.passage} if page.typing else None,
         "submit_label": page.submit_label,
         "persistence": page.persistence,
         "storage_key": f"vibeweb:draft:v1:{page.name}" if page.persistence == "local" else None,
@@ -797,6 +811,30 @@ def render_html(page: WebPage) -> str:
     text_elements = "\n".join(f'    <p data-vibe-text="{i}" aria-live="polite"></p>' for i, _ in enumerate(page.texts))
     controls = "\n".join(f'      <button type="button" data-vibe-button="{i}">{escape(b.label)}</button>' for i, b in enumerate(page.buttons))
     component_markup = "\n".join(component_sections)
+    typing_markup = ""
+    if page.typing is not None:
+        passage = page.typing.passage
+        typing_markup = f"""
+    <section id="vibe-typing" aria-label="Typing dojo">
+      <h2>Keyboard dojo</h2>
+      <p id="vibe-typing-guide">Type the passage exactly, including spaces and punctuation. Backspace can fix mistakes.</p>
+      <p id="vibe-typing-readable" class="vibe-visually-hidden">Passage to type: {escape(passage)}</p>
+      <div id="vibe-typing-passage" class="vibe-typing-passage" aria-hidden="true"></div>
+      <label for="vibe-typing-input">Type the lesson</label>
+      <textarea id="vibe-typing-input" rows="3" maxlength="{len(passage)}"
+        aria-describedby="vibe-typing-guide vibe-typing-readable" spellcheck="false"
+        autocomplete="off" autocapitalize="off"></textarea>
+      <label for="vibe-typing-progress">Typing progress</label>
+      <progress id="vibe-typing-progress" max="{len(passage)}" value="0"></progress>
+      <dl class="vibe-typing-metrics">
+        <div><dt>Accuracy</dt><dd id="vibe-typing-accuracy">100%</dd></div>
+        <div><dt>WPM</dt><dd id="vibe-typing-wpm">0</dd></div>
+        <div><dt>Errors</dt><dd id="vibe-typing-errors">0</dd></div>
+        <div><dt>Elapsed</dt><dd id="vibe-typing-elapsed">0.0s</dd></div>
+      </dl>
+      <button type="button" id="vibe-typing-reset">Restart lesson</button>
+      <p role="status" aria-live="polite" id="vibe-typing-status">Ready to type.</p>
+    </section>"""
     grid_page_class = ' class="vibe-page-grid"' if page.layout == "grid" else ""
     form_open = '<form id="vibe-form" novalidate>' if page.submit_label else ""
     form_close = '</form>' if page.submit_label else ""
@@ -830,6 +868,7 @@ def render_html(page: WebPage) -> str:
     <div class="vibe-layout vibe-layout-{page.layout}">
 {component_markup}
     </div>
+{typing_markup}
 {submit_markup}
 {form_close}
     <footer>Compiled from a .vibe intent. No React, Svelte, or client dependencies.</footer>
