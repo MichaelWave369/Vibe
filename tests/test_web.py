@@ -315,3 +315,85 @@ def test_phase3c_standard_compiler_emits_grid(tmp_path):
     html = path.with_suffix(".html").read_text(encoding="utf-8")
     assert "vibe-layout-grid" in html
     assert 'data-vibe-input="2"' in html
+
+
+TEXT_FORMS = Path("vibe/examples/web_text_forms.vibe")
+
+
+def test_phase3d_text_and_select_roundtrip():
+    import re
+    from vibe.parser import parse_source
+    from vibe.ir import ast_to_ir, serialize_ir
+    from vibe.emitter import emit_code
+
+    program = parse_source(TEXT_FORMS.read_text(encoding="utf-8"))
+    assert program.web_page is not None
+    assert program.web_page.text_state == {"display_name": "Mikey", "theme": "Teal"}
+    assert program.web_page.text_fields[0].kind == "text"
+    assert program.web_page.text_fields[0].maximum == 24
+    assert program.web_page.text_fields[1].options == ("Teal", "Purple", "Gold")
+    component = program.web_page.components["ProfileCard"]
+    assert component.text_state == {"name": "Visitor", "mood": "Calm"}
+    assert component.text_fields[1].kind == "select"
+    ir = ast_to_ir(program)
+    assert ir.web_page is not None
+    assert ir.web_page.text_state == program.web_page.text_state
+    assert ir.web_page.components["ProfileCard"].text_fields == component.text_fields
+    assert "text_field_refs" in serialize_ir(ir)
+    html, backend = emit_code(ir)
+    assert backend.target == "web"
+    assert html.count('data-vibe-string=') == 6
+    assert html.count('<select ') == 3
+    assert html.count('type="text"') == 3
+    assert 'aria-describedby="vibe-string-error-0"' in html
+    assert 'id="vibe-string-error-5" role="status"' in html
+    match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
+    assert match is not None
+    config = json.loads(match.group(1))
+    assert config["text_state"] == {"display_name": "Mikey", "theme": "Teal"}
+    assert config["scope_text_states"] == {
+        "instance_0": {"name": "Visitor", "mood": "Calm"},
+        "instance_1": {"name": "Visitor", "mood": "Calm"},
+    }
+    assert len(config["string_fields"]) == 6
+    assert [item["scope"] for item in config["string_fields"]] == [
+        None, None, "instance_0", "instance_0", "instance_1", "instance_1"
+    ]
+
+
+def test_phase3d_rejects_invalid_initial_string_and_missing_state():
+    source = TEXT_FORMS.read_text(encoding="utf-8")
+    with pytest.raises(WebSpecError, match="violates length bounds"):
+        parse_web_source(source.replace('display_name: "Mikey"', 'display_name: "M"'))
+    with pytest.raises(WebSpecError, match="not an allowed option"):
+        parse_web_source(source.replace('theme: "Teal"', 'theme: "Undefined"'))
+    with pytest.raises(WebSpecError, match="unknown text state"):
+        parse_web_source(source.replace('input_text "Display name": display_name', 'input_text "Display name": missing'))
+    with pytest.raises(WebSpecError, match="invalid text length bounds"):
+        parse_web_source(source.replace("min=2 max=24", "min=27 max=24"))
+    with pytest.raises(WebSpecError, match="distinct nonempty"):
+        parse_web_source(source.replace('options="Teal|Purple|Gold"', 'options="Teal|Teal"'))
+    with pytest.raises(WebSpecError, match="collide"):
+        parse_web_source(source.replace('display_name: "Mikey"', 'total: "Mikey"'))
+    with pytest.raises(WebSpecError, match="unknown state or prop"):
+        parse_web_source(source.replace("{caption}: {name}", "{caption}: {password}"))
+
+
+def test_phase3d_escapes_option_markup_and_labels():
+    source = TEXT_FORMS.read_text(encoding="utf-8")
+    source = source.replace('options="Teal|Purple|Gold"', 'options="Teal|<img src=x onerror=alert(1)>|Gold"')
+    page, _ = parse_web_source(source)
+    html = render_html(page)
+    assert "&lt;img" in html
+    assert "<img src=x onerror=alert(1)>" not in html
+    assert r"\u003cimg" in html
+
+
+def test_phase3d_compiles_with_standard_vibec(tmp_path):
+    from vibe.cli import main
+
+    source = tmp_path / "text_forms.vibe"
+    source.write_text(TEXT_FORMS.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["compile", str(source), "--no-cache"]) == 0
+    html = source.with_suffix(".html").read_text(encoding="utf-8")
+    assert 'data-vibe-string="5"' in html
