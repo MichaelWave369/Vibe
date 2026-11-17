@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field, fields
 from typing import Literal
 
-from .ast import Program, WebPage, WebButton, WebComponent, WebInput, WebStringField, WebTyping
+from .ast import Program, WebPage, WebButton, WebComponent, WebInput, WebStringField, WebTyping, WebTypingLesson
 
 DEFAULT_EPSILON_FLOOR = 0.02
 DEFAULT_MEASUREMENT_SAFE_RATIO = 0.85
@@ -161,8 +161,17 @@ class IRWebComponent:
 
 
 @dataclass(slots=True)
-class IRWebTyping:
+class IRWebTypingLesson:
+    name_ref: str
+    difficulty_ref: str
     passage_ref: str
+
+
+@dataclass(slots=True)
+class IRWebTyping:
+    passage_ref: str | None = None
+    lessons: list[IRWebTypingLesson] = field(default_factory=list)
+    progress_ref: str | None = None
 
 
 @dataclass(slots=True)
@@ -334,7 +343,18 @@ class IR:
             layout=str(self._value(p.layout_ref).data) if p.layout_ref else "stack",
             submit_label=str(self._value(p.submit_label_ref).data) if p.submit_label_ref else "",
             persistence=str(self._value(p.persistence_ref).data) if p.persistence_ref else "none",
-            typing=WebTyping(str(self._value(p.typing.passage_ref).data)) if p.typing else None,
+            typing=WebTyping(
+                passage=str(self._value(p.typing.passage_ref).data) if p.typing.passage_ref else "",
+                lessons=tuple(
+                    WebTypingLesson(
+                        name=str(self._value(item.name_ref).data),
+                        difficulty=str(self._value(item.difficulty_ref).data),
+                        passage=str(self._value(item.passage_ref).data),
+                    )
+                    for item in p.typing.lessons
+                ),
+                progress=str(self._value(p.typing.progress_ref).data) if p.typing.progress_ref else "none",
+            ) if p.typing else None,
             inputs=[WebInput(str(self._value(i.label_ref).data), str(self._value(i.variable_ref).data)) for i in p.inputs],
             text_state={name: str(self._value(ref).data) for name, ref in p.text_state_refs.items()},
             text_fields=[
@@ -728,7 +748,18 @@ def ast_to_ir(program: Program) -> IR:
             layout_ref=b.const("symbol", "literal", p.layout),
             submit_label_ref=b.const("string", "literal", p.submit_label) if p.submit_label else None,
             persistence_ref=b.const("symbol", "literal", p.persistence),
-            typing=IRWebTyping(b.const("string", "literal", p.typing.passage)) if p.typing else None,
+            typing=IRWebTyping(
+                passage_ref=b.const("string", "literal", p.typing.passage) if p.typing.passage else None,
+                lessons=[
+                    IRWebTypingLesson(
+                        name_ref=b.const("string", "literal", lesson.name),
+                        difficulty_ref=b.const("symbol", "literal", lesson.difficulty),
+                        passage_ref=b.const("string", "literal", lesson.passage),
+                    )
+                    for lesson in p.typing.lessons
+                ],
+                progress_ref=b.const("symbol", "literal", p.typing.progress),
+            ) if p.typing else None,
             inputs=[web_input_refs(item) for item in p.inputs],
             text_state_refs={key: b.const("string", "literal", value) for key, value in p.text_state.items()},
             text_field_refs=[web_string_field_refs(item) for item in p.text_fields],
@@ -990,7 +1021,12 @@ def validate_ir(ir: IR) -> None:
         if page.persistence_ref:
             refs.append(page.persistence_ref)
         if page.typing:
-            refs.append(page.typing.passage_ref)
+            if page.typing.passage_ref:
+                refs.append(page.typing.passage_ref)
+            if page.typing.progress_ref:
+                refs.append(page.typing.progress_ref)
+            for lesson in page.typing.lessons:
+                refs.extend([lesson.name_ref, lesson.difficulty_ref, lesson.passage_ref])
         for item in page.inputs:
             refs.extend([item.label_ref, item.variable_ref])
         refs.extend(page.text_state_refs.values())
@@ -1048,7 +1084,13 @@ def serialize_ir(ir: IR) -> str:
                 "buttons": [_obj_dict(button) for button in ir.module.web_page.buttons],
                 "inputs": [_obj_dict(item) for item in ir.module.web_page.inputs],
                 "text_field_refs": [_obj_dict(item) for item in ir.module.web_page.text_field_refs],
-                "typing": _obj_dict(ir.module.web_page.typing) if ir.module.web_page.typing else None,
+                "typing": (
+                    {
+                        "passage_ref": ir.module.web_page.typing.passage_ref,
+                        "progress_ref": ir.module.web_page.typing.progress_ref,
+                        "lessons": [_obj_dict(item) for item in ir.module.web_page.typing.lessons],
+                    } if ir.module.web_page.typing else None
+                ),
                 "components": {
                     name: {
                         "name_ref": component.name_ref,
