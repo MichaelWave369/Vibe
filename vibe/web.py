@@ -409,6 +409,7 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 .vibe-field select{max-width:100%;min-height:44px;border:1px solid #7c99c5;border-radius:10px;padding:.55rem;background:#0d1931;color:white;font:inherit}
 .vibe-field input[aria-invalid="true"],.vibe-field select[aria-invalid="true"]{border-color:#ffa09b}
 .vibe-error{font-size:.82rem;color:#ffb7b2;margin:.1rem 0;min-height:1.2em}
+.vibe-submit{margin-top:1.5rem;display:flex;flex-wrap:wrap;gap:.8rem;align-items:center}.vibe-submit p{font-size:.88rem;margin:0;min-height:1em}
 .vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
@@ -661,6 +662,10 @@ def render_html(page: WebPage) -> str:
         "text_props": text_props,
         "scope_states": scope_states,
         "scope_bounds": scope_bounds,
+        "page_id": page.name,
+        "submit_label": page.submit_label,
+        "persistence": page.persistence,
+        "storage_key": f"vibeweb:draft:v1:{page.name}" if page.persistence == "local" else None,
     }
     raw_json = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     safe_json = (raw_json.replace("&", "\\u0026").replace("<", "\\u003c")
@@ -669,6 +674,13 @@ def render_html(page: WebPage) -> str:
     controls = "\n".join(f'      <button type="button" data-vibe-button="{i}">{escape(b.label)}</button>' for i, b in enumerate(page.buttons))
     component_markup = "\n".join(component_sections)
     grid_page_class = ' class="vibe-page-grid"' if page.layout == "grid" else ""
+    form_open = '<form id="vibe-form" novalidate>' if page.submit_label else ""
+    form_close = '</form>' if page.submit_label else ""
+    submit_markup = (
+        '<div class="vibe-submit"><button type="submit">' + escape(page.submit_label) +
+        '</button><p id="vibe-form-status" role="status" aria-live="polite"></p></div>'
+        if page.submit_label else ""
+    )
     return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -682,6 +694,7 @@ def render_html(page: WebPage) -> str:
   <main{grid_page_class}>
     <div class="tag">Φ VibeWeb · experimental v0</div>
     <h1>{escape(page.heading)}</h1>
+{form_open}
 {text_elements}
     <div class="controls" role="group" aria-label="Page actions">
 {controls}
@@ -693,6 +706,8 @@ def render_html(page: WebPage) -> str:
     <div class="vibe-layout vibe-layout-{page.layout}">
 {component_markup}
     </div>
+{submit_markup}
+{form_close}
     <footer>Compiled from a .vibe intent. No React, Svelte, or client dependencies.</footer>
   </main>
   <script type="application/json" id="vibe-config">{safe_json}</script>
