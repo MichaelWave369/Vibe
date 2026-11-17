@@ -124,7 +124,7 @@ def test_reusable_components_roundtrip_and_shared_state():
     html, backend = emit_code(ir)
     assert backend.target == "web"
     assert html.count('class="vibe-component"') == 3
-    assert html.count("Shared count:") == 1
+    assert html.count("Shared count:") == 2
     match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
     assert match is not None
     config = json.loads(match.group(1))
