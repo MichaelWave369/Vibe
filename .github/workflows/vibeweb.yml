@@ -30,6 +30,10 @@ jobs:
         run: python -m vibe.web vibe/examples/web_forms_grid.vibe --out dist-forms
       - name: Exercise generated form input runtime
         run: node tests/web_forms_runtime_smoke.cjs dist-forms/index.html
+      - name: Compile text and select form studio
+        run: python -m vibe.web vibe/examples/web_text_forms.vibe --out dist-textforms
+      - name: Execute text/select validation runtime
+        run: node tests/web_string_forms_runtime_smoke.cjs dist-textforms/index.html
       - name: Upload static artifact
         uses: actions/upload-artifact@v4
         with:
