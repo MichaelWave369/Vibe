@@ -1,13 +1,13 @@
 """VibeWeb v0: bounded, dependency-free, reactive HTML emitter for Vibe.
 
-Experimental sidecar parser: strips the new `page` block before passing the
-remaining intent contract to Vibe's existing parser/typed IR/bridge verifier.
+The bounded `page` grammar is now recognized by Vibe's primary parser and
+lowered into typed SSA IR. The standalone web build remains supported.
 No arbitrary JavaScript expressions, templates, or imports are executed.
 """
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
+from .ast import WebButton as Button, WebPage
 from html import escape
 import json
 from pathlib import Path
@@ -24,25 +24,6 @@ _BINDING = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _ACTION = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*(\+=|-=|=)\s*(-?\d+)$")
 _PAGE = re.compile(r"^page ([A-Za-z_][A-Za-z0-9_]*):$")
 _BUTTON = re.compile(r'^button\s+("(?:[^"\\]|\\.)*"):$')
-
-
-@dataclass(frozen=True)
-class Button:
-    label: str
-    variable: str
-    operation: str
-    value: int
-
-
-@dataclass
-class WebPage:
-    name: str
-    title: str = ""
-    heading: str = ""
-    state: dict[str, int] = field(default_factory=dict)
-    texts: list[str] = field(default_factory=list)
-    buttons: list[Button] = field(default_factory=list)
-    bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
 
 
 def _quoted(text: str, line: int) -> str:
@@ -262,12 +243,12 @@ def build(source_path: Path, out_dir: Path) -> dict[str, object]:
     from .parser import parse_source
     from .verifier import verify
 
-    page, core = parse_web_source(source_path.read_text(encoding="utf-8"))
-    program = parse_source(core)
-    if page.name != program.intent.name:
-        raise WebSpecError(f"page {page.name!r} must match intent {program.intent.name!r}")
+    program = parse_source(source_path.read_text(encoding="utf-8"))
+    if program.web_page is None:
+        raise WebSpecError("a web build requires a page block")
     ir = ast_to_ir(program)
-    markup = render_html(page)
+    from .emitter import emit_code
+    markup, _ = emit_code(ir)
     verified = verify(ir, markup, use_calibration=False)
     if not verified.passed:
         raise WebSpecError(f"Vibe heuristic bridge rejected output (score={verified.bridge_score:.4f}); nothing emitted")
