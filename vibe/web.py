@@ -211,19 +211,24 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 if typing_passage is not None or len(typing_lessons) >= 12:
                     raise WebSpecError(f"line {idx + 1}: lessons cannot mix with a passage or exceed 12")
                 match = re.fullmatch(
-                    r'lesson\s+("(?:[^"\\]|\\.)*")\s+difficulty=(beginner|intermediate|advanced):\s*("(?:[^"\\]|\\.)*")',
+                    r'lesson\s+("(?:[^"\\]|\\.)*")(?:\s+pack=("(?:[^"\\]|\\.)*"))?\s+difficulty=(beginner|intermediate|advanced):\s*("(?:[^"\\]|\\.)*")',
                     value,
                 )
                 if not match:
                     raise WebSpecError(f"line {idx + 1}: expected lesson \"Name\" difficulty=beginner: \"passage\"")
                 name = _quoted(match.group(1), idx + 1)
-                phrase = _quoted(match.group(3), idx + 1)
+                pack = _quoted(match.group(2), idx + 1) if match.group(2) else "Core"
+                phrase = _quoted(match.group(4), idx + 1)
+                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{1,39}", pack):
+                    raise WebSpecError(f"line {idx + 1}: pack name must be 2-40 simple characters")
+                if pack not in {item.pack for item in typing_lessons} and len({item.pack for item in typing_lessons}) >= 8:
+                    raise WebSpecError(f"line {idx + 1}: at most eight lesson packs are allowed")
                 if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{1,39}", name):
                     raise WebSpecError(f"line {idx + 1}: lesson name must be 2-40 simple characters")
                 if any(item.name == name for item in typing_lessons):
                     raise WebSpecError(f"line {idx + 1}: duplicate typing lesson name")
                 _validate_typing_passage(phrase, idx + 1)
-                typing_lessons.append(WebTypingLesson(name, match.group(2), phrase))
+                typing_lessons.append(WebTypingLesson(name, match.group(3), phrase, pack))
             else:
                 raise WebSpecError(f"line {idx + 1}: expected one typing passage or named lessons")
         elif n == 4 and section == "state":
@@ -479,6 +484,13 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 .vibe-typing-curriculum select:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
 .vibe-typing-saved{margin-top:1rem;border-top:1px solid #465d80;padding-top:.8rem}
 .vibe-typing-saved p{font-size:.9rem;margin:.4rem 0}
+.vibe-heatmap-section{margin:1rem 0}.vibe-heatmap-section h3{margin:.5rem 0}.vibe-heatmap-section p{font-size:.83rem;color:#c7d5e8}
+#vibe-typing-heatmap{display:flex;flex-wrap:wrap;gap:.25rem;max-width:620px}
+.vibe-key{display:inline-flex;align-items:center;justify-content:center;background:#22314c;border:1px solid #526482;border-radius:5px;min-width:30px;min-height:34px;font:600 .85rem ui-monospace,monospace}
+.vibe-key-space{min-width:105px}
+.vibe-key-error{background:#914447;color:#fff;border-color:#ffada0}
+.vibe-key-heavy{background:#b33034;color:#fff;border-color:#ffcf9c}
+#vibe-typing-history{font-size:.85rem;line-height:1.6;color:#e0ebf9;padding-left:1.4rem}
 .vibe-typing-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin:1rem 0}
 .vibe-typing-metrics>div{background:#1a2943;padding:.55rem .8rem;border-radius:10px}
 .vibe-typing-metrics dt{font-size:.85rem;color:#bdd4f1}.vibe-typing-metrics dd{font-size:1.25rem;font-weight:750;margin:0}
@@ -733,6 +745,7 @@ _SCRIPT = r"""
     ];
     const difficultySelect = document.getElementById('vibe-typing-difficulty');
     const lessonSelect = document.getElementById('vibe-typing-lesson');
+    const packSelect = document.getElementById('vibe-typing-pack');
     const input = document.getElementById('vibe-typing-input');
     const display = document.getElementById('vibe-typing-passage');
     const readable = document.getElementById('vibe-typing-readable');
@@ -749,12 +762,19 @@ _SCRIPT = r"""
     const completionNode = savedMode ? document.getElementById('vibe-typing-completed') : null;
     const bestNode = savedMode ? document.getElementById('vibe-typing-best') : null;
     const clearButton = savedMode ? document.getElementById('vibe-typing-clear') : null;
+    const historyNode = savedMode ? document.getElementById('vibe-typing-history') : null;
+    const rawAccuracyNode = document.getElementById('vibe-typing-attempt-accuracy');
+    const keyNodes = [...document.querySelectorAll('[data-vibe-key]')];
     let selected = 0;
     let passage = Array.from(lessons[0].passage);
     let startedAt = null;
     let endedAt = null;
     let timer = null;
     let completed = Object.create(null);
+    let priorTyped = [];
+    let attemptCharacters = 0;
+    let attemptMistakes = 0;
+    let keyErrors = Object.create(null);
     const stopTimer = () => {
       if (timer !== null) window.clearInterval(timer);
       timer = null;
@@ -765,10 +785,20 @@ _SCRIPT = r"""
           !record.completed || typeof record.completed !== 'object' ||
           Array.isArray(record.completed)) return false;
       const names = new Set(lessons.map(item => item.name));
-      return Object.entries(record.completed).every(([name, value]) =>
-        names.has(name) && value && typeof value === 'object' &&
-        Object.keys(value).length === 1 && Number.isSafeInteger(value.bestWpm) &&
-        value.bestWpm >= 0 && value.bestWpm <= 5000);
+      const validAttempt = item => item && typeof item === 'object' &&
+        !Array.isArray(item) && Object.keys(item).length === 3 &&
+        Number.isSafeInteger(item.wpm) && item.wpm >= 0 && item.wpm <= 5000 &&
+        Number.isSafeInteger(item.accuracy) && item.accuracy >= 0 && item.accuracy <= 100 &&
+        Number.isSafeInteger(item.errors) && item.errors >= 0 && item.errors <= 5000;
+      return Object.entries(record.completed).every(([name, value]) => {
+        if (!names.has(name) || !value || typeof value !== 'object' || Array.isArray(value)) return false;
+        const keys = Object.keys(value);
+        if (!keys.includes('bestWpm') || keys.some(key => !['bestWpm', 'history'].includes(key)) ||
+            !Number.isSafeInteger(value.bestWpm) || value.bestWpm < 0 || value.bestWpm > 5000) return false;
+        return !('history' in value) ||
+          (Array.isArray(value.history) && value.history.length <= 10 &&
+           value.history.every(validAttempt));
+      });
     };
     const showSaved = () => {
       if (!savedMode) return;
@@ -777,6 +807,14 @@ _SCRIPT = r"""
       const record = completed[lessons[selected].name];
       bestNode.textContent = 'Best WPM for ' + lessons[selected].name + ': ' +
         (record ? record.bestWpm : 'not yet recorded');
+      const entries = record && Array.isArray(record.history) ? record.history.slice().reverse() : [];
+      const items = entries.map(item => {
+        const li = document.createElement('li');
+        li.textContent = item.wpm + ' WPM, ' + item.accuracy +
+          '% attempt accuracy, ' + item.errors + ' corrected or uncorrected errors';
+        return li;
+      });
+      historyNode.replaceChildren(...items);
     };
     if (savedMode) {
       try {
@@ -792,11 +830,21 @@ _SCRIPT = r"""
         saveStatus.textContent = 'Saved progress unavailable or incompatible; starting fresh.';
       }
     }
-    const recordCompletion = (wpm) => {
+    const recordCompletion = (wpm, rawAccuracy, errors) => {
       if (!savedMode) return;
       const name = lessons[selected].name;
       const previous = completed[name];
-      completed[name] = { bestWpm: Math.max(previous ? previous.bestWpm : 0, wpm) };
+      const history = previous && Array.isArray(previous.history) ?
+        previous.history.slice(-9) : [];
+      history.push({
+        wpm: Math.min(5000, wpm),
+        accuracy: rawAccuracy,
+        errors: Math.min(5000, errors)
+      });
+      completed[name] = {
+        bestWpm: Math.min(5000, Math.max(previous ? previous.bestWpm : 0, wpm)),
+        history
+      };
       try {
         window.localStorage.setItem(storageKey, JSON.stringify({
           version: 1, page: config.page_id, completed
@@ -807,8 +855,32 @@ _SCRIPT = r"""
       }
       showSaved();
     };
+    const updateHeatmap = () => {
+      for (const node of keyNodes) {
+        const count = keyErrors[node.dataset.vibeKey] || 0;
+        node.className = 'vibe-key' + (node.dataset.vibeKey === ' ' ? ' vibe-key-space' : '') +
+          (count >= 3 ? ' vibe-key-heavy' : count ? ' vibe-key-error' : '');
+        const key = node.dataset.vibeKey === ' ' ? 'Space' : node.textContent;
+        node.setAttribute('aria-label', key + ', ' + count + ' errors this attempt');
+      }
+    };
     const update = () => {
       const typed = Array.from(input.value).slice(0, passage.length);
+      if (typed.length > priorTyped.length &&
+          priorTyped.every((value, index) => typed[index] === value)) {
+        for (let index = priorTyped.length; index < typed.length; index++) {
+          attemptCharacters++;
+          if (typed[index] !== passage[index]) {
+            attemptMistakes++;
+            const expected = passage[index].toLowerCase();
+            if (/^[a-z]$/.test(expected) || expected === ' ') {
+              keyErrors[expected] = (keyErrors[expected] || 0) + 1;
+            }
+          }
+        }
+      }
+      priorTyped = typed;
+      updateHeatmap();
       const now = performance.now();
       if (typed.length > 0 && startedAt === null) {
         startedAt = now;
@@ -848,13 +920,16 @@ _SCRIPT = r"""
       accuracyNode.textContent = (typed.length ? Math.round(100 * correct / typed.length) : 100) + '%';
       wpmNode.textContent = String(wpm);
       errorNode.textContent = String(mistakes);
+      const rawAccuracy = attemptCharacters ?
+        Math.round(100 * Math.max(0, attemptCharacters - attemptMistakes) / attemptCharacters) : 100;
+      rawAccuracyNode.textContent = rawAccuracy + '%';
       elapsedNode.textContent = elapsed.toFixed(1) + 's';
       if (complete) status.textContent = 'Lesson complete! Great precision.';
       else if (typed.length === passage.length) status.textContent = 'Fix the highlighted mistakes to finish.';
       else if (mistakes) status.textContent = 'Mistakes highlighted. Backspace to correct.';
       else if (typed.length) status.textContent = 'Keep going. Every space counts.';
       else status.textContent = 'Ready to type.';
-      if (firstCompletion) recordCompletion(wpm);
+      if (firstCompletion) recordCompletion(wpm, rawAccuracy, attemptMistakes);
     };
     const startLesson = (index) => {
       stopTimer();
@@ -862,6 +937,10 @@ _SCRIPT = r"""
       passage = Array.from(lessons[index].passage);
       startedAt = null;
       endedAt = null;
+      priorTyped = [];
+      attemptCharacters = 0;
+      attemptMistakes = 0;
+      keyErrors = Object.create(null);
       input.disabled = false;
       input.value = '';
       input.maxLength = passage.length;
@@ -874,8 +953,10 @@ _SCRIPT = r"""
     if (lessonSelect) {
       const filterLessons = () => {
         const difficulty = difficultySelect.value;
+        const pack = packSelect ? packSelect.value : 'all';
         const candidates = lessons.map((item, index) => ({ ...item, index }))
-          .filter(item => difficulty === 'all' || item.difficulty === difficulty);
+          .filter(item => (difficulty === 'all' || item.difficulty === difficulty) &&
+            (pack === 'all' || (item.pack || 'Core') === pack));
         const options = candidates.map(item => {
           const option = document.createElement('option');
           option.value = String(item.index);
@@ -887,9 +968,17 @@ _SCRIPT = r"""
           const next = candidates.some(item => item.index === selected) ?
             selected : candidates[0].index;
           startLesson(next);
+        } else {
+          stopTimer();
+          input.value = '';
+          input.disabled = true;
+          lessonSelect.disabled = true;
+          status.textContent = 'No lessons match these filters.';
         }
+        if (candidates.length) lessonSelect.disabled = false;
       };
       difficultySelect.addEventListener('change', filterLessons);
+      if (packSelect) packSelect.addEventListener('change', filterLessons);
       lessonSelect.addEventListener('change', () => startLesson(Number(lessonSelect.value)));
     }
     input.addEventListener('input', update);
@@ -1025,7 +1114,7 @@ def render_html(page: WebPage) -> str:
         if page.typing.lessons:
             typing_config = {
                 "lessons": [
-                    {"name": lesson.name, "difficulty": lesson.difficulty, "passage": lesson.passage}
+                    {"name": lesson.name, "difficulty": lesson.difficulty, "passage": lesson.passage, "pack": lesson.pack}
                     for lesson in page.typing.lessons
                 ],
                 "progress": page.typing.progress,
@@ -1073,8 +1162,18 @@ def render_html(page: WebPage) -> str:
                 f'<option value="{i}">{escape(lesson.name)} ({escape(lesson.difficulty)})</option>'
                 for i, lesson in enumerate(lessons)
             )
+            packs = list(dict.fromkeys(lesson.pack for lesson in lessons))
+            pack_markup = ""
+            if len(packs) > 1:
+                pack_options = "".join(
+                    f'<option value="{escape(pack, quote=True)}">{escape(pack)}</option>'
+                    for pack in packs
+                )
+                pack_markup = f"""<div><label for="vibe-typing-pack">Lesson pack</label>
+          <select id="vibe-typing-pack"><option value="all">All packs</option>{pack_options}</select></div>"""
             curriculum_markup = f"""
       <div class="vibe-typing-curriculum">
+        {pack_markup}
         <div><label for="vibe-typing-difficulty">Difficulty</label>
           <select id="vibe-typing-difficulty">
             <option value="all">All difficulties</option>
@@ -1091,9 +1190,17 @@ def render_html(page: WebPage) -> str:
       <div class="vibe-typing-saved">
         <p id="vibe-typing-completed">0 lessons completed</p>
         <p id="vibe-typing-best">Best WPM: not yet recorded</p>
+        <h3>Recent lesson results</h3>
+        <ol id="vibe-typing-history" aria-label="Recent attempts for selected lesson"></ol>
         <button type="button" id="vibe-typing-clear">Clear saved progress</button>
         <p id="vibe-typing-save-status" role="status" aria-live="polite"></p>
       </div>"""
+        heat_keys = "QWERTYUIOPASDFGHJKLZXCVBNM"
+        heat_markup = "".join(
+            f'<span class="vibe-key" data-vibe-key="{key.lower()}" aria-label="{key} zero errors">{key}</span>'
+            for key in heat_keys
+        )
+        heat_markup += '<span class="vibe-key vibe-key-space" data-vibe-key=" " aria-label="Space zero errors">Space</span>'
         typing_markup = f"""
     <section id="vibe-typing" aria-label="Typing dojo">
       <h2>Keyboard dojo</h2>
@@ -1111,8 +1218,14 @@ def render_html(page: WebPage) -> str:
         <div><dt>Accuracy</dt><dd id="vibe-typing-accuracy">100%</dd></div>
         <div><dt>WPM</dt><dd id="vibe-typing-wpm">0</dd></div>
         <div><dt>Errors</dt><dd id="vibe-typing-errors">0</dd></div>
+        <div><dt>Attempt accuracy</dt><dd id="vibe-typing-attempt-accuracy">100%</dd></div>
         <div><dt>Elapsed</dt><dd id="vibe-typing-elapsed">0.0s</dd></div>
       </dl>
+      <div class="vibe-heatmap-section">
+        <h3>Keyboard trouble spots</h3>
+        <p>Highlighted keys show characters missed during this attempt, even after you correct them.</p>
+        <div id="vibe-typing-heatmap" role="group" aria-label="Keyboard error heatmap">{heat_markup}</div>
+      </div>
       <button type="button" id="vibe-typing-reset">Restart lesson</button>
       <p role="status" aria-live="polite" id="vibe-typing-status">Ready to type.</p>
 {progress_markup}

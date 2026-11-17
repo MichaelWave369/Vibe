@@ -165,6 +165,7 @@ class IRWebTypingLesson:
     name_ref: str
     difficulty_ref: str
     passage_ref: str
+    pack_ref: str | None = None
 
 
 @dataclass(slots=True)
@@ -350,6 +351,7 @@ class IR:
                         name=str(self._value(item.name_ref).data),
                         difficulty=str(self._value(item.difficulty_ref).data),
                         passage=str(self._value(item.passage_ref).data),
+                        pack=str(self._value(item.pack_ref).data) if item.pack_ref else "Core",
                     )
                     for item in p.typing.lessons
                 ),
@@ -755,6 +757,7 @@ def ast_to_ir(program: Program) -> IR:
                         name_ref=b.const("string", "literal", lesson.name),
                         difficulty_ref=b.const("symbol", "literal", lesson.difficulty),
                         passage_ref=b.const("string", "literal", lesson.passage),
+                        pack_ref=b.const("string", "literal", lesson.pack),
                     )
                     for lesson in p.typing.lessons
                 ],
@@ -1027,6 +1030,8 @@ def validate_ir(ir: IR) -> None:
                 refs.append(page.typing.progress_ref)
             for lesson in page.typing.lessons:
                 refs.extend([lesson.name_ref, lesson.difficulty_ref, lesson.passage_ref])
+                if lesson.pack_ref:
+                    refs.append(lesson.pack_ref)
         for item in page.inputs:
             refs.extend([item.label_ref, item.variable_ref])
         refs.extend(page.text_state_refs.values())

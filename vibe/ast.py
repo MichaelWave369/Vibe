@@ -188,10 +188,11 @@ class WebComponent:
 
 @dataclass(frozen=True, slots=True)
 class WebTypingLesson:
-    """One named, compiler-validated keyboard lesson."""
+    """One named, compiler-validated keyboard lesson within a pack."""
     name: str
     difficulty: str
     passage: str
+    pack: str = "Core"
 
 
 @dataclass(frozen=True, slots=True)

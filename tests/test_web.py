@@ -653,3 +653,80 @@ def test_typing_course_vibec_native_compile(tmp_path):
     html = spec.with_suffix(".html").read_text(encoding="utf-8")
     assert 'id="vibe-typing-lesson"' in html
     assert '"progress":"local"' in html
+
+
+PACKS = Path("vibe/examples/web_typing_packs.vibe")
+
+
+def test_phase3i_named_lesson_packs_typed_ir_and_render():
+    import re
+    from vibe.parser import parse_source
+    from vibe.ir import ast_to_ir, serialize_ir
+    from vibe.emitter import emit_code
+
+    program = parse_source(PACKS.read_text(encoding="utf-8"))
+    typing = program.web_page.typing
+    assert typing is not None
+    assert len(typing.lessons) == 4
+    assert [lesson.pack for lesson in typing.lessons] == [
+        "Foundations", "Foundations", "Symbols", "Symbols"
+    ]
+    assert [lesson.difficulty for lesson in typing.lessons] == [
+        "beginner", "intermediate", "advanced", "intermediate"
+    ]
+    ir = ast_to_ir(program)
+    assert ir.web_page is not None
+    assert ir.web_page.typing == typing
+    assert '"pack_ref"' in serialize_ir(ir)
+    html, backend = emit_code(ir)
+    assert backend.target == "web"
+    assert 'id="vibe-typing-pack"' in html
+    assert 'id="vibe-typing-heatmap"' in html
+    assert 'id="vibe-typing-history"' in html
+    assert 'id="vibe-typing-attempt-accuracy"' in html
+    assert html.count('data-vibe-key=') == 27
+    match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
+    assert match is not None
+    payload = json.loads(match.group(1))
+    assert payload["typing"]["lessons"][0]["pack"] == "Foundations"
+    assert payload["typing"]["lessons"][2]["pack"] == "Symbols"
+    assert payload["typing"]["storage_key"] == "vibeweb:typing:v1:TypingPacks"
+
+
+def test_phase3i_pack_grammar_rejects_invalid_names_and_preserves_old_source():
+    source = PACKS.read_text(encoding="utf-8")
+    with pytest.raises(WebSpecError, match="pack name"):
+        parse_web_source(source.replace('pack="Foundations"', 'pack="<script>"'))
+    with pytest.raises(WebSpecError, match="pack name"):
+        parse_web_source(source.replace('pack="Foundations"', 'pack="A"'))
+    with pytest.raises(WebSpecError, match="expected lesson"):
+        parse_web_source(source.replace('pack="Foundations"', 'pack=Foundations'))
+    page, _ = parse_web_source(COURSE.read_text(encoding="utf-8"))
+    assert page.typing is not None
+    assert all(lesson.pack == "Core" for lesson in page.typing.lessons)
+    assert 'id="vibe-typing-pack"' not in render_html(page)
+
+
+def test_phase3i_pack_markup_escapes_names_and_limits_storage_to_opt_in():
+    source = PACKS.read_text(encoding="utf-8").replace("    progress: local\n", "")
+    page, _ = parse_web_source(source)
+    html = render_html(page)
+    assert 'id="vibe-typing-history"' not in html
+    assert 'id="vibe-typing-pack"' in html
+    assert 'id="vibe-typing-heatmap"' in html
+    assert '"progress":"none"' in html
+    # Pack titles are bounded by the grammar, rather than ever interpreted as HTML.
+    with pytest.raises(WebSpecError, match="pack name"):
+        parse_web_source(PACKS.read_text(encoding="utf-8").replace(
+            'pack="Symbols"', 'pack="</option><script>alert(1)</script>"'
+        ))
+
+
+def test_phase3i_packs_native_vibec_compile(tmp_path):
+    from vibe.cli import main
+    source = tmp_path / "packs.vibe"
+    source.write_text(PACKS.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["compile", str(source), "--no-cache"]) == 0
+    html = source.with_suffix(".html").read_text(encoding="utf-8")
+    assert 'id="vibe-typing-pack"' in html
+    assert 'data-vibe-key=" "' in html

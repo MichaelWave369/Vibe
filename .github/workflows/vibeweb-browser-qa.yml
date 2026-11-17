@@ -28,6 +28,7 @@ jobs:
           python -m vibe.web vibe/examples/web_drafts.vibe --out dist-qa
           python -m vibe.web vibe/examples/web_typing_dojo.vibe --out dist-qa-typing
           python -m vibe.web vibe/examples/web_typing_course.vibe --out dist-qa-course
+          python -m vibe.web vibe/examples/web_typing_packs.vibe --out dist-qa-packs
       - name: Install QA dependencies
         run: npm install --prefix qa/vibeweb --no-audit --no-fund
       - name: Build equivalent React/Svelte apps

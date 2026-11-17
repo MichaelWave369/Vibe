@@ -9,6 +9,7 @@ try {
     ["/dist-qa-instances/index.html", "Two counters. One language."],
     ["/dist-qa-typing/index.html", "Keyboard Dojo · First Lesson"],
     ["/dist-qa-course/index.html", "Keyboard Dojo · Training Grounds"],
+    ["/dist-qa-packs/index.html", "Keyboard Dojo · Lesson Packs"],
     ["/qa/vibeweb/dist-react/index.html", "React Counter Baseline"],
     ["/qa/vibeweb/dist-svelte/index.html", "Svelte Counter Baseline"],
   ]) {
