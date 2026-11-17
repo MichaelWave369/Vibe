@@ -136,6 +136,9 @@ class IRWebComponent:
     name_ref: str
     text_refs: list[str]
     buttons: list[IRWebButton]
+    props_refs: list[str] = field(default_factory=list)
+    state_refs: dict[str, str] = field(default_factory=dict)
+    bounds_refs: dict[str, tuple[str, str]] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -149,6 +152,7 @@ class IRWebPage:
     buttons: list[IRWebButton]
     components: dict[str, IRWebComponent] = field(default_factory=dict)
     uses_refs: list[str] = field(default_factory=list)
+    use_prop_refs: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -309,6 +313,12 @@ class IR:
                 name: WebComponent(
                     name=str(self._value(component.name_ref).data),
                     texts=[str(self._value(ref).data) for ref in component.text_refs],
+                    props=[str(self._value(ref).data) for ref in component.props_refs],
+                    state={key: int(self._value(ref).data) for key, ref in component.state_refs.items()},
+                    bounds={
+                        key: (int(self._value(lo).data), int(self._value(hi).data))
+                        for key, (lo, hi) in component.bounds_refs.items()
+                    },
                     buttons=[
                         WebButton(
                             label=str(self._value(btn.label_ref).data),
@@ -322,6 +332,10 @@ class IR:
                 for name, component in p.components.items()
             },
             uses=[str(self._value(ref).data) for ref in p.uses_refs],
+            use_props=[
+                {key: str(self._value(ref).data) for key, ref in props.items()}
+                for props in p.use_prop_refs
+            ],
         )
 
     @property
@@ -641,11 +655,21 @@ def ast_to_ir(program: Program) -> IR:
                 name: IRWebComponent(
                     name_ref=b.const("symbol", "identifier", component.name),
                     text_refs=[b.const("string", "literal", text) for text in component.texts],
+                    props_refs=[b.const("symbol", "identifier", key) for key in component.props],
+                    state_refs={key: b.const("number", "literal", float(value)) for key, value in component.state.items()},
+                    bounds_refs={
+                        key: (b.const("number", "literal", float(lo)), b.const("number", "literal", float(hi)))
+                        for key, (lo, hi) in component.bounds.items()
+                    },
                     buttons=[web_button_refs(button) for button in component.buttons],
                 )
                 for name, component in p.components.items()
             },
             uses_refs=[b.const("symbol", "identifier", name) for name in p.uses],
+            use_prop_refs=[
+                {key: b.const("string", "literal", value) for key, value in props.items()}
+                for props in p.use_props
+            ],
         )
 
     module = IRModule(
@@ -879,9 +903,15 @@ def validate_ir(ir: IR) -> None:
         for button in page.buttons:
             refs.extend([button.label_ref, button.variable_ref, button.operation_ref, button.value_ref])
         refs.extend(page.uses_refs)
+        for props in page.use_prop_refs:
+            refs.extend(props.values())
         for component in page.components.values():
             refs.append(component.name_ref)
             refs.extend(component.text_refs)
+            refs.extend(component.props_refs)
+            refs.extend(component.state_refs.values())
+            for low_ref, high_ref in component.bounds_refs.values():
+                refs.extend([low_ref, high_ref])
             for button in component.buttons:
                 refs.extend([button.label_ref, button.variable_ref, button.operation_ref, button.value_ref])
 
@@ -915,6 +945,9 @@ def serialize_ir(ir: IR) -> str:
                     name: {
                         "name_ref": component.name_ref,
                         "text_refs": component.text_refs,
+                        "props_refs": component.props_refs,
+                        "state_refs": component.state_refs,
+                        "bounds_refs": component.bounds_refs,
                         "buttons": [_obj_dict(button) for button in component.buttons],
                     }
                     for name, component in ir.module.web_page.components.items()
