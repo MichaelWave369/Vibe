@@ -47,7 +47,7 @@ def _integer(text: str, line: int) -> int:
 
 def _parse_use(text: str, line: int) -> tuple[str, dict[str, str]]:
     """Parse a component use and bounded JSON-quoted string properties."""
-    match = re.fullmatch(r"use\\s+([A-Za-z_][A-Za-z0-9_]*)(.*)", text)
+    match = re.fullmatch(r"use\s+([A-Za-z_][A-Za-z0-9_]*)(.*)", text)
     if not match:
         raise WebSpecError(f"line {line}: expected use ComponentName [prop=\\\"value\\\"]")
     name, rest = match.groups()
@@ -55,7 +55,7 @@ def _parse_use(text: str, line: int) -> tuple[str, dict[str, str]]:
     decoder = json.JSONDecoder()
     while rest.strip():
         rest = rest.lstrip()
-        prop = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*", rest)
+        prop = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*", rest)
         if prop is None or len(args) >= 16:
             raise WebSpecError(f"line {line}: invalid component prop assignment")
         key = prop.group(1)
@@ -169,7 +169,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                     raise WebSpecError(f"line {idx + 1}: duplicate prop or prop limit exceeded")
                 current_component.props.append(prop_name)
             elif value.startswith("state "):
-                match = re.fullmatch(r"state ([A-Za-z_][A-Za-z0-9_]*):\\s*(-?\\d{1,12})", value)
+                match = re.fullmatch(r"state ([A-Za-z_][A-Za-z0-9_]*):\s*(-?\d{1,12})", value)
                 if not match:
                     raise WebSpecError(f"line {idx + 1}: expected state name: integer")
                 key, number = match.groups()
@@ -177,7 +177,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                     raise WebSpecError(f"line {idx + 1}: duplicate local state or state limit exceeded")
                 current_component.state[key] = int(number)
             elif value.startswith("bounds "):
-                match = re.fullmatch(r"bounds ([A-Za-z_][A-Za-z0-9_]*):\\s*(-?\\d{1,12})\\.\\.(-?\\d{1,12})", value)
+                match = re.fullmatch(r"bounds ([A-Za-z_][A-Za-z0-9_]*):\s*(-?\d{1,12})\.\.(-?\d{1,12})", value)
                 if not match:
                     raise WebSpecError(f"line {idx + 1}: expected bounds name: min..max")
                 key, lower, upper = match.groups()
