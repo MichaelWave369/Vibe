@@ -170,6 +170,8 @@ class IRWebPage:
     text_refs: list[str]
     buttons: list[IRWebButton]
     layout_ref: str | None = None
+    submit_label_ref: str | None = None
+    persistence_ref: str | None = None
     inputs: list[IRWebInput] = field(default_factory=list)
     text_field_refs: list[IRWebStringField] = field(default_factory=list)
     text_state_refs: dict[str, str] = field(default_factory=dict)
@@ -324,6 +326,8 @@ class IR:
             },
             texts=[str(self._value(ref).data) for ref in p.text_refs],
             layout=str(self._value(p.layout_ref).data) if p.layout_ref else "stack",
+            submit_label=str(self._value(p.submit_label_ref).data) if p.submit_label_ref else "",
+            persistence=str(self._value(p.persistence_ref).data) if p.persistence_ref else "none",
             inputs=[WebInput(str(self._value(i.label_ref).data), str(self._value(i.variable_ref).data)) for i in p.inputs],
             text_state={name: str(self._value(ref).data) for name, ref in p.text_state_refs.items()},
             text_fields=[
@@ -715,6 +719,8 @@ def ast_to_ir(program: Program) -> IR:
             },
             text_refs=[b.const("string", "literal", value) for value in p.texts],
             layout_ref=b.const("symbol", "literal", p.layout),
+            submit_label_ref=b.const("string", "literal", p.submit_label) if p.submit_label else None,
+            persistence_ref=b.const("symbol", "literal", p.persistence),
             inputs=[web_input_refs(item) for item in p.inputs],
             text_state_refs={key: b.const("string", "literal", value) for key, value in p.text_state.items()},
             text_field_refs=[web_string_field_refs(item) for item in p.text_fields],
@@ -971,6 +977,10 @@ def validate_ir(ir: IR) -> None:
         refs.extend(page.text_refs)
         if page.layout_ref:
             refs.append(page.layout_ref)
+        if page.submit_label_ref:
+            refs.append(page.submit_label_ref)
+        if page.persistence_ref:
+            refs.append(page.persistence_ref)
         for item in page.inputs:
             refs.extend([item.label_ref, item.variable_ref])
         refs.extend(page.text_state_refs.values())
