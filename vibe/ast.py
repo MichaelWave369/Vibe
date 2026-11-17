@@ -155,6 +155,14 @@ class WebButton:
 
 
 @dataclass(slots=True)
+class WebComponent:
+    """Reusable bounded view fragment sharing its parent page's state."""
+    name: str
+    texts: list[str] = field(default_factory=list)
+    buttons: list[WebButton] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class WebPage:
     """Page syntax node with no arbitrary script evaluation."""
     name: str
@@ -164,6 +172,8 @@ class WebPage:
     texts: list[str] = field(default_factory=list)
     buttons: list[WebButton] = field(default_factory=list)
     bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
+    components: dict[str, WebComponent] = field(default_factory=dict)
+    uses: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field, fields
 from typing import Literal
 
-from .ast import Program, WebPage, WebButton
+from .ast import Program, WebPage, WebButton, WebComponent
 
 DEFAULT_EPSILON_FLOOR = 0.02
 DEFAULT_MEASUREMENT_SAFE_RATIO = 0.85
@@ -132,6 +132,13 @@ class IRWebButton:
 
 
 @dataclass(slots=True)
+class IRWebComponent:
+    name_ref: str
+    text_refs: list[str]
+    buttons: list[IRWebButton]
+
+
+@dataclass(slots=True)
 class IRWebPage:
     name_ref: str
     title_ref: str
@@ -140,6 +147,8 @@ class IRWebPage:
     bounds_refs: dict[str, tuple[str, str]]
     text_refs: list[str]
     buttons: list[IRWebButton]
+    components: dict[str, IRWebComponent] = field(default_factory=dict)
+    uses_refs: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -296,6 +305,23 @@ class IR:
                 )
                 for b in p.buttons
             ],
+            components={
+                name: WebComponent(
+                    name=str(self._value(component.name_ref).data),
+                    texts=[str(self._value(ref).data) for ref in component.text_refs],
+                    buttons=[
+                        WebButton(
+                            label=str(self._value(btn.label_ref).data),
+                            variable=str(self._value(btn.variable_ref).data),
+                            operation=str(self._value(btn.operation_ref).data),
+                            value=int(self._value(btn.value_ref).data),
+                        )
+                        for btn in component.buttons
+                    ],
+                )
+                for name, component in p.components.items()
+            },
+            uses=[str(self._value(ref).data) for ref in p.uses_refs],
         )
 
     @property
@@ -589,6 +615,14 @@ def ast_to_ir(program: Program) -> IR:
     enums_refs = [b.const("named", "type_ref", v) for v in program.enums]
     interfaces_refs = [b.const("named", "type_ref", v) for v in program.interfaces]
 
+    def web_button_refs(button: WebButton) -> IRWebButton:
+        return IRWebButton(
+            label_ref=b.const("string", "literal", button.label),
+            variable_ref=b.const("symbol", "identifier", button.variable),
+            operation_ref=b.const("symbol", "literal", button.operation),
+            value_ref=b.const("number", "literal", float(button.value)),
+        )
+
     web_page_ir = None
     if program.web_page is not None:
         p = program.web_page
@@ -602,15 +636,16 @@ def ast_to_ir(program: Program) -> IR:
                 for k, (lo, hi) in p.bounds.items()
             },
             text_refs=[b.const("string", "literal", value) for value in p.texts],
-            buttons=[
-                IRWebButton(
-                    label_ref=b.const("string", "literal", button.label),
-                    variable_ref=b.const("symbol", "identifier", button.variable),
-                    operation_ref=b.const("symbol", "literal", button.operation),
-                    value_ref=b.const("number", "literal", float(button.value)),
+            buttons=[web_button_refs(button) for button in p.buttons],
+            components={
+                name: IRWebComponent(
+                    name_ref=b.const("symbol", "identifier", component.name),
+                    text_refs=[b.const("string", "literal", text) for text in component.texts],
+                    buttons=[web_button_refs(button) for button in component.buttons],
                 )
-                for button in p.buttons
-            ],
+                for name, component in p.components.items()
+            },
+            uses_refs=[b.const("symbol", "identifier", name) for name in p.uses],
         )
 
     module = IRModule(
@@ -843,6 +878,12 @@ def validate_ir(ir: IR) -> None:
             refs.extend([low_ref, high_ref])
         for button in page.buttons:
             refs.extend([button.label_ref, button.variable_ref, button.operation_ref, button.value_ref])
+        refs.extend(page.uses_refs)
+        for component in page.components.values():
+            refs.append(component.name_ref)
+            refs.extend(component.text_refs)
+            for button in component.buttons:
+                refs.extend([button.label_ref, button.variable_ref, button.operation_ref, button.value_ref])
 
     for ref in refs:
         if ref not in ir.module.values:
@@ -868,8 +909,16 @@ def serialize_ir(ir: IR) -> str:
         "emit_target_ref": ir.module.emit_target_ref,
         "web_page": (
             {
-                **{k: v for k, v in _obj_dict(ir.module.web_page).items() if k != "buttons"},
+                **{k: v for k, v in _obj_dict(ir.module.web_page).items() if k not in {"buttons", "components"}},
                 "buttons": [_obj_dict(button) for button in ir.module.web_page.buttons],
+                "components": {
+                    name: {
+                        "name_ref": component.name_ref,
+                        "text_refs": component.text_refs,
+                        "buttons": [_obj_dict(button) for button in component.buttons],
+                    }
+                    for name, component in ir.module.web_page.components.items()
+                },
             }
             if ir.module.web_page is not None else None
         ),

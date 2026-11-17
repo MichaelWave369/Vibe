@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage
+from .ast import WebButton as Button, WebPage, WebComponent
 from html import escape
 import json
 from pathlib import Path
@@ -24,6 +24,7 @@ _BINDING = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _ACTION = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*(\+=|-=|=)\s*(-?\d+)$")
 _PAGE = re.compile(r"^page ([A-Za-z_][A-Za-z0-9_]*):$")
 _BUTTON = re.compile(r'^button\s+("(?:[^"\\]|\\.)*"):$')
+_COMPONENT = re.compile(r"^component ([A-Za-z_][A-Za-z0-9_]*):$")
 
 
 def _quoted(text: str, line: int) -> str:
@@ -48,8 +49,8 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
     Unsupported constructs fail closed. The returned core source uses the
-    existing typescript target only to pass through the normal Vibe parser;
-    final output is produced by this web emitter, not the TS emitter.
+    existing TypeScript target solely for legacy parsing compatibility;
+    Vibe's native parser records the page AST and the web emitter produces HTML.
     """
     raw = source.splitlines(keepends=True)
     start = None
@@ -74,6 +75,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     page = WebPage(name=name)
     section = ""
     pending_button: tuple[str, int] | None = None
+    current_component: WebComponent | None = None
     for idx in range(start + 1, end):
         line = raw[idx].rstrip("\r\n")
         if not line.strip() or line.lstrip().startswith("#"):
@@ -83,8 +85,11 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         if n % 2:
             raise WebSpecError(f"line {idx + 1}: indent with multiples of two spaces")
         if n == 2:
+            if pending_button:
+                raise WebSpecError(f"line {pending_button[1]}: button missing action")
             pending_button = None
-            if value in {"state:", "view:", "bounds:"}:
+            current_component = None
+            if value in {"state:", "view:", "bounds:", "components:"}:
                 section = value[:-1]
                 continue
             section = ""
@@ -112,12 +117,47 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             if lo > hi:
                 raise WebSpecError(f"line {idx + 1}: minimum exceeds maximum")
             page.bounds[key] = (lo, hi)
+        elif n == 4 and section == "components":
+            if pending_button:
+                raise WebSpecError(f"line {pending_button[1]}: button missing action")
+            match = _COMPONENT.fullmatch(value)
+            if not match:
+                raise WebSpecError(f"line {idx + 1}: expected component Name:")
+            name = match.group(1)
+            if name in page.components or len(page.components) >= 32:
+                raise WebSpecError(f"line {idx + 1}: repeated component or component limit exceeded")
+            current_component = WebComponent(name=name)
+            page.components[name] = current_component
+        elif n == 6 and section == "components" and current_component is not None:
+            if pending_button:
+                raise WebSpecError(f"line {pending_button[1]}: button missing action")
+            if value.startswith("text:"):
+                current_component.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
+            else:
+                match = _BUTTON.fullmatch(value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected component text or button")
+                pending_button = (_quoted(match.group(1), idx + 1), idx + 1)
+        elif n == 8 and section == "components" and current_component is not None and pending_button:
+            if not value.startswith("action:"):
+                raise WebSpecError(f"line {idx + 1}: expected action")
+            match = _ACTION.fullmatch(value.split(":", 1)[1].strip())
+            if not match:
+                raise WebSpecError(f"line {idx + 1}: only integer state assignments supported")
+            variable, operation, amount = match.groups()
+            current_component.buttons.append(Button(pending_button[0], variable, operation, int(amount)))
+            pending_button = None
         elif n == 4 and section == "view":
             if pending_button:
                 raise WebSpecError(f"line {pending_button[1]}: button missing action")
             if value.startswith("text:"):
                 page.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
                 pending_button = None
+            elif value.startswith("use "):
+                name = value[4:].strip()
+                if not _NAME.fullmatch(name) or len(page.uses) >= 64:
+                    raise WebSpecError(f"line {idx + 1}: invalid component use or use limit exceeded")
+                page.uses.append(name)
             else:
                 m = _BUTTON.fullmatch(value)
                 if not m:
@@ -136,9 +176,24 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             raise WebSpecError(f"line {idx + 1}: invalid indentation or unsupported construct")
     if pending_button:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
-    if not page.title or not page.heading or not page.state or not page.texts or not page.buttons:
-        raise WebSpecError("page requires title, heading, state, text, and a button")
-    for b in page.buttons:
+    if not page.title or not page.heading or not page.state:
+        raise WebSpecError("page requires title, heading, and state")
+    for name in page.uses:
+        if name not in page.components:
+            raise WebSpecError(f"unknown component {name!r}")
+    active_components = [page.components[name] for name in page.uses]
+    if not (page.texts or any(component.texts for component in active_components)):
+        raise WebSpecError("page requires at least one visible text")
+    if not (page.buttons or any(component.buttons for component in active_components)):
+        raise WebSpecError("page requires at least one visible button")
+    all_buttons = list(page.buttons)
+    all_texts = list(page.texts)
+    for component in page.components.values():
+        if not component.texts and not component.buttons:
+            raise WebSpecError(f"component {component.name!r} cannot be empty")
+        all_buttons.extend(component.buttons)
+        all_texts.extend(component.texts)
+    for b in all_buttons:
         if b.variable not in page.state:
             raise WebSpecError(f"button {b.label!r} references unknown state {b.variable!r}")
     for key, (lo, hi) in page.bounds.items():
@@ -146,7 +201,7 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             raise WebSpecError(f"bounds references unknown state {key!r}")
         if not (lo <= page.state[key] <= hi):
             raise WebSpecError(f"initial state {key} is outside bounds")
-    for value in page.texts:
+    for value in all_texts:
         for ref in _BINDING.findall(value):
             if ref not in page.state:
                 raise WebSpecError(f"text references unknown state {ref!r}")
@@ -166,6 +221,7 @@ _STYLE = """
 main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #40516c;border-radius:22px;background:#182238;box-shadow:0 20px 70px #0005}
 .tag{font-size:.74rem;text-transform:uppercase;letter-spacing:.18em;color:#a5cdfb;font-weight:800}h1{font-size:clamp(2rem,6vw,3rem);line-height:1.1;margin:.6rem 0 1rem}p{font-size:1.14rem;color:#dbe5f5;overflow-wrap:anywhere}
 .controls{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:1.8rem}button{border:1px solid #7c99c5;color:white;background:#30466e;padding:.8rem 1.2rem;border-radius:12px;font:inherit;cursor:pointer;min-height:44px}
+.vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
 """.strip()
@@ -200,10 +256,37 @@ _SCRIPT = r"""
 
 def render_html(page: WebPage) -> str:
     """Generate deterministic HTML with no framework/runtime dependencies."""
+    texts = list(page.texts)
+    buttons = list(page.buttons)
+    component_sections: list[str] = []
+    for name in page.uses:
+        component = page.components[name]
+        body: list[str] = []
+        for value in component.texts:
+            index = len(texts)
+            texts.append(value)
+            body.append(f'      <p data-vibe-text="{index}" aria-live="polite"></p>')
+        actions: list[str] = []
+        for action in component.buttons:
+            index = len(buttons)
+            buttons.append(action)
+            actions.append(f'        <button type="button" data-vibe-button="{index}">{escape(action.label)}</button>')
+        if actions:
+            body.append('      <div class="controls" role="group" aria-label="Component actions">')
+            body.extend(actions)
+            body.append("      </div>")
+        component_sections.append(
+            '    <section class="vibe-component" aria-label="' + escape(name, quote=True) + '">\n'
+            + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\n'
+            + '\n'.join(body) + '\n    </section>'
+        )
     payload = {
         "state": page.state,
-        "texts": page.texts,
-        "buttons": [vars(b) if hasattr(b, "__dict__") else {"label": b.label, "variable": b.variable, "operation": b.operation, "value": b.value} for b in page.buttons],
+        "texts": texts,
+        "buttons": [
+            {"label": b.label, "variable": b.variable, "operation": b.operation, "value": b.value}
+            for b in buttons
+        ],
         "bounds": page.bounds,
     }
     raw_json = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -211,6 +294,7 @@ def render_html(page: WebPage) -> str:
                  .replace(">", "\\u003e").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
     text_elements = "\n".join(f'    <p data-vibe-text="{i}" aria-live="polite"></p>' for i, _ in enumerate(page.texts))
     controls = "\n".join(f'      <button type="button" data-vibe-button="{i}">{escape(b.label)}</button>' for i, b in enumerate(page.buttons))
+    component_markup = "\n".join(component_sections)
     return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -228,6 +312,7 @@ def render_html(page: WebPage) -> str:
     <div class="controls" role="group" aria-label="Page actions">
 {controls}
     </div>
+{component_markup}
     <footer>Compiled from a .vibe intent. No React, Svelte, or client dependencies.</footer>
   </main>
   <script type="application/json" id="vibe-config">{safe_json}</script>
