@@ -369,3 +369,55 @@ and an automated axe WCAG A/AA scan. WPM is a training approximation;
 accuracy reflects currently correct characters rather than historical errors.
 No anti-paste checks, global leaderboard, user accounts, customizable drills,
 Unicode/IME curriculum, progress export or cross-browser certification yet.
+
+## Phase 3I: named lesson packs, keyboard trouble map, and practice history
+
+Custom lesson packs are authored directly in the source `.vibe` page, compiled
+into a bounded literal curriculum with no server or runtime code evaluation.
+
+```yaml
+typing:
+  progress: local
+  lesson "Double-Space Warmup" pack="Foundations" difficulty=beginner: "Precision matters.  Two spaces are welcome here."
+  lesson "Symbol Sprint" pack="Symbols" difficulty=advanced: "Caps LOCK? No!  Symbols: @ # $ % & *; keep control."
+```
+
+The optional `pack="Name"` attribute is a 2–40-character plain name.
+When omitted, its value defaults to `Core` for backward compatibility. Up
+to 8 distinct packs and 12 lessons remain bounded at compile time. Multiple
+packs add a **Lesson pack** dropdown; it combines with the existing difficulty
+filter. When no lessons match, the typing input is disabled until a valid
+filter is selected.
+
+During a typing attempt, a keyboard trouble map highlights the *expected*
+letters A–Z and Space when a user enters the wrong character. Corrections
+clear the live text mismatch but do not erase counted mistakes. The display
+also includes **Attempt accuracy**, which measures successful appended
+character entries divided by all appended character entries; it differs
+from the existing live **Accuracy** metric that reflects currently correct
+characters. A corrected mistake is still visible in attempt accuracy and
+the trouble map. Paste and mid-string replacement can affect this
+approximate coaching metric, which is **not** a standardized typing score.
+The heatmap is per-session only, resets when changing/restarting lessons,
+and is never stored persistently.
+
+When `progress: local` is declared, completing a lesson stores its previous
+best WPM and the last **10 completed attempt summaries** for that lesson,
+containing only WPM, attempt accuracy, and error count. Typed text, key
+sequences, exact erroneous characters, and full passages are not stored.
+Previous Phase 3H `{bestWpm}` records remain accepted; malformed historical
+records fail closed. The existing **Clear saved progress** button removes the
+history as well. Nothing is transmitted to a server. Same-origin JavaScript
+can read localStorage and browser clearing removes it.
+
+```bash
+vibec compile vibe/examples/web_typing_packs.vibe --no-cache
+python -m vibe.web vibe/examples/web_typing_packs.vibe --out dist-packs
+```
+
+Playwright verifies filters, no-match handling, the per-key heatmap, corrected
+error metrics, persisted summaries, backward compatibility, corruption
+rejection, mobile overflow, and automated axe WCAG A/AA checks. Automated
+checks do not substitute for manual accessibility audits. Custom packs are
+compile-time declarations, **not arbitrary runtime uploads**; no accounts,
+telemetry, multiplayer, editable lesson authoring UI, or online catalog exists.
