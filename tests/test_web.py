@@ -397,3 +397,83 @@ def test_phase3d_compiles_with_standard_vibec(tmp_path):
     assert main(["compile", str(source), "--no-cache"]) == 0
     html = source.with_suffix(".html").read_text(encoding="utf-8")
     assert 'data-vibe-string="5"' in html
+
+
+DRAFTS = Path("vibe/examples/web_drafts.vibe")
+
+
+def test_phase3e_submit_and_persistence_roundtrip():
+    import re
+    from vibe.parser import parse_source
+    from vibe.ir import ast_to_ir, serialize_ir
+    from vibe.emitter import emit_code
+
+    program = parse_source(DRAFTS.read_text(encoding="utf-8"))
+    assert program.web_page is not None
+    assert program.web_page.submit_label == "Save local draft"
+    assert program.web_page.persistence == "local"
+    ir = ast_to_ir(program)
+    assert ir.web_page is not None
+    assert ir.web_page.submit_label == program.web_page.submit_label
+    assert ir.web_page.persistence == "local"
+    assert '"submit_label_ref"' in serialize_ir(ir)
+    assert '"persistence_ref"' in serialize_ir(ir)
+    html, backend = emit_code(ir)
+    assert backend.target == "web"
+    assert html.count('<form id="vibe-form" novalidate>') == 1
+    assert html.count('</form>') == 1
+    assert 'id="vibe-form-status" role="status"' in html
+    assert '<button type="submit">Save local draft</button>' in html
+    match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
+    assert match
+    config = json.loads(match.group(1))
+    assert config["page_id"] == "FormStudio"
+    assert config["persistence"] == "local"
+    assert config["storage_key"] == "vibeweb:draft:v1:FormStudio"
+    assert config["scope_text_states"]["instance_1"]["name"] == "Visitor"
+    assert "vibe:submit" in html
+
+
+def test_phase3e_submit_disabled_in_old_examples():
+    import re
+    page, _ = parse_web_source(TEXT_FORMS.read_text(encoding="utf-8"))
+    assert page.submit_label == ""
+    assert page.persistence == "none"
+    html = render_html(page)
+    assert 'id="vibe-form"' not in html
+    match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
+    assert match
+    config = json.loads(match.group(1))
+    assert config["persistence"] == "none"
+    assert config["storage_key"] is None
+
+
+def test_phase3e_fails_closed_for_invalid_persistence():
+    source = DRAFTS.read_text(encoding="utf-8")
+    with pytest.raises(WebSpecError, match="supports only local"):
+        parse_web_source(source.replace("persist: local", "persist: cloud"))
+    with pytest.raises(WebSpecError, match="requires an explicit submit"):
+        parse_web_source(source.replace('submit: "Save local draft"', ""))
+    with pytest.raises(WebSpecError, match="duplicate submit"):
+        parse_web_source(source.replace('submit: "Save local draft"', 'submit: "Save local draft"\\n  submit: "Again"'))
+    with pytest.raises(WebSpecError, match="duplicate persistence"):
+        parse_web_source(source.replace("persist: local", "persist: local\\n  persist: local"))
+
+
+def test_phase3e_submit_label_escaped():
+    source = DRAFTS.read_text(encoding="utf-8").replace(
+        'submit: "Save local draft"', 'submit: "<img src=x onerror=alert(1)>"'
+    )
+    page, _ = parse_web_source(source)
+    html = render_html(page)
+    assert "&lt;img" in html
+    assert "<img src=x onerror=alert(1)>" not in html
+
+
+def test_phase3e_standard_compiler_builds_local_draft(tmp_path):
+    from vibe.cli import main
+
+    path = tmp_path / "draft.vibe"
+    path.write_text(DRAFTS.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["compile", str(path), "--no-cache"]) == 0
+    assert 'id="vibe-form-status"' in path.with_suffix(".html").read_text(encoding="utf-8")
