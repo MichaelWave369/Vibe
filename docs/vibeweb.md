@@ -53,3 +53,30 @@ tests, improve formal obligations, and benchmark against React/Svelte.
 5. optional WASM/WebGPU backends, without imposing them on simple pages
 
 For now, treat this as a controlled experiment in intent-preserving compilation.
+
+
+## Phase 2: native AST, typed IR, and a standard web emitter
+
+Vibe's primary parser now recognizes the bounded `page` block, attaching a
+typed WebPage object to Program. Title, heading, state, bounds, text and
+button actions lower into typed SSA references. The normal emitter registry
+supports `emit web`.
+
+The existing standalone build still emits `dist/index.html` and a bounded
+verification report:
+
+```bash
+python -m vibe.web vibe/examples/web_counter.vibe --out dist
+```
+
+The standard Vibe compile command now also handles the web target, producing
+HTML beside the input `.vibe` file:
+
+```bash
+vibec compile vibe/examples/web_counter.vibe --no-cache
+```
+
+The HTML target is deterministic and deliberately bypasses the multi-candidate
+synthesis pipeline, so `--with-tests` and `--refine` are not supported yet.
+The preservation bridge is heuristic. Passing its gate is not a proof of
+browser behavior, comprehensive security, or accessibility compliance.
