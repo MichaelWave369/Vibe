@@ -8,6 +8,5 @@ export default defineConfig({
   build: {
     outDir: fileURLToPath(new URL("./dist-svelte/", import.meta.url)),
     emptyOutDir: true,
-    minify: "esbuild",
   },
 });
