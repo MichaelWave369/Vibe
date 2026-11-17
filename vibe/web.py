@@ -386,9 +386,9 @@ def render_html(page: WebPage) -> str:
             body.extend(actions)
             body.append("      </div>")
         component_sections.append(
-            '    <section class="vibe-component" aria-label="' + escape(name, quote=True) + '">\\n'
-            + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\\n'
-            + '\\n'.join(body) + '\\n    </section>'
+            '    <section class="vibe-component" aria-label="' + escape(name, quote=True) + '">\n'
+            + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\n'
+            + '\n'.join(body) + '\n    </section>'
         )
     payload = {
         "state": page.state,
