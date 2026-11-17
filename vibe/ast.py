@@ -187,9 +187,19 @@ class WebComponent:
 
 
 @dataclass(frozen=True, slots=True)
-class WebTyping:
-    """Single bounded, literal typing exercise, with no executable source."""
+class WebTypingLesson:
+    """One named, compiler-validated keyboard lesson."""
+    name: str
+    difficulty: str
     passage: str
+
+
+@dataclass(frozen=True, slots=True)
+class WebTyping:
+    """Bounded keyboard lesson or optional multi-lesson curriculum."""
+    passage: str = ""
+    lessons: tuple[WebTypingLesson, ...] = ()
+    progress: str = "none"
 
 
 @dataclass(slots=True)
