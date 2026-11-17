@@ -240,10 +240,13 @@ def render_html(page: WebPage) -> str:
 def build(source_path: Path, out_dir: Path) -> dict[str, object]:
     """Compile only if bounded VibeWeb checks AND Vibe bridge check pass."""
     from .ir import ast_to_ir
-    from .parser import parse_source
+    from .parser import parse_source, ParseError
     from .verifier import verify
 
-    program = parse_source(source_path.read_text(encoding="utf-8"))
+    try:
+        program = parse_source(source_path.read_text(encoding="utf-8"))
+    except ParseError as exc:
+        raise WebSpecError(str(exc)) from exc
     if program.web_page is None:
         raise WebSpecError("a web build requires a page block")
     ir = ast_to_ir(program)
