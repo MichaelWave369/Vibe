@@ -66,3 +66,19 @@ dojo results are not included in those framework performance figures.
 python -m vibe.web vibe/examples/web_typing_dojo.vibe --out dist-qa-typing
 npm run test:browser --prefix qa/vibeweb
 ```
+
+## Phase 3H: full typing curriculum QA
+
+`vibe/examples/web_typing_course.vibe` compiles three lesson levels and a
+browser-local, opt-in progress store. The Playwright suite
+`tests/typing-course.spec.mjs` checks actual lesson changes, exact double
+spaces, score storage and reload, clearing progress, malformed-storage
+rejection, mobile behavior and axe scanning.
+
+```bash
+python -m vibe.web vibe/examples/web_typing_course.vibe --out dist-qa-course
+npm run test:browser --prefix qa/vibeweb
+```
+
+The existing React/Svelte performance benchmark still covers only the
+original bounded counter. It does not imply typing-game framework parity.
