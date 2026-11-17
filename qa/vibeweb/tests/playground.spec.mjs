@@ -6,7 +6,7 @@ const url = "http://127.0.0.1:4320/";
 test("native compiler playground edits, compiles and previews real Vibe code in an isolated iframe", async ({ page }) => {
   await page.goto(url);
   const source = page.getByRole("textbox", { name: "Vibe source code" });
-  await expect(source).toContainText("intent TypingPacks");
+  await expect(source).toHaveValue(/intent TypingPacks/);
   await expect(page.locator("#state")).toContainText("Compiled");
   const iframe = page.locator("#preview");
   await expect(iframe).toHaveAttribute("sandbox", "allow-scripts");
@@ -14,7 +14,7 @@ test("native compiler playground edits, compiles and previews real Vibe code in 
 
   await page.getByRole("combobox", { name: "Example to load" }).selectOption("counter");
   await page.getByRole("button", { name: "Load example" }).click();
-  await expect(source).toContainText("intent CounterPage");
+  await expect(source).toHaveValue(/intent CounterPage/);
   await expect(page.locator("#state")).toContainText("Compiled");
   const preview = page.frameLocator("#preview");
   await expect(preview.getByRole("heading", { name: "The first VibeWeb page" })).toBeVisible();
