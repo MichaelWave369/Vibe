@@ -45,6 +45,35 @@ def _integer(text: str, line: int) -> int:
     return int(text)
 
 
+def _parse_use(text: str, line: int) -> tuple[str, dict[str, str]]:
+    """Parse a component use and bounded JSON-quoted string properties."""
+    match = re.fullmatch(r"use\s+([A-Za-z_][A-Za-z0-9_]*)(.*)", text)
+    if not match:
+        raise WebSpecError(f"line {line}: expected use ComponentName [prop=\\\"value\\\"]")
+    name, rest = match.groups()
+    args: dict[str, str] = {}
+    decoder = json.JSONDecoder()
+    while rest.strip():
+        rest = rest.lstrip()
+        prop = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*", rest)
+        if prop is None or len(args) >= 16:
+            raise WebSpecError(f"line {line}: invalid component prop assignment")
+        key = prop.group(1)
+        if key in args:
+            raise WebSpecError(f"line {line}: duplicate component prop {key!r}")
+        try:
+            value, consumed = decoder.raw_decode(rest[prop.end():])
+        except json.JSONDecodeError as exc:
+            raise WebSpecError(f"line {line}: component prop must be a JSON-quoted string") from exc
+        if not isinstance(value, str) or len(value) > 4000:
+            raise WebSpecError(f"line {line}: component props must be bounded strings")
+        rest = rest[prop.end() + consumed:]
+        if rest and not rest[0].isspace():
+            raise WebSpecError(f"line {line}: separate props with spaces")
+        args[key] = value
+    return name, args
+
+
 def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
@@ -131,12 +160,36 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
         elif n == 6 and section == "components" and current_component is not None:
             if pending_button:
                 raise WebSpecError(f"line {pending_button[1]}: button missing action")
-            if value.startswith("text:"):
+            if value.startswith("prop "):
+                match = re.fullmatch(r"prop ([A-Za-z_][A-Za-z0-9_]*): string", value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected prop name: string")
+                prop_name = match.group(1)
+                if prop_name in current_component.props or len(current_component.props) >= 16:
+                    raise WebSpecError(f"line {idx + 1}: duplicate prop or prop limit exceeded")
+                current_component.props.append(prop_name)
+            elif value.startswith("state "):
+                match = re.fullmatch(r"state ([A-Za-z_][A-Za-z0-9_]*):\s*(-?\d{1,12})", value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected state name: integer")
+                key, number = match.groups()
+                if key in current_component.state or len(current_component.state) >= 32:
+                    raise WebSpecError(f"line {idx + 1}: duplicate local state or state limit exceeded")
+                current_component.state[key] = int(number)
+            elif value.startswith("bounds "):
+                match = re.fullmatch(r"bounds ([A-Za-z_][A-Za-z0-9_]*):\s*(-?\d{1,12})\.\.(-?\d{1,12})", value)
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected bounds name: min..max")
+                key, lower, upper = match.groups()
+                if key in current_component.bounds or int(lower) > int(upper):
+                    raise WebSpecError(f"line {idx + 1}: duplicate or invalid local bounds")
+                current_component.bounds[key] = (int(lower), int(upper))
+            elif value.startswith("text:"):
                 current_component.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
             else:
                 match = _BUTTON.fullmatch(value)
                 if not match:
-                    raise WebSpecError(f"line {idx + 1}: expected component text or button")
+                    raise WebSpecError(f"line {idx + 1}: expected prop, state, bounds, component text or button")
                 pending_button = (_quoted(match.group(1), idx + 1), idx + 1)
         elif n == 8 and section == "components" and current_component is not None and pending_button:
             if not value.startswith("action:"):
@@ -154,10 +207,11 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
                 page.texts.append(_quoted(value.split(":", 1)[1].strip(), idx + 1))
                 pending_button = None
             elif value.startswith("use "):
-                name = value[4:].strip()
-                if not _NAME.fullmatch(name) or len(page.uses) >= 64:
-                    raise WebSpecError(f"line {idx + 1}: invalid component use or use limit exceeded")
+                name, props = _parse_use(value, idx + 1)
+                if len(page.uses) >= 64:
+                    raise WebSpecError(f"line {idx + 1}: component use limit exceeded")
                 page.uses.append(name)
+                page.use_props.append(props)
             else:
                 m = _BUTTON.fullmatch(value)
                 if not m:
@@ -176,38 +230,59 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             raise WebSpecError(f"line {idx + 1}: invalid indentation or unsupported construct")
     if pending_button:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
-    if not page.title or not page.heading or not page.state:
-        raise WebSpecError("page requires title, heading, and state")
-    for name in page.uses:
+    if not page.title or not page.heading:
+        raise WebSpecError("page requires title and heading")
+    if not (page.state or any(component.state for component in page.components.values())):
+        raise WebSpecError("page requires page or component state")
+    if len(page.uses) != len(page.use_props):
+        raise WebSpecError("component use/prop count mismatch")
+    for name, props in zip(page.uses, page.use_props):
         if name not in page.components:
             raise WebSpecError(f"unknown component {name!r}")
+        expected = set(page.components[name].props)
+        if set(props) != expected:
+            raise WebSpecError(f"component {name!r} requires exactly props {sorted(expected)}")
     active_components = [page.components[name] for name in page.uses]
     if not (page.texts or any(component.texts for component in active_components)):
         raise WebSpecError("page requires at least one visible text")
     if not (page.buttons or any(component.buttons for component in active_components)):
         raise WebSpecError("page requires at least one visible button")
-    all_buttons = list(page.buttons)
-    all_texts = list(page.texts)
-    for component in page.components.values():
-        if not component.texts and not component.buttons:
-            raise WebSpecError(f"component {component.name!r} cannot be empty")
-        all_buttons.extend(component.buttons)
-        all_texts.extend(component.texts)
-    for b in all_buttons:
-        if b.variable not in page.state:
-            raise WebSpecError(f"button {b.label!r} references unknown state {b.variable!r}")
+
+    def check_text(template: str, allowed: set[str]) -> None:
+        for ref in _BINDING.findall(template):
+            if ref not in allowed:
+                raise WebSpecError(f"text references unknown state or prop {ref!r}")
+        if "{" in _BINDING.sub("", template) or "}" in _BINDING.sub("", template):
+            raise WebSpecError("unsupported text interpolation; use {state_name}")
+
     for key, (lo, hi) in page.bounds.items():
         if key not in page.state:
             raise WebSpecError(f"bounds references unknown state {key!r}")
         if not (lo <= page.state[key] <= hi):
             raise WebSpecError(f"initial state {key} is outside bounds")
-    for value in all_texts:
-        for ref in _BINDING.findall(value):
-            if ref not in page.state:
-                raise WebSpecError(f"text references unknown state {ref!r}")
-        # Deny malformed variable expressions instead of silently rendering them.
-        if "{" in _BINDING.sub("", value) or "}" in _BINDING.sub("", value):
-            raise WebSpecError("unsupported text interpolation; use {state_name}")
+    for button in page.buttons:
+        if button.variable not in page.state:
+            raise WebSpecError(f"button {button.label!r} references unknown state {button.variable!r}")
+    for template in page.texts:
+        check_text(template, set(page.state))
+
+    for component in page.components.values():
+        if not component.texts and not component.buttons:
+            raise WebSpecError(f"component {component.name!r} cannot be empty")
+        overlap = set(component.props) & (set(component.state) | set(page.state))
+        if overlap:
+            raise WebSpecError(f"component prop collides with state: {sorted(overlap)}")
+        for key, (lo, hi) in component.bounds.items():
+            if key not in component.state:
+                raise WebSpecError(f"component bounds references unknown local state {key!r}")
+            if not (lo <= component.state[key] <= hi):
+                raise WebSpecError(f"component initial state {key!r} outside bounds")
+        writable = set(component.state) | set(page.state)
+        for button in component.buttons:
+            if button.variable not in writable:
+                raise WebSpecError(f"button {button.label!r} references unknown state {button.variable!r}")
+        for template in component.texts:
+            check_text(template, writable | set(component.props))
     core = "".join(raw[:start] + raw[end:])
     if len(re.findall(r"(?m)^emit web\s*$", core)) != 1:
         raise WebSpecError("a web page needs exactly one `emit web` declaration")
@@ -231,21 +306,39 @@ _SCRIPT = r"""
   'use strict';
   const config = JSON.parse(document.getElementById('vibe-config').textContent);
   const state = Object.assign(Object.create(null), config.state);
+  const scopedStates = Object.create(null);
+  Object.entries(config.scope_states || {}).forEach(([scope, values]) => {
+    scopedStates[scope] = Object.assign(Object.create(null), values);
+  });
+  const owns = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
   const render = () => {
     document.querySelectorAll('[data-vibe-text]').forEach((node) => {
-      const template = config.texts[Number(node.dataset.vibeText)];
+      const index = Number(node.dataset.vibeText);
+      const template = config.texts[index];
+      const scope = (config.text_scopes || [])[index];
+      const props = (config.text_props || [])[index] || {};
+      const local = scope == null ? null : scopedStates[scope];
       node.textContent = template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
-        (_, key) => String(state[key]));
+        (_, key) => {
+          if (owns(props, key)) return String(props[key]);
+          if (local && owns(local, key)) return String(local[key]);
+          return String(state[key]);
+        });
     });
   };
   document.querySelectorAll('[data-vibe-button]').forEach((node) => {
     node.addEventListener('click', () => {
       const action = config.buttons[Number(node.dataset.vibeButton)];
-      const old = state[action.variable];
+      const scope = action.scope;
+      const local = scope == null ? null : scopedStates[scope];
+      const target = local && owns(local, action.variable) ? local : state;
+      const old = target[action.variable];
       const next = action.operation === '=' ? action.value :
         action.operation === '+=' ? old + action.value : old - action.value;
-      const bounds = config.bounds[action.variable];
-      state[action.variable] = bounds ? Math.max(bounds[0], Math.min(bounds[1], next)) : next;
+      const bounds = target === state
+        ? config.bounds[action.variable]
+        : config.scope_bounds[scope][action.variable];
+      target[action.variable] = bounds ? Math.max(bounds[0], Math.min(bounds[1], next)) : next;
       render();
     });
   });
@@ -257,19 +350,36 @@ _SCRIPT = r"""
 def render_html(page: WebPage) -> str:
     """Generate deterministic HTML with no framework/runtime dependencies."""
     texts = list(page.texts)
-    buttons = list(page.buttons)
+    text_scopes: list[str | None] = [None] * len(page.texts)
+    text_props: list[dict[str, str]] = [{} for _ in page.texts]
+    buttons: list[dict[str, object]] = [
+        {"label": action.label, "variable": action.variable,
+         "operation": action.operation, "value": action.value, "scope": None}
+        for action in page.buttons
+    ]
+    scope_states: dict[str, dict[str, int]] = {}
+    scope_bounds: dict[str, dict[str, tuple[int, int]]] = {}
     component_sections: list[str] = []
-    for name in page.uses:
+    for instance_id, (name, props) in enumerate(zip(page.uses, page.use_props)):
         component = page.components[name]
+        scope = f"instance_{instance_id}"
+        scope_states[scope] = dict(component.state)
+        scope_bounds[scope] = dict(component.bounds)
         body: list[str] = []
         for value in component.texts:
             index = len(texts)
             texts.append(value)
+            text_scopes.append(scope)
+            text_props.append(dict(props))
             body.append(f'      <p data-vibe-text="{index}" aria-live="polite"></p>')
         actions: list[str] = []
         for action in component.buttons:
             index = len(buttons)
-            buttons.append(action)
+            buttons.append({
+                "label": action.label, "variable": action.variable,
+                "operation": action.operation, "value": action.value,
+                "scope": scope,
+            })
             actions.append(f'        <button type="button" data-vibe-button="{index}">{escape(action.label)}</button>')
         if actions:
             body.append('      <div class="controls" role="group" aria-label="Component actions">')
@@ -283,11 +393,12 @@ def render_html(page: WebPage) -> str:
     payload = {
         "state": page.state,
         "texts": texts,
-        "buttons": [
-            {"label": b.label, "variable": b.variable, "operation": b.operation, "value": b.value}
-            for b in buttons
-        ],
+        "buttons": buttons,
         "bounds": page.bounds,
+        "text_scopes": text_scopes,
+        "text_props": text_props,
+        "scope_states": scope_states,
+        "scope_bounds": scope_bounds,
     }
     raw_json = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     safe_json = (raw_json.replace("&", "\\u0026").replace("<", "\\u003c")
