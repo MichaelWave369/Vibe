@@ -7,7 +7,7 @@ No arbitrary JavaScript expressions, templates, or imports are executed.
 from __future__ import annotations
 
 import argparse
-from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField, WebTyping
+from .ast import WebButton as Button, WebPage, WebComponent, WebInput, WebStringField, WebTyping, WebTypingLesson
 from html import escape
 import json
 from pathlib import Path
@@ -108,6 +108,13 @@ def _parse_string_field(text: str, line: int) -> WebStringField:
     return WebStringField(label, variable, "select", options=options)
 
 
+def _validate_typing_passage(phrase: str, line: int) -> None:
+    if not 12 <= len(phrase) <= 240 or phrase != phrase.strip():
+        raise WebSpecError(f"line {line}: typing passage must be 12-240 chars without edge spaces")
+    if any(not (" " <= char <= "~") for char in phrase):
+        raise WebSpecError(f"line {line}: typing passage supports printable ASCII and spaces only")
+
+
 def parse_web_source(source: str) -> tuple[WebPage, str]:
     """Parse a *restricted* page block and return the standard Vibe contract.
 
@@ -139,6 +146,10 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
     section = ""
     pending_button: tuple[str, int] | None = None
     current_component: WebComponent | None = None
+    typing_seen = False
+    typing_passage: str | None = None
+    typing_lessons: list[WebTypingLesson] = []
+    typing_progress = "none"
     for idx in range(start + 1, end):
         line = raw[idx].rstrip("\r\n")
         if not line.strip() or line.lstrip().startswith("#"):
@@ -153,6 +164,10 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             pending_button = None
             current_component = None
             if value in {"state:", "text_state:", "view:", "bounds:", "components:", "typing:"}:
+                if value == "typing:":
+                    if typing_seen:
+                        raise WebSpecError(f"line {idx + 1}: duplicate typing section")
+                    typing_seen = True
                 section = value[:-1]
                 continue
             section = ""
@@ -182,14 +197,35 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             else:
                 raise WebSpecError(f"line {idx + 1}: unsupported page field {value!r}")
         elif n == 4 and section == "typing":
-            if page.typing is not None or not value.startswith("passage:"):
-                raise WebSpecError(f"line {idx + 1}: expected one typing passage")
-            phrase = _quoted(value.split(":", 1)[1].strip(), idx + 1)
-            if not 12 <= len(phrase) <= 240 or phrase != phrase.strip():
-                raise WebSpecError(f"line {idx + 1}: typing passage must be 12-240 chars without edge spaces")
-            if any(not (" " <= char <= "~") for char in phrase):
-                raise WebSpecError(f"line {idx + 1}: typing passage supports printable ASCII and spaces only")
-            page.typing = WebTyping(passage=phrase)
+            if value.startswith("progress:"):
+                if typing_progress != "none" or value.split(":", 1)[1].strip() != "local":
+                    raise WebSpecError(f"line {idx + 1}: progress supports one local declaration")
+                typing_progress = "local"
+            elif value.startswith("passage:"):
+                if typing_passage is not None or typing_lessons:
+                    raise WebSpecError(f"line {idx + 1}: expected one typing passage or named lessons")
+                phrase = _quoted(value.split(":", 1)[1].strip(), idx + 1)
+                _validate_typing_passage(phrase, idx + 1)
+                typing_passage = phrase
+            elif value.startswith("lesson "):
+                if typing_passage is not None or len(typing_lessons) >= 12:
+                    raise WebSpecError(f"line {idx + 1}: lessons cannot mix with a passage or exceed 12")
+                match = re.fullmatch(
+                    r'lesson\\s+("(?:[^"\\\\]|\\\\.)*")\\s+difficulty=(beginner|intermediate|advanced):\\s*("(?:[^"\\\\]|\\\\.)*")',
+                    value,
+                )
+                if not match:
+                    raise WebSpecError(f"line {idx + 1}: expected lesson \"Name\" difficulty=beginner: \"passage\"")
+                name = _quoted(match.group(1), idx + 1)
+                phrase = _quoted(match.group(3), idx + 1)
+                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9 ._-]{1,39}", name):
+                    raise WebSpecError(f"line {idx + 1}: lesson name must be 2-40 simple characters")
+                if any(item.name == name for item in typing_lessons):
+                    raise WebSpecError(f"line {idx + 1}: duplicate typing lesson name")
+                _validate_typing_passage(phrase, idx + 1)
+                typing_lessons.append(WebTypingLesson(name, match.group(2), phrase))
+            else:
+                raise WebSpecError(f"line {idx + 1}: expected one typing passage or named lessons")
         elif n == 4 and section == "state":
             if ":" not in value:
                 raise WebSpecError(f"line {idx + 1}: expected `name: integer`")
@@ -315,6 +351,14 @@ def parse_web_source(source: str) -> tuple[WebPage, str]:
             raise WebSpecError(f"line {idx + 1}: invalid indentation or unsupported construct")
     if pending_button:
         raise WebSpecError(f"line {pending_button[1]}: button missing action")
+    if typing_seen:
+        if typing_passage is None and len(typing_lessons) < 2:
+            raise WebSpecError("typing curriculum needs at least two lessons, or one passage")
+        page.typing = WebTyping(
+            passage=typing_passage or "",
+            lessons=tuple(typing_lessons),
+            progress=typing_progress,
+        )
     if not page.title or not page.heading:
         raise WebSpecError("page requires title and heading")
     if page.persistence != "none" and not page.submit_label:
