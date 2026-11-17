@@ -160,3 +160,85 @@ def test_compiler_emits_reusable_components(tmp_path):
     assert main(["compile", str(source), "--no-cache"]) == 0
     html = source.with_suffix(".html").read_text(encoding="utf-8")
     assert html.count('class="vibe-component"') == 3
+
+
+INSTANCES = Path("vibe/examples/web_instances.vibe")
+
+
+def _instance_config():
+    import re
+    from vibe.parser import parse_source
+    from vibe.ir import ast_to_ir, serialize_ir
+    from vibe.emitter import emit_code
+
+    program = parse_source(INSTANCES.read_text(encoding="utf-8"))
+    assert program.web_page is not None
+    ir = ast_to_ir(program)
+    assert ir.web_page is not None
+    html, backend = emit_code(ir)
+    assert backend.target == "web"
+    assert "use_prop_refs" in serialize_ir(ir)
+    match = re.search(r'<script type="application/json" id="vibe-config">(.*?)</script>', html, re.S)
+    assert match is not None
+    return program, ir, html, json.loads(match.group(1))
+
+
+def test_component_props_and_local_state_roundtrip():
+    program, ir, html, config = _instance_config()
+    assert program.web_page.uses == ["CounterCard", "CounterCard"]
+    assert program.web_page.use_props == [{"label": "Alpha"}, {"label": "Beta"}]
+    assert program.web_page.components["CounterCard"].props == ["label"]
+    assert ir.web_page.components["CounterCard"].state == {"count": 0}
+    assert ir.web_page.components["CounterCard"].bounds == {"count": (0, 9)}
+    assert ir.web_page.use_props == program.web_page.use_props
+    assert config["scope_states"] == {
+        "instance_0": {"count": 0}, "instance_1": {"count": 0},
+    }
+    assert config["scope_bounds"]["instance_1"] == {"count": [0, 9]}
+    assert config["text_props"][1:] == [{"label": "Alpha"}, {"label": "Beta"}]
+    assert config["text_scopes"] == [None, "instance_0", "instance_1"]
+    assert len(set(action["scope"] for action in config["buttons"][1:])) == 2
+    assert html.count('class="vibe-component"') == 2
+
+
+def test_component_props_validation_fails_closed():
+    source = INSTANCES.read_text(encoding="utf-8")
+    with pytest.raises(WebSpecError, match="requires exactly props"):
+        parse_web_source(source.replace('use CounterCard label="Alpha"', "use CounterCard"))
+    with pytest.raises(WebSpecError, match="requires exactly props"):
+        parse_web_source(source.replace('label="Alpha"', 'label="Alpha" unknown="x"'))
+    with pytest.raises(WebSpecError, match="duplicate component prop"):
+        parse_web_source(source.replace('label="Alpha"', 'label="Alpha" label="Again"'))
+    with pytest.raises(WebSpecError, match="component props must be bounded strings"):
+        parse_web_source(source.replace('label="Alpha"', "label=123"))
+
+
+def test_component_local_state_bounds_and_bindings_fail_closed():
+    source = INSTANCES.read_text(encoding="utf-8")
+    with pytest.raises(WebSpecError, match="outside bounds"):
+        parse_web_source(source.replace("state count: 0", "state count: 99"))
+    with pytest.raises(WebSpecError, match="unknown state"):
+        parse_web_source(source.replace("action: count += 1", "action: missing += 1"))
+    with pytest.raises(WebSpecError, match="unknown state or prop"):
+        parse_web_source(source.replace("{label}: {count}", "{unknown}: {count}"))
+    with pytest.raises(WebSpecError, match="collides with state"):
+        parse_web_source(source.replace("prop label: string", "prop count: string"))
+    with pytest.raises(WebSpecError, match="only integer state assignments"):
+        parse_web_source(source.replace("action: count += 1", "action: count += total"))
+
+
+def test_component_string_props_escape_in_serialized_markup():
+    source = INSTANCES.read_text(encoding="utf-8").replace('label="Alpha"', 'label="<script>alert(1)</script>"')
+    page, _ = parse_web_source(source)
+    html = render_html(page)
+    assert "<script>alert(1)</script>" not in html
+    assert r"\u003cscript\u003e" in html
+
+
+def test_standard_compiler_builds_instance_page(tmp_path):
+    from vibe.cli import main
+
+    path = tmp_path / "instances.vibe"
+    path.write_text(INSTANCES.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["compile", str(path), "--no-cache"]) == 0
+    assert "scope_states" in path.with_suffix(".html").read_text(encoding="utf-8")
