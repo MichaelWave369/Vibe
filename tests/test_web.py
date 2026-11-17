@@ -455,9 +455,9 @@ def test_phase3e_fails_closed_for_invalid_persistence():
     with pytest.raises(WebSpecError, match="requires an explicit submit"):
         parse_web_source(source.replace('submit: "Save local draft"', ""))
     with pytest.raises(WebSpecError, match="duplicate submit"):
-        parse_web_source(source.replace('submit: "Save local draft"', 'submit: "Save local draft"\\n  submit: "Again"'))
+        parse_web_source(source.replace('submit: "Save local draft"', 'submit: "Save local draft"\n  submit: "Again"'))
     with pytest.raises(WebSpecError, match="duplicate persistence"):
-        parse_web_source(source.replace("persist: local", "persist: local\\n  persist: local"))
+        parse_web_source(source.replace("persist: local", "persist: local\n  persist: local"))
 
 
 def test_phase3e_submit_label_escaped():
