@@ -1,0 +1,34 @@
+intent CounterPage:
+  goal: "Display and update a bounded interactive counter in a web browser."
+  inputs:
+    step: number
+  outputs:
+    count: number
+
+preserve:
+  readability = high
+  testability = high
+
+bridge:
+  epsilon_floor = 0.02
+  measurement_safe_ratio = 0.85
+  mode = strict
+
+page CounterPage:
+  title: "Φ VibeWeb · First Light"
+  heading: "The first VibeWeb page"
+  state:
+    count: 0
+  bounds:
+    count: 0..369
+  view:
+    text: "Count: {count}"
+    text: "Compiled from intent. Rendered in your browser."
+    button "Increase":
+      action: count += 1
+    button "Decrease":
+      action: count -= 1
+    button "Reset":
+      action: count = 0
+
+emit web

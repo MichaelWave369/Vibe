@@ -1,0 +1,27 @@
+name: VibeWeb experimental build
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  verify-vibeweb:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Vibe and pytest
+        run: python -m pip install -e . pytest
+      - name: Run VibeWeb tests
+        run: python -m pytest -q tests/test_web.py
+      - name: Compile first VibeWeb page
+        run: python -m vibe.web vibe/examples/web_counter.vibe --out dist
+      - name: Upload static artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibeweb-first-light
+          path: dist/
