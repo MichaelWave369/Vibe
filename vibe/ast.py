@@ -154,12 +154,20 @@ class WebButton:
     value: int
 
 
+@dataclass(frozen=True, slots=True)
+class WebInput:
+    """Accessible bounded integer input bound to writable state."""
+    label: str
+    variable: str
+
+
 @dataclass(slots=True)
 class WebComponent:
     """Bounded reusable view fragment with optional per-instance state and string props."""
     name: str
     texts: list[str] = field(default_factory=list)
     buttons: list[WebButton] = field(default_factory=list)
+    inputs: list[WebInput] = field(default_factory=list)
     props: list[str] = field(default_factory=list)
     state: dict[str, int] = field(default_factory=dict)
     bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
@@ -174,6 +182,8 @@ class WebPage:
     state: dict[str, int] = field(default_factory=dict)
     texts: list[str] = field(default_factory=list)
     buttons: list[WebButton] = field(default_factory=list)
+    inputs: list[WebInput] = field(default_factory=list)
+    layout: str = "stack"
     bounds: dict[str, tuple[int, int]] = field(default_factory=dict)
     components: dict[str, WebComponent] = field(default_factory=dict)
     uses: list[str] = field(default_factory=list)
