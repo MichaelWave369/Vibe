@@ -474,6 +474,11 @@ main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #4051
 #vibe-typing-input{font:1rem/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;background:#0b1426;color:#f5f6fb;border:2px solid #7898c7;border-radius:10px;padding:.7rem;width:100%;resize:vertical;min-height:6rem}
 #vibe-typing-input:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
 #vibe-typing-progress{width:100%;height:1rem;accent-color:#8ef0b3}
+.vibe-typing-curriculum{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:1rem;margin:1rem 0}
+.vibe-typing-curriculum select{width:100%;min-height:44px;background:#0b1426;color:#f5f6fb;border:1px solid #7898c7;border-radius:10px;padding:.5rem;font:inherit}
+.vibe-typing-curriculum select:focus-visible{outline:3px solid #f9d56e;outline-offset:2px}
+.vibe-typing-saved{margin-top:1rem;border-top:1px solid #465d80;padding-top:.8rem}
+.vibe-typing-saved p{font-size:.9rem;margin:.4rem 0}
 .vibe-typing-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;margin:1rem 0}
 .vibe-typing-metrics>div{background:#1a2943;padding:.55rem .8rem;border-radius:10px}
 .vibe-typing-metrics dt{font-size:.85rem;color:#bdd4f1}.vibe-typing-metrics dd{font-size:1.25rem;font-weight:750;margin:0}
@@ -910,6 +915,24 @@ def render_html(page: WebPage) -> str:
             + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\n'
             + '\n'.join(body) + '\n    </section>'
         )
+    typing_config = None
+    if page.typing:
+        if page.typing.lessons:
+            typing_config = {
+                "lessons": [
+                    {"name": lesson.name, "difficulty": lesson.difficulty, "passage": lesson.passage}
+                    for lesson in page.typing.lessons
+                ],
+                "progress": page.typing.progress,
+                "storage_key": f"vibeweb:typing:v1:{page.name}" if page.typing.progress == "local" else None,
+            }
+        else:
+            typing_config = {"passage": page.typing.passage}
+            if page.typing.progress == "local":
+                typing_config.update({
+                    "progress": "local",
+                    "storage_key": f"vibeweb:typing:v1:{page.name}",
+                })
     payload = {
         "state": page.state,
         "text_state": page.text_state,
@@ -924,7 +947,7 @@ def render_html(page: WebPage) -> str:
         "scope_states": scope_states,
         "scope_bounds": scope_bounds,
         "page_id": page.name,
-        "typing": {"passage": page.typing.passage} if page.typing else None,
+        "typing": typing_config,
         "submit_label": page.submit_label,
         "persistence": page.persistence,
         "storage_key": f"vibeweb:draft:v1:{page.name}" if page.persistence == "local" else None,
@@ -937,11 +960,40 @@ def render_html(page: WebPage) -> str:
     component_markup = "\n".join(component_sections)
     typing_markup = ""
     if page.typing is not None:
-        passage = page.typing.passage
+        lessons = page.typing.lessons
+        passage = lessons[0].passage if lessons else page.typing.passage
+        curriculum_markup = ""
+        if lessons:
+            lesson_choices = "".join(
+                f'<option value="{i}">{escape(lesson.name)} ({escape(lesson.difficulty)})</option>'
+                for i, lesson in enumerate(lessons)
+            )
+            curriculum_markup = f"""
+      <div class="vibe-typing-curriculum">
+        <div><label for="vibe-typing-difficulty">Difficulty</label>
+          <select id="vibe-typing-difficulty">
+            <option value="all">All difficulties</option>
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select></div>
+        <div><label for="vibe-typing-lesson">Lesson</label>
+          <select id="vibe-typing-lesson">{lesson_choices}</select></div>
+      </div>"""
+        progress_markup = ""
+        if page.typing.progress == "local":
+            progress_markup = """
+      <div class="vibe-typing-saved">
+        <p id="vibe-typing-completed">0 lessons completed</p>
+        <p id="vibe-typing-best">Best WPM: not yet recorded</p>
+        <button type="button" id="vibe-typing-clear">Clear saved progress</button>
+        <p id="vibe-typing-save-status" role="status" aria-live="polite"></p>
+      </div>"""
         typing_markup = f"""
     <section id="vibe-typing" aria-label="Typing dojo">
       <h2>Keyboard dojo</h2>
       <p id="vibe-typing-guide">Type the passage exactly, including spaces and punctuation. Backspace can fix mistakes.</p>
+{curriculum_markup}
       <p id="vibe-typing-readable" class="vibe-visually-hidden">Passage to type: {escape(passage)}</p>
       <div id="vibe-typing-passage" class="vibe-typing-passage" aria-hidden="true"></div>
       <label for="vibe-typing-input">Type the lesson</label>
@@ -958,6 +1010,7 @@ def render_html(page: WebPage) -> str:
       </dl>
       <button type="button" id="vibe-typing-reset">Restart lesson</button>
       <p role="status" aria-live="polite" id="vibe-typing-status">Ready to type.</p>
+{progress_markup}
     </section>"""
     grid_page_class = ' class="vibe-page-grid"' if page.layout == "grid" else ""
     form_open = '<form id="vibe-form" novalidate>' if page.submit_label else ""
