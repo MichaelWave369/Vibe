@@ -27,6 +27,9 @@ vibec = "vibe.cli:main"
 where = ["."]
 include = ["vibe*"]
 
+[tool.setuptools.package-data]
+vibe = ["playground.html", "examples/*.vibe"]
+
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
