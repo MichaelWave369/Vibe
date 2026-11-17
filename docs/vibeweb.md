@@ -216,3 +216,54 @@ actions, async validation, passwords, uploads, rich text, checkbox state, or
 persistent storage. The current `change` handler validates on committed edits.
 Native accessibility and cross-browser behavior need browser-level testing;
 our CI runtime uses a simulated DOM. The preservation bridge is heuristic.
+
+## Phase 3E: explicit submit and opt-in browser-local draft storage
+
+Pages may declare an explicit form submission control and optional local
+persistence policy. Neither is enabled by default.
+
+```yaml
+page FormStudio:
+  title: "My Form"
+  heading: "Local Draft Lab"
+  submit: "Save local draft"
+  persist: local
+  text_state:
+    display_name: "Visitor"
+  view:
+    text: "Welcome {display_name}"
+    input_text "Display name": display_name min=2 max=24
+emit web
+```
+
+Declaring `submit: "Label"` produces a native `<form>`, a submit control,
+and an accessible status message. The JavaScript runtime prevents navigation,
+checks for uncommitted invalid input, and dispatches a `vibe:submit`
+`CustomEvent` carrying a local snapshot of the form state. It does not send
+anything to a server.
+
+`persist: local` requires `submit:` and explicitly enables saving the
+snapshot to same-origin browser `localStorage` **only on submission**.
+On reload, the compiler-generated runtime restores a compatible draft.
+Restoration checks schema version, page name, exact state keys and scopes,
+safe integer bounds, text lengths, and select options before accepting data.
+Missing, unavailable, oversized, invalid, or incompatible stored data does
+not overwrite current initial values. The page shows success, recovery,
+or storage-failure status text.
+
+Browser storage is shared with other scripts on the same origin and is **not**
+appropriate for passwords, secrets, or sensitive personal data. Saving is
+not encrypted, synced, backed up, or automatically exported. Clearing site
+storage removes drafts. The event is local to the page and other page scripts
+may observe its state snapshot.
+
+```bash
+vibec compile vibe/examples/web_drafts.vibe --no-cache
+python -m vibe.web vibe/examples/web_drafts.vibe --out dist-drafts
+node tests/web_draft_runtime_smoke.cjs dist-drafts/index.html
+```
+
+Phase 3E does not implement remote submission, authentication, database
+storage, or cross-device synchronization. Validation and storage have a
+bounded simulated-DOM runtime smoke test. Browser-specific behavior and
+accessibility still need a real-browser test suite.
