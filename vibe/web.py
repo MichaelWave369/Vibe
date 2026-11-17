@@ -221,6 +221,7 @@ _STYLE = """
 main{width:min(100%,570px);padding:clamp(1.4rem,5vw,3rem);border:1px solid #40516c;border-radius:22px;background:#182238;box-shadow:0 20px 70px #0005}
 .tag{font-size:.74rem;text-transform:uppercase;letter-spacing:.18em;color:#a5cdfb;font-weight:800}h1{font-size:clamp(2rem,6vw,3rem);line-height:1.1;margin:.6rem 0 1rem}p{font-size:1.14rem;color:#dbe5f5;overflow-wrap:anywhere}
 .controls{display:flex;flex-wrap:wrap;gap:.65rem;margin-top:1.8rem}button{border:1px solid #7c99c5;color:white;background:#30466e;padding:.8rem 1.2rem;border-radius:12px;font:inherit;cursor:pointer;min-height:44px}
+.vibe-component{border:1px solid #465d80;border-radius:14px;margin:1.2rem 0;padding:1.2rem;background:#131d32}.vibe-component h2{font-size:1.05rem;margin:0 0 .65rem;color:#b9dafa}
 button:hover{background:#415e8e}button:focus-visible{outline:3px solid #f9d56e;outline-offset:3px}footer{margin-top:2rem;color:#a2aec5;font-size:.75rem}
 @media(prefers-reduced-motion:no-preference){button{transition:background .15s ease,transform .15s ease}button:active{transform:scale(.98)}}
 """.strip()
@@ -275,9 +276,9 @@ def render_html(page: WebPage) -> str:
             body.extend(actions)
             body.append("      </div>")
         component_sections.append(
-            '    <section class="vibe-component" aria-label="' + escape(name, quote=True) + '">\\n'
-            + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\\n'
-            + '\\n'.join(body) + '\\n    </section>'
+            '    <section class="vibe-component" aria-label="' + escape(name, quote=True) + '">\n'
+            + '      <h2>' + escape(name.replace("_", " ")) + '</h2>\n'
+            + '\n'.join(body) + '\n    </section>'
         )
     payload = {
         "state": page.state,
@@ -293,6 +294,7 @@ def render_html(page: WebPage) -> str:
                  .replace(">", "\\u003e").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
     text_elements = "\n".join(f'    <p data-vibe-text="{i}" aria-live="polite"></p>' for i, _ in enumerate(page.texts))
     controls = "\n".join(f'      <button type="button" data-vibe-button="{i}">{escape(b.label)}</button>' for i, b in enumerate(page.buttons))
+    component_markup = "\n".join(component_sections)
     return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -310,6 +312,7 @@ def render_html(page: WebPage) -> str:
     <div class="controls" role="group" aria-label="Page actions">
 {controls}
     </div>
+{component_markup}
     <footer>Compiled from a .vibe intent. No React, Svelte, or client dependencies.</footer>
   </main>
   <script type="application/json" id="vibe-config">{safe_json}</script>
