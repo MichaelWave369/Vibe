@@ -50,7 +50,7 @@ page_block      <- 'page' WS IDENT ':' NEWLINE INDENT page_field+ DEDENT
 # Bounded title, heading, layout, state, bounds, components and view fields.
 # View/component items allow numeric inputs, bounded text inputs, and select controls.
 # Optional typing section uses one `passage: "literal"` OR 2-12 named lesson lines.
-# `lesson "Name" difficulty=beginner|intermediate|advanced: "literal"`;
+# `lesson "Name" [pack="Name"] difficulty=beginner|intermediate|advanced: "literal"`;
 # `progress: local` is an opt-in local-only completion record policy.
 # The strict indentation/action parser is implemented in vibe.web.
 page_field      <- 'title:' WS STRING / 'heading:' WS STRING / 'layout:' WS IDENT / 'submit:' WS STRING / 'persist:' WS IDENT / 'state:' / 'bounds:' / 'components:' / 'typing:' / 'view:'
