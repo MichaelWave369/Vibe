@@ -57,3 +57,43 @@ def test_page_name_must_match_intent(tmp_path):
     path.write_text(source)
     with pytest.raises(WebSpecError, match="must match intent"):
         build(path, tmp_path / "output")
+
+
+def test_native_parser_and_typed_web_ir():
+    from vibe.parser import parse_source
+    from vibe.ir import ast_to_ir, serialize_ir
+    from vibe.emitter import emit_code
+
+    program = parse_source(EXAMPLE.read_text(encoding="utf-8"))
+    assert program.emit_target == "web"
+    assert program.web_page is not None
+    assert program.web_page.state["count"] == 0
+    ir = ast_to_ir(program)
+    assert ir.emit_target == "web"
+    assert ir.module.web_page is not None
+    assert ir.web_page.bounds["count"] == (0, 369)
+    assert ir.web_page.buttons[0].operation == "+="
+    html, backend = emit_code(ir)
+    assert backend.extension == ".html"
+    assert "The first VibeWeb page" in html
+    assert '"web_page"' in serialize_ir(ir)
+
+
+def test_native_parser_rejects_web_without_page():
+    from vibe.parser import parse_source, ParseError
+
+    source = EXAMPLE.read_text(encoding="utf-8")
+    source = source.replace("page CounterPage:", "notpage CounterPage:")
+    with pytest.raises(ParseError):
+        parse_source(source)
+
+
+def test_standard_vibec_compile_web(tmp_path):
+    from vibe.cli import main
+
+    source = tmp_path / "first_light.vibe"
+    source.write_text(EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
+    assert main(["compile", str(source), "--no-cache"]) == 0
+    html = source.with_suffix(".html").read_text(encoding="utf-8")
+    assert "data-vibe-button" in html
+    assert "Count: {count}" in html
