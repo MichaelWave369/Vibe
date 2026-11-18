@@ -145,10 +145,113 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
   const source = byId("source");
   const examples = byId("examples");
   const editorLines = byId("line-numbers");
-  const tabs = ["preview", "html", "report"];
+  const tabs = ["preview", "html", "report", "map"];
   const preview = byId("preview");
   let generatedHTML = "";
   let working = false;
+  let errorLine = null;
+  let completionChoices = [];
+  let completionSelected = 0;
+  const statementSuggestions = {
+    root: ["intent App:", "preserve:", "bridge:", "page App:", "emit web"],
+    page: ['title: "Page title"', 'heading: "Page heading"', "layout: grid",
+      "state:", "text_state:", "bounds:", "components:", "view:", "typing:",
+      'submit: "Save local draft"', "persist: local"],
+    view: ['text: "Hello {name}"', 'input "Count": count',
+      'input_text "Name": name min=2 max=24', 'select "Theme": theme options="Teal|Gold"',
+      'use CounterCard label="Alpha"', 'button "Increase":'],
+    components: ["component CounterCard:"],
+    component: ['prop label: string', "state count: 0", "bounds count: 0..9",
+      'text: "{label}: {count}"', 'input "Count": count',
+      'input_text "Name": name min=2 max=24', 'button "Increment":'],
+    typing: ['passage: "Precision matters.  Two spaces are welcome here."',
+      "progress: local",
+      'lesson "Warmup" difficulty=beginner: "Type slowly and precisely."',
+      'lesson "Practice" pack="Foundations" difficulty=intermediate: "Practice with spaces."'],
+    state: ["count: 0", "total: 0"],
+    text_state: ['name: "Visitor"', 'theme: "Teal"'],
+    bounds: ["count: 0..369", "total: 0..369"],
+    preserve: ["readability = high", "testability = high"],
+    bridge: ["epsilon_floor = 0.02", "measurement_safe_ratio = 0.85", "mode = strict"],
+  };
+  function contextAtCursor() {
+    const lines = source.value.slice(0, source.selectionStart).split("\n");
+    const current = lines.at(-1);
+    const indent = (current.match(/^ */) || [""])[0].length;
+    if (indent === 0) return { section: "root", prefix: current };
+    if (indent === 2) return { section: "page", prefix: current.trimStart() };
+    let section = "page";
+    for (let i = lines.length - 2; i >= 0; i--) {
+      const value = lines[i];
+      const depth = (value.match(/^ */) || [""])[0].length;
+      const text = value.trim();
+      if (depth === 0 && /^(?:page|intent)\s/.test(text)) break;
+      if (depth === 2 && /^(?:view|typing|components|state|text_state|bounds|preserve|bridge):$/.test(text)) {
+        section = text.slice(0, -1);
+        break;
+      }
+      if (depth === 4 && /^component\s+/.test(text) && indent >= 6) {
+        section = "component";
+        break;
+      }
+    }
+    return { section, prefix: current.trimStart() };
+  }
+  function closeSuggestions() {
+    byId("suggestions").hidden = true;
+    byId("suggest").setAttribute("aria-expanded", "false");
+    completionChoices = [];
+    completionSelected = 0;
+  }
+  function highlightSuggestion() {
+    [...byId("suggestion-list").children].forEach((node, index) => {
+      node.setAttribute("aria-selected", String(index === completionSelected));
+    });
+  }
+  function applySuggestion(index) {
+    const choice = completionChoices[index];
+    if (!choice) return;
+    const cursor = source.selectionStart;
+    const lineStart = source.value.lastIndexOf("\n", cursor - 1) + 1;
+    const before = source.value.slice(lineStart, cursor);
+    const indent = (before.match(/^ */) || [""])[0].length;
+    source.setRangeText(choice, lineStart + indent, cursor, "end");
+    closeSuggestions();
+    source.focus();
+    source.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function openSuggestions() {
+    const { section, prefix } = contextAtCursor();
+    const sourceLine = source.value.slice(source.value.lastIndexOf("\n", source.selectionStart - 1) + 1);
+    if (sourceLine.slice(source.selectionStart - (source.value.lastIndexOf("\n", source.selectionStart - 1) + 1)).trim()) {
+      // No suggestions inside a line's existing suffix.
+      closeSuggestions();
+      return;
+    }
+    const values = statementSuggestions[section] || [];
+    completionChoices = values.filter(value =>
+      value.toLowerCase().startsWith(prefix.toLowerCase())).slice(0, 9);
+    const list = byId("suggestion-list");
+    list.replaceChildren();
+    if (!completionChoices.length) {
+      closeSuggestions();
+      setState("No completions match this position. Try a section heading.", "");
+      return;
+    }
+    completionSelected = 0;
+    completionChoices.forEach((value, index) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(index === 0));
+      option.textContent = value;
+      option.addEventListener("mousedown", event => event.preventDefault());
+      option.addEventListener("click", () => applySuggestion(index));
+      list.append(option);
+    });
+    byId("suggestions").hidden = false;
+    byId("suggest").setAttribute("aria-expanded", "true");
+  }
   function setState(message, kind) {
     const node = byId("state");
     node.textContent = message;
