@@ -35,7 +35,11 @@ test("Phase 3L: import a local .vibe file, edit, then download exact source", as
   const updated = original.replace("The first VibeWeb page", "My Edited Counter");
   await editor.fill(updated);
   await expect(page.locator("#dirty-flag")).toHaveText("Unsaved edits");
+  const keyboardDownload = page.waitForEvent("download");
   await editor.press("Control+s");
+  const keyboardFile = await keyboardDownload;
+  expect(keyboardFile.suggestedFilename()).toBe("local-counter.vibe");
+  expect(await readFile(await keyboardFile.path(), "utf8")).toBe(updated);
   const downloadFromButton = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download .vibe" }).click();
   const downloaded = await downloadFromButton;
