@@ -173,6 +173,10 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
   let errorLine = null;
   let completionChoices = [];
   let completionSelected = 0;
+  const SNAPSHOT_KEY = "vibeweb:playground:source:v1";
+  const MAX_SOURCE = 20000;
+  const MAX_FILE_BYTES = 40000;
+  let sourceBaseline = "";
   const statementSuggestions = {
     root: ["intent App:", "preserve:", "bridge:", "page App:", "emit web"],
     page: ['title: "Page title"', 'heading: "Page heading"', "layout: grid",
@@ -276,6 +280,146 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
     const node = byId("state");
     node.textContent = message;
     node.className = "status" + (kind ? " " + kind : "");
+  }
+  function validFileName(value) {
+    return typeof value === "string" && value.length <= 80 &&
+      /^[A-Za-z0-9][A-Za-z0-9 ._-]*\.vibe$/.test(value) && !value.includes("..");
+  }
+  function fileName() {
+    return byId("project-name").value.trim();
+  }
+  function projectStatus(message, isError = false) {
+    const status = byId("project-status");
+    status.textContent = message;
+    status.className = isError ? "error" : "";
+  }
+  function projectState() {
+    const name = fileName();
+    byId("source-label").textContent = name || "untitled.vibe";
+    const dirty = source.value !== sourceBaseline;
+    const marker = byId("dirty-flag");
+    marker.textContent = dirty ? "Unsaved edits" : "Unchanged";
+    marker.className = dirty ? "" : "clean";
+    return dirty;
+  }
+  function loadSourceText(text, name) {
+    source.value = text;
+    sourceBaseline = text;
+    byId("project-name").value = name;
+    source.scrollTop = 0;
+    errorLine = null;
+    closeSuggestions();
+    updateLines();
+    projectState();
+    return compile();
+  }
+  function validSnapshot(record) {
+    return record !== null && typeof record === "object" &&
+      !Array.isArray(record) &&
+      Object.keys(record).sort().join(",") === "filename,source,version" &&
+      record.version === 1 && validFileName(record.filename) &&
+      typeof record.source === "string" &&
+      record.source.length <= MAX_SOURCE && !record.source.includes("\0");
+  }
+  function readSnapshot() {
+    try {
+      const raw = window.localStorage.getItem(SNAPSHOT_KEY);
+      if (raw === null) return { exists: false, record: null };
+      if (raw.length > MAX_FILE_BYTES) return { exists: true, record: null };
+      const record = JSON.parse(raw);
+      return { exists: true, record: validSnapshot(record) ? record : null };
+    } catch {
+      return { exists: false, record: null, unavailable: true };
+    }
+  }
+  function refreshSnapshot() {
+    const saved = readSnapshot();
+    byId("restore-snapshot").disabled = !saved.record;
+    byId("clear-snapshot").disabled = !saved.exists;
+    return saved;
+  }
+  function downloadText(text, name, contentType) {
+    const href = URL.createObjectURL(new Blob([text], { type: contentType }));
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = name;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(href), 2000);
+  }
+  function saveSource() {
+    const name = fileName();
+    if (!validFileName(name)) {
+      projectStatus("Choose a safe .vibe filename (letters, numbers, spaces, dots, _ or -).", true);
+      return;
+    }
+    downloadText(source.value, name, "text/plain;charset=utf-8");
+    sourceBaseline = source.value;
+    projectState();
+    projectStatus("Source download requested: " + name + ". Keep your downloaded copy.");
+  }
+  async function importSource(file) {
+    if (!file) return;
+    if (!validFileName(file.name)) {
+      projectStatus("Only .vibe files with a safe filename are accepted.", true);
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      projectStatus("Source files must be 40 KB or smaller.", true);
+      return;
+    }
+    try {
+      const text = await file.text();
+      if (text.length > MAX_SOURCE || text.includes("\0")) {
+        projectStatus("Source must contain at most 20,000 characters and no NUL bytes.", true);
+        return;
+      }
+      await loadSourceText(text, file.name);
+      projectStatus("Opened local source: " + file.name + ". File was not uploaded or modified.");
+    } catch (error) {
+      projectStatus("Could not read local source file: " + String(error.message || error), true);
+    }
+  }
+  function saveSnapshot() {
+    const name = fileName();
+    if (!validFileName(name) || source.value.length > MAX_SOURCE || source.value.includes("\0")) {
+      projectStatus("Fix the filename or source size before saving a snapshot.", true);
+      return;
+    }
+    const record = { version: 1, filename: name, source: source.value };
+    try {
+      const serialized = JSON.stringify(record);
+      if (serialized.length > MAX_FILE_BYTES) {
+        projectStatus("Snapshot exceeds the browser's 40 KB limit.", true);
+        return;
+      }
+      window.localStorage.setItem(SNAPSHOT_KEY, serialized);
+      refreshSnapshot();
+      projectStatus("Snapshot saved in this browser only. No automatic saving or syncing.");
+    } catch {
+      projectStatus("Browser storage unavailable. Download the .vibe source instead.", true);
+    }
+  }
+  async function restoreSnapshot() {
+    const record = refreshSnapshot().record;
+    if (!record) {
+      projectStatus("No valid saved snapshot available.", true);
+      return;
+    }
+    if (!window.confirm("Restore the saved " + record.filename + " snapshot? Current editor text will be replaced.")) {
+      return;
+    }
+    await loadSourceText(record.source, record.filename);
+    projectStatus("Local snapshot restored: " + record.filename + ".");
+  }
+  function clearSnapshot() {
+    if (!window.confirm("Clear the saved VibeWeb source snapshot from this browser?")) return;
+    try {
+      window.localStorage.removeItem(SNAPSHOT_KEY);
+      refreshSnapshot();
+      projectStatus("Local snapshot cleared. Current editor text was kept.");
+    } catch {
+      projectStatus("Browser storage unavailable; could not clear snapshot.", true);
+    }
   }
   function updateLines() {
     const lineCount = Math.max(1, source.value.split("\n").length);
