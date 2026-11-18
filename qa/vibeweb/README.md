@@ -151,3 +151,21 @@ compiler failures, filename safety, mobile layout, and axe accessibility.
 bounded ZIP paths, metadata/headers, same-origin request guards and
 failure-without-download behavior. No GitHub repository changes or actual
 deployment are performed by the tests.
+
+## Phase 3N: build-on-push ZIP QA
+
+Exports now include a GitHub Pages workflow that checks out Vibe at a pinned
+immutable public Git commit, recompiles exactly one `source/*.vibe` file,
+verifies the native compiler report, and only then uploads the built `site/`.
+Files in the `source/` directory are never served by the Pages artifact.
+
+The Python regression in `tests/test_playground.py` extracts a generated ZIP
+and runs the **exact Bash compile and verify run block** from its deployment
+workflow on a temporary project. It tests a changed source, the presence of
+a verified build report, refusal of invalid source, removal of stale HTML
+before compilation, and refusal when multiple source files are present.
+
+The browser ZIP test also checks the pinned compiler checkout, install
+command, source-to-HTML build command, and the ordering of compilation
+before Pages upload. These tests do not publish a site or require access
+to the user's GitHub repositories.
