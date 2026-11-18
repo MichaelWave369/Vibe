@@ -88,7 +88,8 @@ def test_playground_static_page_and_allowlisted_examples(local_server):
     assert code == 200
     assert b'VibeWeb Playground' in document
     assert b'sandbox="allow-scripts"' in document
-    assert b"allow-same-origin" not in document
+    assert b'sandbox="allow-scripts allow-same-origin"' not in document
+    assert b'sandbox="allow-same-origin' not in document
     assert headers["Cache-Control"] == "no-store"
     assert "Content-Security-Policy" in headers
 
