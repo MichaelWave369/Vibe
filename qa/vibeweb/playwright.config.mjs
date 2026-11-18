@@ -14,10 +14,18 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    command: "node serve.mjs",
-    url: "http://127.0.0.1:4319/health",
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
-  },
+  webServer: [
+    {
+      command: "node serve.mjs",
+      url: "http://127.0.0.1:4319/health",
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      command: "python -m vibe.playground --port 4320",
+      url: "http://127.0.0.1:4320/health",
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+  ],
 });

@@ -421,3 +421,57 @@ rejection, mobile overflow, and automated axe WCAG A/AA checks. Automated
 checks do not substitute for manual accessibility audits. Custom packs are
 compile-time declarations, **not arbitrary runtime uploads**; no accounts,
 telemetry, multiplayer, editable lesson authoring UI, or online catalog exists.
+
+## Phase 3J: local native compiler playground
+
+VibeWeb now includes a **local development playground** that uses the same
+Python parser, typed SSA IR, web emitter and heuristic preservation gate as
+the CLI. It is not a second/approximate JavaScript compiler.
+
+From the Vibe repository (Python 3.11+):
+
+```bash
+python -m pip install -e .
+python -m vibe.playground --port 4320
+```
+
+Then open **http://127.0.0.1:4320/**. You can start with a counter,
+component, form, typing lesson, curriculum or lesson-pack example, edit the
+source in the built-in editor, and click **Compile & preview** or press
+**Ctrl+Enter**. The right panel displays the compiled page, generated HTML,
+or a JSON verification report. Parser/binding diagnostics stay visible and
+are linked to source line numbers where available. **Save HTML** downloads
+only the generated standalone output to your own machine when requested.
+
+The server binds only to `127.0.0.1`, rejects non-loopback Host headers,
+does not provide cross-origin access, and requires a custom header plus
+application/json for the compiler POST route. Requests are capped at 40 KB,
+source at 20,000 characters, and example retrieval is allowlisted. No
+arbitrary shell commands, user-provided file paths or network actions are
+executed by the compiler service. Compiles are **in memory** and do not
+write or modify repository files. No account, external API or online compiler
+is required. Python dependencies remain standard-library-only beyond Vibe.
+
+The browser preview uses `iframe sandbox="allow-scripts"` with an opaque
+origin; it cannot access the playground's own origin/storage. An additional
+CSP disables external connections, navigation-dependent forms and external
+assets in the preview. Consequently, app features requiring same-origin
+browser localStorage will not function normally inside the preview; download
+the compiled HTML and serve it from a local web server for full storage
+testing. A compiler bridge score is **heuristic**, not a formal guarantee
+of security or browser behavior.
+
+```bash
+python -m pytest -q tests/test_playground.py
+# Full real Chromium suite (Node 22+, Playwright dependencies required):
+npm run test:browser --prefix qa/vibeweb
+```
+
+The Playwright browser QA workflow launches the separate local playground
+server and tests editing, compilation, diagnostics, sandboxing, HTML
+inspection, download, mobile layout and an axe WCAG A/AA scan. Automated
+accessibility checks are not equivalent to a manual audit. This local
+developer environment is not a public multi-tenant service and must not be
+exposed directly to the internet; deploying a hosted compiler requires
+additional authentication, process isolation, rate controls and security
+review.
