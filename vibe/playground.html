@@ -611,10 +611,8 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       const response = await fetch("/api/example?name=" + encodeURIComponent(examples.value));
       if (!response.ok) throw Error("Example unavailable");
       const data = await response.json();
-      source.value = data.source;
-      source.scrollTop = 0;
-      updateLines();
-      await compile();
+      await loadSourceText(data.source, examples.value + ".vibe");
+      projectStatus("Loaded starter example. Current editor text was replaced; no source files were changed.");
     } catch (error) {
       setState(String(error.message || error), "bad");
     }
@@ -633,6 +631,10 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       }
       examples.value = "packs";
       await loadExample();
+      const stored = refreshSnapshot();
+      if (stored.record) projectStatus("Saved browser snapshot available. Click Restore snapshot to load it.");
+      else if (stored.exists) projectStatus("Stored snapshot is incompatible. You can clear it.", true);
+      else if (stored.unavailable) projectStatus("Browser storage unavailable. Use Download .vibe to save work.", true);
     } catch (error) {
       setState(String(error.message || error), "bad");
     }
@@ -641,10 +643,16 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
     errorLine = null;
     updateLines();
     closeSuggestions();
+    projectState();
     if (!working) setState("Source changed. Compile to refresh output.");
   });
   source.addEventListener("scroll", () => { editorLines.scrollTop = source.scrollTop; });
   source.addEventListener("keydown", event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      saveSource();
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && (event.code === "Space" || event.key === " ")) {
       event.preventDefault();
       openSuggestions();
@@ -678,11 +686,29 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       const start = source.selectionStart, end = source.selectionEnd;
       source.setRangeText("  ", start, end, "end");
       updateLines();
+      projectState();
     }
   });
   byId("suggest").addEventListener("click", () => {
     source.focus();
     openSuggestions();
+  });
+  byId("open-source").addEventListener("click", () => byId("open-source-file").click());
+  byId("open-source-file").addEventListener("change", async () => {
+    const picker = byId("open-source-file");
+    const file = picker.files && picker.files[0];
+    try { await importSource(file); }
+    finally { picker.value = ""; }
+  });
+  byId("save-source").addEventListener("click", saveSource);
+  byId("save-snapshot").addEventListener("click", saveSnapshot);
+  byId("restore-snapshot").addEventListener("click", restoreSnapshot);
+  byId("clear-snapshot").addEventListener("click", clearSnapshot);
+  byId("project-name").addEventListener("input", () => {
+    projectState();
+    if (!validFileName(fileName())) {
+      projectStatus("Choose a valid .vibe filename before downloading or saving a snapshot.", true);
+    }
   });
   byId("compile").addEventListener("click", compile);
   byId("load").addEventListener("click", loadExample);
