@@ -149,3 +149,68 @@ def test_playground_request_validation_and_csrf_guard(local_server):
     code, _, _ = http_request(local_server, "/api/no", method="POST",
                               data={"source": sample()}, headers=compile_headers())
     assert code == 404
+
+
+
+def test_phase3k_compiler_report_contains_bounded_source_to_html_anchors():
+    result = compile_document(sample("counter"))
+    assert result["ok"] is True
+    report = result["report"]
+    assert "not a full source map" in report["outline_note"]
+    outline = report["outline"]
+    assert isinstance(outline, list) and 3 <= len(outline) <= 80
+    heading = next(item for item in outline if item["kind"] == "heading")
+    assert heading["source_line"] > 1
+    assert heading["html_line"] > 1
+    assert "<h1>" in heading["html_excerpt"]
+    page = next(item for item in outline if item["kind"] == "page")
+    assert page["name"] == "CounterPage"
+    assert page["source_line"] < heading["source_line"]
+    assert page["html_line"] is not None
+    intent = next(item for item in outline if item["kind"] == "intent")
+    assert intent["html_line"] is None  # Intent is metadata, not a DOM node.
+    for item in outline:
+        assert item["source_line"] <= len(sample().splitlines())
+        if item["html_line"] is not None:
+            assert item["html_line"] <= len(result["html"].splitlines())
+
+
+def test_phase3k_inspector_handles_components_and_typing_sections():
+    result = compile_document(sample("packs"))
+    assert result["ok"] is True
+    outline = result["report"]["outline"]
+    typing = next(item for item in outline if item["kind"] == "typing")
+    assert "vibe-typing" in typing["html_excerpt"]
+    lessons = [item for item in outline if item["kind"] == "lesson"]
+    assert len(lessons) == 4
+    assert all(item["html_line"] is not None for item in lessons)
+
+    result = compile_document(sample("components"))
+    assert result["ok"] is True
+    components = [item for item in result["report"]["outline"] if item["kind"] == "component"]
+    assert components and all(item["source_line"] > 1 for item in components)
+
+
+def test_phase3k_parser_errors_preserve_source_line_locations():
+    source = sample().replace('  heading: "The first VibeWeb page"',
+                              '   heading: "The first VibeWeb page"')
+    result = compile_document(source)
+    assert result["ok"] is False
+    diagnostic = result["diagnostics"][0]
+    assert diagnostic["level"] == "error"
+    assert diagnostic["line"] == next(
+        i for i, text in enumerate(source.splitlines(), 1) if "heading:" in text
+    )
+    assert "indent with multiples of two spaces" in diagnostic["message"]
+
+
+def test_phase3k_inspector_never_treats_markup_literals_as_executable_source():
+    from vibe.playground_inspector import build_outline
+
+    source = 'intent Safe:\npage Safe:\n  heading: "<img src=x onerror=x>"\n'
+    html = '<!doctype html>\n<title>safe</title>\n<h1>&lt;img src=x onerror=x&gt;</h1>'
+    outline = build_outline(source, html)
+    assert len(outline) == 3
+    heading = next(item for item in outline if item["kind"] == "heading")
+    assert heading["html_excerpt"] == "<h1>&lt;img src=x onerror=x&gt;</h1>"
+    assert not any(item["kind"] == "img" for item in outline)

@@ -54,7 +54,28 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
 .status{font-size:.79rem;color:var(--muted)}
 .status.good{color:#a6f0c6}.status.bad{color:var(--err)}
 #diagnostics{font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:150px;overflow:auto;color:#bcd2f2}
+.diag-item{display:flex;align-items:flex-start;gap:.55rem;margin:.2rem 0}
+.diag-item button{min-height:28px;padding:.1rem .42rem;flex-shrink:0;font:inherit;border-color:#c77e85;color:#ffe2da}
+.diag-text{overflow-wrap:anywhere;white-space:pre-wrap}
 #diagnostics.error{color:#ffb1aa}
+.gutter .gutter-marked{display:block;background:#68323c;color:#ffd6cd;border-radius:4px;font-weight:700}
+#source.source-has-error{box-shadow:inset 0 0 0 2px #aa6165}
+#suggestions{position:absolute;bottom:.7rem;left:3.8rem;right:.7rem;max-width:530px;background:#14243c;border:1px solid #71c9bb;border-radius:10px;padding:.6rem;z-index:3;box-shadow:0 10px 30px #0009}
+#suggestions[hidden]{display:none}
+#suggestions p{font-size:.76rem;color:#b9e8dc;margin:.1rem .3rem .45rem}
+#suggestion-list{max-height:215px;overflow:auto}
+#suggestion-list button{display:block;width:100%;min-height:30px;border:0;text-align:left;background:transparent;border-radius:6px;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap}
+#suggestion-list button[aria-selected="true"]{background:#2d5570;color:#fff}
+.map-intro{font-size:.79rem;color:var(--muted);line-height:1.45;margin:0 0 .8rem}
+.map-list{display:grid;gap:.65rem}
+.map-entry{border:1px solid #3a5070;background:#142239;border-radius:10px;padding:.65rem}
+.map-entry strong{font-size:.8rem}
+.map-entry p{font-size:.75rem;color:var(--muted);margin:.22rem 0;overflow-wrap:anywhere}
+.map-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:.45rem 0}
+.map-actions button{min-height:30px;font-size:.75rem;padding:.2rem .55rem}
+.map-entry pre{font:11px/1.45 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#cadff3;margin:.45rem 0 0}
+#html-output .html-line{display:block;white-space:pre-wrap;overflow-wrap:anywhere}
+#html-output .html-focus-line{background:#36506a;color:#fff;outline:1px solid #82e2d2}
 .hint{padding:1rem .1rem 0;font-size:.79rem;line-height:1.6;color:var(--muted)}
 .hint strong{color:#c9ecff}
 @media(max-width:980px){.workspace{grid-template-columns:1fr}.editor-body,.preview-wrap,.output{height:440px;min-height:320px}.wrapper{padding:1rem}.panel{border-radius:12px}}
@@ -78,10 +99,14 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
   </section>
   <div class="workspace">
     <section class="panel" aria-label="Vibe source editor">
-      <div class="panel-head"><strong>source.vibe</strong><small>VibeWeb bounded syntax</small></div>
+      <div class="panel-head"><strong>source.vibe</strong><div><button type="button" id="suggest" aria-controls="suggestions" aria-expanded="false">Suggestions</button> <small>Ctrl+Space</small></div></div>
       <div class="editor-body">
         <pre class="gutter" id="line-numbers" aria-hidden="true">1</pre>
         <textarea id="source" aria-label="Vibe source code" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+        <div id="suggestions" hidden>
+          <p id="suggestions-title">Available Vibe statements · Arrow keys to choose · Enter to insert</p>
+          <div id="suggestion-list" role="listbox" aria-label="Vibe completion suggestions"></div>
+        </div>
       </div>
       <div class="editor-foot"><span id="charcount">0 characters</span><span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> to compile</span></div>
     </section>
@@ -92,6 +117,7 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
           <button class="tab" id="tab-preview" role="tab" aria-selected="true" aria-controls="view-preview">Preview</button>
           <button class="tab" id="tab-html" role="tab" aria-selected="false" aria-controls="view-html">HTML</button>
           <button class="tab" id="tab-report" role="tab" aria-selected="false" aria-controls="view-report">Report</button>
+          <button class="tab" id="tab-map" role="tab" aria-selected="false" aria-controls="view-map">Source map</button>
         </div>
       </div>
       <div class="preview-wrap" id="view-preview" role="tabpanel" aria-labelledby="tab-preview">
@@ -99,6 +125,10 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       </div>
       <div class="output" id="view-html" role="tabpanel" aria-labelledby="tab-html" hidden><pre id="html-output">Compile a page to inspect its generated HTML.</pre></div>
       <div class="output" id="view-report" role="tabpanel" aria-labelledby="tab-report" hidden><pre id="report-output">Compiler details appear after a build.</pre></div>
+      <div class="output" id="view-map" role="tabpanel" aria-labelledby="tab-map" hidden>
+        <p class="map-intro">Approximate declaration-to-HTML anchors from the native compiler, not a full source map. Select a source declaration or generated line.</p>
+        <div id="map-output" class="map-list">Compile a page to inspect its structure.</div>
+      </div>
       <div class="report">
         <div class="report-header"><h3>Compiler diagnostics</h3><div><button type="button" id="download" disabled>Save HTML</button></div></div>
         <div id="state" class="status" role="status" aria-live="polite">Loading examples…</div>
@@ -115,10 +145,112 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
   const source = byId("source");
   const examples = byId("examples");
   const editorLines = byId("line-numbers");
-  const tabs = ["preview", "html", "report"];
+  const tabs = ["preview", "html", "report", "map"];
   const preview = byId("preview");
   let generatedHTML = "";
   let working = false;
+  let errorLine = null;
+  let completionChoices = [];
+  let completionSelected = 0;
+  const statementSuggestions = {
+    root: ["intent App:", "preserve:", "bridge:", "page App:", "emit web"],
+    page: ['title: "Page title"', 'heading: "Page heading"', "layout: grid",
+      "state:", "text_state:", "bounds:", "components:", "view:", "typing:",
+      'submit: "Save local draft"', "persist: local"],
+    view: ['text: "Hello {name}"', 'input "Count": count',
+      'input_text "Name": name min=2 max=24', 'select "Theme": theme options="Teal|Gold"',
+      'use CounterCard label="Alpha"', 'button "Increase":'],
+    components: ["component CounterCard:"],
+    component: ['prop label: string', "state count: 0", "bounds count: 0..9",
+      'text: "{label}: {count}"', 'input "Count": count',
+      'input_text "Name": name min=2 max=24', 'button "Increment":'],
+    typing: ['passage: "Precision matters.  Two spaces are welcome here."',
+      "progress: local",
+      'lesson "Warmup" difficulty=beginner: "Type slowly and precisely."',
+      'lesson "Practice" pack="Foundations" difficulty=intermediate: "Practice with spaces."'],
+    state: ["count: 0", "total: 0"],
+    text_state: ['name: "Visitor"', 'theme: "Teal"'],
+    bounds: ["count: 0..369", "total: 0..369"],
+    preserve: ["readability = high", "testability = high"],
+    bridge: ["epsilon_floor = 0.02", "measurement_safe_ratio = 0.85", "mode = strict"],
+  };
+  function contextAtCursor() {
+    const lines = source.value.slice(0, source.selectionStart).split("\n");
+    const current = lines.at(-1);
+    const indent = (current.match(/^ */) || [""])[0].length;
+    if (indent === 0) return { section: "root", prefix: current };
+    if (indent === 2) return { section: "page", prefix: current.trimStart() };
+    let section = "page";
+    for (let i = lines.length - 2; i >= 0; i--) {
+      const value = lines[i];
+      const depth = (value.match(/^ */) || [""])[0].length;
+      const text = value.trim();
+      if (depth === 0 && /^(?:page|intent)\s/.test(text)) break;
+      if (depth === 2 && /^(?:view|typing|components|state|text_state|bounds|preserve|bridge):$/.test(text)) {
+        section = text.slice(0, -1);
+        break;
+      }
+      if (depth === 4 && /^component\s+/.test(text) && indent >= 6) {
+        section = "component";
+        break;
+      }
+    }
+    return { section, prefix: current.trimStart() };
+  }
+  function closeSuggestions() {
+    byId("suggestions").hidden = true;
+    byId("suggest").setAttribute("aria-expanded", "false");
+    completionChoices = [];
+    completionSelected = 0;
+  }
+  function highlightSuggestion() {
+    [...byId("suggestion-list").children].forEach((node, index) => {
+      node.setAttribute("aria-selected", String(index === completionSelected));
+    });
+  }
+  function applySuggestion(index) {
+    const choice = completionChoices[index];
+    if (!choice) return;
+    const cursor = source.selectionStart;
+    const lineStart = source.value.lastIndexOf("\n", cursor - 1) + 1;
+    const lineEndIndex = source.value.indexOf("\n", cursor);
+    const lineEnd = lineEndIndex < 0 ? source.value.length : lineEndIndex;
+    const before = source.value.slice(lineStart, cursor);
+    const indent = (before.match(/^ */) || [""])[0].length;
+    // Replacing an existing statement must not duplicate its remaining suffix.
+    source.setRangeText(choice, lineStart + indent, lineEnd, "end");
+    closeSuggestions();
+    source.focus();
+    source.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function openSuggestions() {
+    const { section, prefix } = contextAtCursor();
+    // Offer contextual replacement even at the start of an existing statement.
+    // Acceptance replaces the entire current statement, not just the prefix.
+    const values = statementSuggestions[section] || [];
+    completionChoices = values.filter(value =>
+      value.toLowerCase().startsWith(prefix.toLowerCase())).slice(0, 9);
+    const list = byId("suggestion-list");
+    list.replaceChildren();
+    if (!completionChoices.length) {
+      closeSuggestions();
+      setState("No completions match this position. Try a section heading.", "");
+      return;
+    }
+    completionSelected = 0;
+    completionChoices.forEach((value, index) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(index === 0));
+      option.textContent = value;
+      option.addEventListener("mousedown", event => event.preventDefault());
+      option.addEventListener("click", () => applySuggestion(index));
+      list.append(option);
+    });
+    byId("suggestions").hidden = false;
+    byId("suggest").setAttribute("aria-expanded", "true");
+  }
   function setState(message, kind) {
     const node = byId("state");
     node.textContent = message;
@@ -126,8 +258,117 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
   }
   function updateLines() {
     const lineCount = Math.max(1, source.value.split("\n").length);
-    editorLines.textContent = Array.from({ length: lineCount }, (_, i) => i + 1).join("\n");
+    const fragment = document.createDocumentFragment();
+    for (let line = 1; line <= lineCount; line++) {
+      const item = document.createElement("span");
+      item.textContent = String(line);
+      if (line === errorLine) item.className = "gutter-marked";
+      fragment.append(item);
+    }
+    editorLines.replaceChildren(fragment);
+    source.classList.toggle("source-has-error", errorLine !== null);
+    editorLines.scrollTop = source.scrollTop;
     byId("charcount").textContent = source.value.length + " / 20,000 characters";
+  }
+  function jumpToLine(line) {
+    if (!Number.isInteger(line) || line < 1) return;
+    const lines = source.value.split("\n");
+    if (line > lines.length) return;
+    const before = lines.slice(0, line - 1);
+    const start = before.reduce((sum, text) => sum + text.length + 1, 0);
+    source.focus();
+    source.setSelectionRange(start, start + lines[line - 1].length);
+    const lineHeight = Number.parseFloat(window.getComputedStyle(source).lineHeight) || 21;
+    source.scrollTop = Math.max(0, (line - 3) * lineHeight);
+    editorLines.scrollTop = source.scrollTop;
+    errorLine = line;
+    updateLines();
+  }
+  function renderDiagnostics(items) {
+    const container = byId("diagnostics");
+    container.replaceChildren();
+    if (!items.length) {
+      container.textContent = "No diagnostics.";
+      return;
+    }
+    const first = items.find(item => item.level === "error" && Number.isInteger(item.line));
+    errorLine = first ? first.line : null;
+    updateLines();
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = "diag-item";
+      if (Number.isInteger(item.line) && item.line > 0) {
+        const go = document.createElement("button");
+        go.type = "button";
+        go.textContent = "Line " + item.line + (item.column ? ":" + item.column : "");
+        go.addEventListener("click", () => jumpToLine(item.line));
+        row.append(go);
+      }
+      const message = document.createElement("span");
+      message.className = "diag-text";
+      message.textContent = item.level.toUpperCase() + ": " + item.message;
+      row.append(message);
+      container.append(row);
+    }
+  }
+  function showHtml(html) {
+    const pre = byId("html-output");
+    pre.replaceChildren();
+    const fragment = document.createDocumentFragment();
+    html.split("\n").forEach((line, index) => {
+      const element = document.createElement("span");
+      element.className = "html-line";
+      element.dataset.line = String(index + 1);
+      element.textContent = line || " ";
+      fragment.append(element);
+    });
+    pre.append(fragment);
+  }
+  function showHtmlAtLine(line) {
+    tab("html");
+    const element = [...byId("html-output").children]
+      .find(child => Number(child.dataset.line) === line);
+    if (!element) return;
+    const panel = byId("view-html");
+    [...byId("html-output").children].forEach(child =>
+      child.classList.remove("html-focus-line"));
+    element.classList.add("html-focus-line");
+    const delta = element.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+    panel.scrollTop += delta - panel.clientHeight / 3;
+  }
+  function renderOutline(outline) {
+    const list = byId("map-output");
+    list.replaceChildren();
+    if (!Array.isArray(outline) || !outline.length) {
+      list.textContent = "No declaration anchors were generated.";
+      return;
+    }
+    for (const item of outline) {
+      const row = document.createElement("div");
+      row.className = "map-entry";
+      const heading = document.createElement("strong");
+      heading.textContent = item.kind + " · " + item.name;
+      row.append(heading);
+      const navigation = document.createElement("div");
+      navigation.className = "map-actions";
+      const sourceButton = document.createElement("button");
+      sourceButton.type = "button";
+      sourceButton.textContent = "Source line " + item.source_line;
+      sourceButton.addEventListener("click", () => jumpToLine(item.source_line));
+      navigation.append(sourceButton);
+      if (Number.isInteger(item.html_line)) {
+        const htmlButton = document.createElement("button");
+        htmlButton.type = "button";
+        htmlButton.textContent = "HTML line " + item.html_line;
+        htmlButton.addEventListener("click", () => showHtmlAtLine(item.html_line));
+        navigation.append(htmlButton);
+      }
+      row.append(navigation);
+      const excerpt = document.createElement("pre");
+      excerpt.textContent = item.html_excerpt || "No direct emitted HTML anchor.";
+      row.append(excerpt);
+      list.append(row);
+    }
   }
   function tab(name) {
     tabs.forEach(key => {
@@ -147,28 +388,34 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
     byId("download").disabled = true;
     byId("html-output").textContent = "No HTML was emitted.";
     byId("report-output").textContent = "No report was emitted.";
+    byId("map-output").textContent = "No source map available.";
     preview.srcdoc = "<!doctype html><html><body style=\"font:16px sans-serif;padding:2rem\">No preview available.</body></html>";
   }
   async function compile() {
     if (working) return;
     working = true;
+    const snapshot = source.value;
     byId("compile").disabled = true;
     setState("Compiling with native Vibe…");
     byId("diagnostics").className = "";
+    errorLine = null;
+    updateLines();
+    closeSuggestions();
     try {
       const response = await fetch("/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Vibe-Playground": "compile" },
-        body: JSON.stringify({ source: source.value }),
+        body: JSON.stringify({ source: snapshot }),
         cache: "no-store",
       });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Compiler service failed");
+      if (source.value !== snapshot) {
+        setState("Source changed during compilation. Compile again.", "bad");
+        return;
+      }
       const items = Array.isArray(data.diagnostics) ? data.diagnostics : [];
-      byId("diagnostics").textContent = items.map(item => {
-        const where = item.line ? "Line " + item.line + (item.column ? ":" + item.column : "") + ": " : "";
-        return item.level.toUpperCase() + ": " + where + item.message;
-      }).join("\n") || "No diagnostics.";
+      renderDiagnostics(items);
       if (!data.ok) {
         resetOutput();
         byId("diagnostics").className = "error";
@@ -176,8 +423,9 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
         tab("report");
       } else {
         generatedHTML = data.html;
-        byId("html-output").textContent = generatedHTML;
+        showHtml(generatedHTML);
         byId("report-output").textContent = JSON.stringify(data.report, null, 2);
+        renderOutline(data.report.outline);
         preview.srcdoc = previewDocument(generatedHTML);
         byId("download").disabled = false;
         setState("Compiled " + data.report.size_bytes + " bytes · bridge score " + data.report.bridge_score, "good");
@@ -224,9 +472,38 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       setState(String(error.message || error), "bad");
     }
   }
-  source.addEventListener("input", updateLines);
+  source.addEventListener("input", () => {
+    errorLine = null;
+    updateLines();
+    closeSuggestions();
+    if (!working) setState("Source changed. Compile to refresh output.");
+  });
   source.addEventListener("scroll", () => { editorLines.scrollTop = source.scrollTop; });
   source.addEventListener("keydown", event => {
+    if ((event.ctrlKey || event.metaKey) && (event.code === "Space" || event.key === " ")) {
+      event.preventDefault();
+      openSuggestions();
+      return;
+    }
+    if (!byId("suggestions").hidden) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSuggestions();
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        completionSelected = (completionSelected +
+          (event.key === "ArrowDown" ? 1 : -1) + completionChoices.length) % completionChoices.length;
+        highlightSuggestion();
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        applySuggestion(completionSelected);
+        return;
+      }
+    }
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
       compile();
@@ -237,6 +514,10 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       source.setRangeText("  ", start, end, "end");
       updateLines();
     }
+  });
+  byId("suggest").addEventListener("click", () => {
+    source.focus();
+    openSuggestions();
   });
   byId("compile").addEventListener("click", compile);
   byId("load").addEventListener("click", loadExample);

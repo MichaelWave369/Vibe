@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from .emitter import emit_code
 from .ir import ast_to_ir
+from .playground_inspector import build_outline
 from .parser import ParseError, parse_source
 from .verifier import verify
 from .web import WebSpecError
@@ -65,6 +66,8 @@ def compile_document(source: str) -> dict[str, object]:
                 "size_bytes": len(html.encode("utf-8")),
                 "bridge_score": round(float(result.bridge_score), 6),
                 "bridge_passed": True,
+                "outline": build_outline(source, html),
+                "outline_note": "Approximate declaration-to-markup anchors, not a full source map.",
                 "checks": ["bounded VibeWeb grammar", "typed SSA IR", "native web emitter",
                            "heuristic preservation gate"],
                 "disclaimer": "Bridge scores are heuristic, not proof of browser safety or correctness.",
