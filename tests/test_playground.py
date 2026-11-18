@@ -236,3 +236,128 @@ def test_phase3l_playground_exposes_only_client_side_file_and_snapshot_controls(
         status, _, _ = http_request(local_server, route, method="POST",
                                      data={"source": sample()}, headers=compile_headers())
         assert status == 404, route
+
+
+
+def test_phase3m_pages_archive_is_complete_in_memory_and_reproducible():
+    from io import BytesIO
+    from zipfile import ZipFile
+    from vibe.playground_export import archive_filename, build_pages_archive, safe_source_filename
+
+    source = sample("counter")
+    compiled = compile_document(source)
+    assert compiled["ok"] is True
+    archive = build_pages_archive(source, "My Counter.vibe", compiled["html"])
+    assert archive == build_pages_archive(source, "My Counter.vibe", compiled["html"])
+    assert archive_filename("My Counter.vibe") == "vibeweb-my-counter-pages.zip"
+    with ZipFile(BytesIO(archive), "r") as zipped:
+        names = set(zipped.namelist())
+        assert names == {
+            "site/index.html", "site/.nojekyll", "source/My Counter.vibe",
+            "README.md", ".github/workflows/deploy-pages.yml",
+        }
+        assert zipped.testzip() is None
+        assert zipped.read("site/index.html").decode("utf-8") == compiled["html"]
+        assert zipped.read("source/My Counter.vibe").decode("utf-8") == source
+        assert zipped.read("site/.nojekyll") == b""
+        workflow = zipped.read(".github/workflows/deploy-pages.yml").decode("utf-8")
+        assert "actions/configure-pages@v5" in workflow
+        assert "actions/upload-pages-artifact@v4" in workflow
+        assert "actions/deploy-pages@v4" in workflow
+        assert "pages: write" in workflow and "id-token: write" in workflow
+        assert "path: site" in workflow
+        assert "branches: [main]" in workflow
+        guide = zipped.read("README.md").decode("utf-8")
+        assert "Settings" in guide and "Pages" in guide
+        assert "not" in guide.lower() and "deploy" in guide.lower()
+        assert "source/My Counter.vibe" in guide
+
+    for invalid in ("../evil.vibe", "bad/name.vibe", "evil.zip",
+                    "<script>.vibe", "a..b.vibe", ".vibe", "", "a" * 81 + ".vibe"):
+        assert not safe_source_filename(invalid)
+    assert not safe_source_filename(None)
+    assert safe_source_filename("My Counter.vibe")
+
+
+def test_phase3m_pages_archive_rejects_uncompiled_content_and_unsafe_names():
+    from vibe.playground_export import build_pages_archive
+
+    for filename in ("../../x.vibe", "x.js", "x\\name.vibe"):
+        with pytest.raises(ValueError, match="safe"):
+            build_pages_archive(sample(), filename, "<!doctype html><html></html>")
+    with pytest.raises(ValueError, match="compiled HTML"):
+        build_pages_archive(sample(), "good.vibe", "<html>Not compiled</html>")
+
+
+def test_phase3m_export_endpoint_returns_download_only_when_compilation_passes(local_server):
+    from io import BytesIO
+    from zipfile import ZipFile
+
+    source = sample("counter")
+    status, headers, body = http_request(
+        local_server, "/api/export-pages", method="POST",
+        data={"source": source, "filename": "Counter Demo.vibe"}, headers=compile_headers()
+    )
+    assert status == 200
+    assert headers["Content-Type"] == "application/zip"
+    assert headers["X-Content-Type-Options"] == "nosniff"
+    assert 'filename="vibeweb-counter-demo-pages.zip"' in headers["Content-Disposition"]
+    with ZipFile(BytesIO(body)) as archive:
+        assert archive.read("source/Counter Demo.vibe").decode() == source
+        assert archive.read("site/index.html").decode().startswith("<!doctype html>")
+
+    bad_source = source.replace("count += 1", "eval(1)")
+    status, headers, body = http_request(
+        local_server, "/api/export-pages", method="POST",
+        data={"source": bad_source, "filename": "counter.vibe"}, headers=compile_headers()
+    )
+    assert status == 422
+    assert headers["Content-Type"].startswith("application/json")
+    failure = json.loads(body)
+    assert failure["ok"] is False
+    assert failure["diagnostics"][0]["level"] == "error"
+    assert "html" not in failure
+
+    for data in (
+        {"source": source},
+        {"source": source, "filename": "good.vibe", "path": "/etc/shadow"},
+        {"filename": "good.vibe"},
+    ):
+        status, _, _ = http_request(
+            local_server, "/api/export-pages", method="POST",
+            data=data, headers=compile_headers()
+        )
+        assert status == 400
+
+    for name in ("../evil.vibe", "site/index.html", "bad.zip"):
+        status, _, body = http_request(
+            local_server, "/api/export-pages", method="POST",
+            data={"source": source, "filename": name}, headers=compile_headers()
+        )
+        assert status == 400 and b"safe" in body
+
+    for headers, expected in (
+        ({"Content-Type": "application/json"}, 403),
+        ({**compile_headers(), "Origin": "https://evil.example"}, 403),
+        ({**compile_headers(), "Host": "evil.example"}, 403),
+        ({"Content-Type": "text/plain", "X-Vibe-Playground": "compile"}, 415),
+    ):
+        status, _, _ = http_request(
+            local_server, "/api/export-pages", method="POST",
+            data={"source": source, "filename": "counter.vibe"}, headers=headers
+        )
+        assert status == expected
+
+    status, _, _ = http_request(local_server, "/api/export-pages", method="OPTIONS")
+    assert status == 405
+
+
+def test_phase3m_playground_exposes_explicit_pages_export_only(local_server):
+    status, _, body = http_request(local_server, "/")
+    assert status == 200
+    document = body.decode()
+    assert 'id="export-pages"' in document
+    assert "Export Pages ZIP" in document
+    assert "/api/export-pages" in document
+    assert 'sandbox="allow-scripts"' in document
+    assert "window.localStorage.setItem(SNAPSHOT_KEY" in document
