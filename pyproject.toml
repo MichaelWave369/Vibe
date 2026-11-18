@@ -28,7 +28,7 @@ where = ["."]
 include = ["vibe*"]
 
 [tool.setuptools.package-data]
-vibe = ["playground.html", "examples/*.vibe"]
+vibe = ["playground.html", "pages_workflow.yml", "examples/*.vibe"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
