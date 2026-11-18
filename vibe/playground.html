@@ -8,7 +8,7 @@
 :root{color-scheme:dark;font-family:Inter,"Segoe UI",system-ui,sans-serif;--bg:#080d18;--panel:#111c31;--soft:#17243b;--line:#314361;--white:#edf4ff;--muted:#abc0de;--accent:#7de0cf;--purple:#ac99ff;--err:#ffb1aa}
 *{box-sizing:border-box}
 body{background:radial-gradient(ellipse at top left,#1c2141 0,transparent 42%),var(--bg);color:var(--white);margin:0;min-height:100vh}
-button,select,textarea{font:inherit}
+button,select,textarea,input{font:inherit}
 button,select{border:1px solid #496081;border-radius:10px;background:var(--soft);color:var(--white);min-height:42px;padding:.5rem .85rem}
 button{cursor:pointer}
 button:hover{border-color:var(--accent)}
@@ -27,6 +27,16 @@ header{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:s
 .toolbar{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
 .toolbar label{font-size:.8rem;color:var(--muted)}
 .toolbar select{min-width:170px}
+.project-tools{display:flex;gap:.55rem .75rem;align-items:center;flex-wrap:wrap;margin:0 0 1rem;padding:.85rem 1rem;border:1px solid var(--line);background:#111b2f;border-radius:12px}
+.project-tools label{font-size:.82rem;color:var(--muted)}
+.project-tools input[type="text"]{min-height:42px;max-width:100%;width:190px;background:var(--soft);color:var(--white);border:1px solid #496081;border-radius:9px;padding:.45rem .7rem}
+.project-tools input[type="text"]:focus-visible{outline:3px solid #f6df9e;outline-offset:2px}
+.project-tools button{font-size:.84rem}
+.project-tools button:disabled{opacity:.45}
+#project-status{flex-basis:100%;font-size:.78rem;color:var(--muted);margin:0;min-height:1.15rem}
+#project-status.error{color:var(--err)}
+#dirty-flag{font-size:.78rem;color:#ffdc93;margin-right:.45rem}
+#dirty-flag.clean{color:#a6f0c6}
 .primary{border-color:#56d6bf;background:#49cfb4;color:#061625;font-weight:750}
 .primary:hover{background:#86edda}
 .workspace{display:grid;grid-template-columns:minmax(290px,1.03fr) minmax(320px,1fr);gap:1rem;min-height:650px}
@@ -97,9 +107,20 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       <button type="button" class="primary" id="compile">Compile &amp; preview</button>
     </div>
   </section>
+  <section class="project-tools" aria-label="Local project files">
+    <label for="project-name">Source file</label>
+    <input id="project-name" type="text" value="source.vibe" maxlength="80" autocomplete="off" spellcheck="false" aria-label="Source file name">
+    <input id="open-source-file" type="file" accept=".vibe" hidden>
+    <button type="button" id="open-source">Open .vibe</button>
+    <button type="button" id="save-source">Download .vibe</button>
+    <button type="button" id="save-snapshot">Save snapshot</button>
+    <button type="button" id="restore-snapshot" disabled>Restore snapshot</button>
+    <button type="button" id="clear-snapshot" disabled>Clear snapshot</button>
+    <p id="project-status" role="status" aria-live="polite">Source is local. No automatic saving or uploads.</p>
+  </section>
   <div class="workspace">
     <section class="panel" aria-label="Vibe source editor">
-      <div class="panel-head"><strong>source.vibe</strong><div><button type="button" id="suggest" aria-controls="suggestions" aria-expanded="false">Suggestions</button> <small>Ctrl+Space</small></div></div>
+      <div class="panel-head"><div><strong id="source-label">source.vibe</strong> <span id="dirty-flag" class="clean">Unchanged</span></div><div><button type="button" id="suggest" aria-controls="suggestions" aria-expanded="false">Suggestions</button> <small>Ctrl+Space</small></div></div>
       <div class="editor-body">
         <pre class="gutter" id="line-numbers" aria-hidden="true">1</pre>
         <textarea id="source" aria-label="Vibe source code" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
@@ -136,7 +157,7 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       </div>
     </section>
   </div>
-  <p class="hint"><strong>Safety:</strong> This tool listens only on your computer. It performs no file writes when compiling. The preview has an opaque sandbox origin with no parent-page access and an additional restrictive content policy. The current Vibe preservation gate is heuristic, not formal verification. Locally saved drafts inside a sandboxed preview may be unavailable.</p>
+  <p class="hint"><strong>Safety:</strong> You can open or download a local .vibe file and explicitly save/restore a source snapshot in this browser. No automatic saving or source uploads occur; browser snapshots are not encrypted and should not contain credentials. Loading examples replaces the current editor text. This tool listens only on your computer. It performs no server file writes when compiling. The preview has an opaque sandbox origin with no parent-page access and an additional restrictive content policy. The current Vibe preservation gate is heuristic, not formal verification. Locally saved drafts inside a sandboxed preview may be unavailable.</p>
 </main>
 <script>
 (() => {
