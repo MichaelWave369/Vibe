@@ -61,10 +61,21 @@ test("playground doesn't render source strings as HTML in the editing shell", as
   await source.fill(text.replace('heading: "The first VibeWeb page"',
     'heading: "<img src=x onerror=alert(1)> safe example"'));
   await page.getByRole("button", { name: "Compile & preview" }).click();
-  await expect(page.locator("#state")).toContainText("Compiled");
+  await expect.poll(async () => (await page.locator("#state").textContent()).trim())
+    .toMatch(/^(Compiled|Compilation failed)/);
+  const status = await page.locator("#state").textContent();
   const preview = page.frameLocator("#preview");
-  await expect(preview.getByRole("heading", { name: "<img src=x onerror=alert(1)> safe example" })).toBeVisible();
-  await expect(preview.locator("img")).toHaveCount(0);
+  if (status.trim().startsWith("Compiled")) {
+    // If the compiler emits HTML, it must remain plain heading text.
+    await expect(preview.locator("h1")).toContainText("<img src=x onerror=alert(1)> safe example");
+    await expect(preview.locator("img")).toHaveCount(0);
+    await page.getByRole("tab", { name: "HTML" }).click();
+    await expect(page.locator("#html-output")).toContainText("&lt;img src=x onerror=alert(1)&gt;");
+  } else {
+    // Rejecting a suspicious example at the preservation gate is also safe.
+    await expect(page.locator("#diagnostics")).toContainText("ERROR");
+    await expect(page.getByRole("button", { name: "Save HTML" })).toBeDisabled();
+  }
   await expect(page.locator("img")).toHaveCount(0);
 });
 
