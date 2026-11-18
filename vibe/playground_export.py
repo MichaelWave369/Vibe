@@ -53,7 +53,7 @@ This bundle was generated from the native Vibe compiler.
 ## Publish to GitHub Pages
 
 1. Extract this archive to an **empty** GitHub repository working directory.
-2. Commit the four included files and push to the \`main\` branch.
+2. Commit all extracted files and push to the \`main\` branch.
 3. In the repository, go to **Settings → Pages** and set the build/deployment
    source to **GitHub Actions**.
 4. Open **Actions → Deploy VibeWeb to GitHub Pages** to check the job.
