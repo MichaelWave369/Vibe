@@ -126,3 +126,15 @@ partial. No new React/Svelte performance comparison is claimed.
 ```bash
 npm run test:browser --prefix qa/vibeweb
 ```
+
+## Phase 3L: local project file workflow
+
+`tests/playground-projects.spec.mjs` verifies that the native local
+playground supports opening a `.vibe` file, downloading exact edited
+source, explicit local snapshots, confirmation-based restoration and
+clearing, input/file-size limits, corrupt-storage rejection, mobile
+layout and axe checks.
+
+This remains an opt-in, browser-local workflow. The compiler backend
+does **not** create or overwrite project files, and no cloud sync,
+repository commit operation or public hosting is involved.
