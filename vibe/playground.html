@@ -54,7 +54,28 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
 .status{font-size:.79rem;color:var(--muted)}
 .status.good{color:#a6f0c6}.status.bad{color:var(--err)}
 #diagnostics{font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:150px;overflow:auto;color:#bcd2f2}
+.diag-item{display:flex;align-items:flex-start;gap:.55rem;margin:.2rem 0}
+.diag-item button{min-height:28px;padding:.1rem .42rem;flex-shrink:0;font:inherit;border-color:#c77e85;color:#ffe2da}
+.diag-text{overflow-wrap:anywhere;white-space:pre-wrap}
 #diagnostics.error{color:#ffb1aa}
+.gutter .gutter-marked{display:block;background:#68323c;color:#ffd6cd;border-radius:4px;font-weight:700}
+#source.source-has-error{box-shadow:inset 0 0 0 2px #aa6165}
+#suggestions{position:absolute;bottom:.7rem;left:3.8rem;right:.7rem;max-width:530px;background:#14243c;border:1px solid #71c9bb;border-radius:10px;padding:.6rem;z-index:3;box-shadow:0 10px 30px #0009}
+#suggestions[hidden]{display:none}
+#suggestions p{font-size:.76rem;color:#b9e8dc;margin:.1rem .3rem .45rem}
+#suggestion-list{max-height:215px;overflow:auto}
+#suggestion-list button{display:block;width:100%;min-height:30px;border:0;text-align:left;background:transparent;border-radius:6px;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap}
+#suggestion-list button[aria-selected="true"]{background:#2d5570;color:#fff}
+.map-intro{font-size:.79rem;color:var(--muted);line-height:1.45;margin:0 0 .8rem}
+.map-list{display:grid;gap:.65rem}
+.map-entry{border:1px solid #3a5070;background:#142239;border-radius:10px;padding:.65rem}
+.map-entry strong{font-size:.8rem}
+.map-entry p{font-size:.75rem;color:var(--muted);margin:.22rem 0;overflow-wrap:anywhere}
+.map-actions{display:flex;flex-wrap:wrap;gap:.5rem;margin:.45rem 0}
+.map-actions button{min-height:30px;font-size:.75rem;padding:.2rem .55rem}
+.map-entry pre{font:11px/1.45 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#cadff3;margin:.45rem 0 0}
+#html-output .html-line{display:block;white-space:pre-wrap;overflow-wrap:anywhere}
+#html-output .html-focus-line{background:#36506a;color:#fff;outline:1px solid #82e2d2}
 .hint{padding:1rem .1rem 0;font-size:.79rem;line-height:1.6;color:var(--muted)}
 .hint strong{color:#c9ecff}
 @media(max-width:980px){.workspace{grid-template-columns:1fr}.editor-body,.preview-wrap,.output{height:440px;min-height:320px}.wrapper{padding:1rem}.panel{border-radius:12px}}
@@ -78,10 +99,14 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
   </section>
   <div class="workspace">
     <section class="panel" aria-label="Vibe source editor">
-      <div class="panel-head"><strong>source.vibe</strong><small>VibeWeb bounded syntax</small></div>
+      <div class="panel-head"><strong>source.vibe</strong><div><button type="button" id="suggest" aria-controls="suggestions" aria-expanded="false">Suggestions</button> <small>Ctrl+Space</small></div></div>
       <div class="editor-body">
         <pre class="gutter" id="line-numbers" aria-hidden="true">1</pre>
         <textarea id="source" aria-label="Vibe source code" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
+        <div id="suggestions" hidden>
+          <p id="suggestions-title">Available Vibe statements · Arrow keys to choose · Enter to insert</p>
+          <div id="suggestion-list" role="listbox" aria-label="Vibe completion suggestions"></div>
+        </div>
       </div>
       <div class="editor-foot"><span id="charcount">0 characters</span><span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> to compile</span></div>
     </section>
@@ -92,6 +117,7 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
           <button class="tab" id="tab-preview" role="tab" aria-selected="true" aria-controls="view-preview">Preview</button>
           <button class="tab" id="tab-html" role="tab" aria-selected="false" aria-controls="view-html">HTML</button>
           <button class="tab" id="tab-report" role="tab" aria-selected="false" aria-controls="view-report">Report</button>
+          <button class="tab" id="tab-map" role="tab" aria-selected="false" aria-controls="view-map">Source map</button>
         </div>
       </div>
       <div class="preview-wrap" id="view-preview" role="tabpanel" aria-labelledby="tab-preview">
@@ -99,6 +125,10 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       </div>
       <div class="output" id="view-html" role="tabpanel" aria-labelledby="tab-html" hidden><pre id="html-output">Compile a page to inspect its generated HTML.</pre></div>
       <div class="output" id="view-report" role="tabpanel" aria-labelledby="tab-report" hidden><pre id="report-output">Compiler details appear after a build.</pre></div>
+      <div class="output" id="view-map" role="tabpanel" aria-labelledby="tab-map" hidden>
+        <p class="map-intro">Approximate declaration-to-HTML anchors from the native compiler, not a full source map. Select a source declaration or generated line.</p>
+        <div id="map-output" class="map-list">Compile a page to inspect its structure.</div>
+      </div>
       <div class="report">
         <div class="report-header"><h3>Compiler diagnostics</h3><div><button type="button" id="download" disabled>Save HTML</button></div></div>
         <div id="state" class="status" role="status" aria-live="polite">Loading examples…</div>
