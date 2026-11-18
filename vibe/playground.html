@@ -390,28 +390,34 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
     byId("download").disabled = true;
     byId("html-output").textContent = "No HTML was emitted.";
     byId("report-output").textContent = "No report was emitted.";
+    byId("map-output").textContent = "No source map available.";
     preview.srcdoc = "<!doctype html><html><body style=\"font:16px sans-serif;padding:2rem\">No preview available.</body></html>";
   }
   async function compile() {
     if (working) return;
     working = true;
+    const snapshot = source.value;
     byId("compile").disabled = true;
     setState("Compiling with native Vibe…");
     byId("diagnostics").className = "";
+    errorLine = null;
+    updateLines();
+    closeSuggestions();
     try {
       const response = await fetch("/api/compile", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Vibe-Playground": "compile" },
-        body: JSON.stringify({ source: source.value }),
+        body: JSON.stringify({ source: snapshot }),
         cache: "no-store",
       });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || "Compiler service failed");
+      if (source.value !== snapshot) {
+        setState("Source changed during compilation. Compile again.", "bad");
+        return;
+      }
       const items = Array.isArray(data.diagnostics) ? data.diagnostics : [];
-      byId("diagnostics").textContent = items.map(item => {
-        const where = item.line ? "Line " + item.line + (item.column ? ":" + item.column : "") + ": " : "";
-        return item.level.toUpperCase() + ": " + where + item.message;
-      }).join("\n") || "No diagnostics.";
+      renderDiagnostics(items);
       if (!data.ok) {
         resetOutput();
         byId("diagnostics").className = "error";
@@ -419,8 +425,9 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
         tab("report");
       } else {
         generatedHTML = data.html;
-        byId("html-output").textContent = generatedHTML;
+        showHtml(generatedHTML);
         byId("report-output").textContent = JSON.stringify(data.report, null, 2);
+        renderOutline(data.report.outline);
         preview.srcdoc = previewDocument(generatedHTML);
         byId("download").disabled = false;
         setState("Compiled " + data.report.size_bytes + " bytes · bridge score " + data.report.bridge_score, "good");
@@ -467,9 +474,38 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       setState(String(error.message || error), "bad");
     }
   }
-  source.addEventListener("input", updateLines);
+  source.addEventListener("input", () => {
+    errorLine = null;
+    updateLines();
+    closeSuggestions();
+    if (!working) setState("Source changed. Compile to refresh output.");
+  });
   source.addEventListener("scroll", () => { editorLines.scrollTop = source.scrollTop; });
   source.addEventListener("keydown", event => {
+    if ((event.ctrlKey || event.metaKey) && (event.code === "Space" || event.key === " ")) {
+      event.preventDefault();
+      openSuggestions();
+      return;
+    }
+    if (!byId("suggestions").hidden) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSuggestions();
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        completionSelected = (completionSelected +
+          (event.key === "ArrowDown" ? 1 : -1) + completionChoices.length) % completionChoices.length;
+        highlightSuggestion();
+        return;
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        event.preventDefault();
+        applySuggestion(completionSelected);
+        return;
+      }
+    }
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
       compile();
@@ -480,6 +516,10 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       source.setRangeText("  ", start, end, "end");
       updateLines();
     }
+  });
+  byId("suggest").addEventListener("click", () => {
+    source.focus();
+    openSuggestions();
   });
   byId("compile").addEventListener("click", compile);
   byId("load").addEventListener("click", loadExample);
