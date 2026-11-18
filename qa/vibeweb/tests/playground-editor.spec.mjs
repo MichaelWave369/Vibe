@@ -35,8 +35,13 @@ test("Phase 3K: editor offers context-aware keyboard completions", async ({ page
   });
   await page.getByRole("button", { name: "Suggestions" }).click();
   await expect(page.locator("#suggestions")).toBeVisible();
-  await source.press("Escape");
+  // Existing text after the caret must not suppress completions.
+  await page.getByRole("option", { name: 'heading: "Page heading"' }).click();
   await expect(page.locator("#suggestions")).toBeHidden();
+  const updated = await source.inputValue();
+  expect(updated.match(/  heading: "Page heading"/g)).toHaveLength(1);
+  await source.press("Control+Enter");
+  await expect(page.locator("#state")).toContainText("Compiled");
 });
 
 test("Phase 3K: line-specific error is clickable and selects the failing source line", async ({ page }) => {
