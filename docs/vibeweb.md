@@ -513,3 +513,52 @@ and automated axe accessibility checks. The compiler server remains bound
 to localhost and all preview sandbox restrictions remain unchanged. No
 network-connected autocomplete service, remote language model or third-party
 editor dependency is added.
+
+## Phase 3L: local source projects, file round trips and explicit snapshots
+
+The existing loopback-native VibeWeb Playground now has a simple local
+project workflow. It is still a **single-document editor**, rather than a
+multi-file repository IDE.
+
+- **Open .vibe** reads one explicitly selected file in your browser and
+  compiles its contents with the existing native Vibe compiler. It never
+  sends a file to a remote service or writes it to a repository.
+- **Download .vibe**, or **Ctrl+S** while the editor is focused, requests a
+  download of the exact current source text under the selected filename.
+  The downloaded file is editable in any text editor or version-controlled
+  normally. The playground does not silently replace an existing file on
+  disk.
+- **Save snapshot** explicitly stores the current filename and source
+  in browser `localStorage` at
+  `vibeweb:playground:source:v1`. There is **no autosave**. On reload,
+  the editor still opens its standard starter example. A saved snapshot is
+  offered for explicit restoration, not loaded without permission.
+- **Restore snapshot** asks for confirmation before replacing the current
+  editor contents; **Clear snapshot** deletes the browser-local copy but
+  leaves the current editor text alone.
+- The header shows whether source differs from the last opened/downloaded
+  text. Loading an example also replaces editor text, and does not change
+  files on disk. Download source before replacing an important edit.
+
+Imports use bounded, safe `.vibe` basenames, a maximum file size of 40 KB,
+and up to 20,000 source characters with no NUL bytes. Snapshots have the
+same source/filename constraints, a versioned record structure, bounded
+JSON size, and validation before restoration. Invalid or corrupt records
+are ignored rather than silently applied. Source files are never evaluated
+as JavaScript. The compiler server still provides only in-memory compilation
+and allowlisted example reading.
+
+**Privacy:** browser storage is same-origin, unencrypted, and visible to
+other scripts served from the same origin. Do not place credentials, secrets,
+or sensitive personal information in saved snapshots. Clearing site data
+deletes them. Downloaded source files are the user's own responsibility.
+The opt-in snapshot is not a backup, synchronization, Git commit, or
+disk-write mechanism.
+
+```bash
+python -m vibe.playground --port 4320
+```
+
+The Playwright suite covers opening source, exact download round trips,
+source dirty status, save/reload/restore/clear, invalid filenames and files,
+corrupt storage, 360px mobile layout, and axe A/AA automated checks.

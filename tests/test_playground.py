@@ -214,3 +214,25 @@ def test_phase3k_inspector_never_treats_markup_literals_as_executable_source():
     heading = next(item for item in outline if item["kind"] == "heading")
     assert heading["html_excerpt"] == "<h1>&lt;img src=x onerror=x&gt;</h1>"
     assert not any(item["kind"] == "img" for item in outline)
+
+
+
+def test_phase3l_playground_exposes_only_client_side_file_and_snapshot_controls(local_server):
+    code, headers, document = http_request(local_server, "/")
+    assert code == 200
+    content = document.decode("utf-8")
+    for button in ("open-source", "save-source", "save-snapshot",
+                   "restore-snapshot", "clear-snapshot"):
+        assert f'id="{button}"' in content
+    assert 'id="open-source-file" type="file" accept=".vibe"' in content
+    assert 'id="project-name" type="text"' in content
+    assert "vibeweb:playground:source:v1" in content
+    assert "window.localStorage.setItem(SNAPSHOT_KEY" in content
+    assert "No automatic saving" in content or "no automatic saving" in content
+    assert 'sandbox="allow-scripts"' in content
+    assert "allow-same-origin" not in content.split('<iframe id="preview"')[1].split("</iframe>")[0]
+    # The server remains a deliberately small, in-memory compiler API:
+    for route in ("/api/save", "/api/open", "/api/snapshot"):
+        status, _, _ = http_request(local_server, route, method="POST",
+                                     data={"source": sample()}, headers=compile_headers())
+        assert status == 404, route

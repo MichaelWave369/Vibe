@@ -8,7 +8,7 @@
 :root{color-scheme:dark;font-family:Inter,"Segoe UI",system-ui,sans-serif;--bg:#080d18;--panel:#111c31;--soft:#17243b;--line:#314361;--white:#edf4ff;--muted:#abc0de;--accent:#7de0cf;--purple:#ac99ff;--err:#ffb1aa}
 *{box-sizing:border-box}
 body{background:radial-gradient(ellipse at top left,#1c2141 0,transparent 42%),var(--bg);color:var(--white);margin:0;min-height:100vh}
-button,select,textarea{font:inherit}
+button,select,textarea,input{font:inherit}
 button,select{border:1px solid #496081;border-radius:10px;background:var(--soft);color:var(--white);min-height:42px;padding:.5rem .85rem}
 button{cursor:pointer}
 button:hover{border-color:var(--accent)}
@@ -27,6 +27,16 @@ header{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:s
 .toolbar{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap}
 .toolbar label{font-size:.8rem;color:var(--muted)}
 .toolbar select{min-width:170px}
+.project-tools{display:flex;gap:.55rem .75rem;align-items:center;flex-wrap:wrap;margin:0 0 1rem;padding:.85rem 1rem;border:1px solid var(--line);background:#111b2f;border-radius:12px}
+.project-tools label{font-size:.82rem;color:var(--muted)}
+.project-tools input[type="text"]{min-height:42px;max-width:100%;width:190px;background:var(--soft);color:var(--white);border:1px solid #496081;border-radius:9px;padding:.45rem .7rem}
+.project-tools input[type="text"]:focus-visible{outline:3px solid #f6df9e;outline-offset:2px}
+.project-tools button{font-size:.84rem}
+.project-tools button:disabled{opacity:.45}
+#project-status{flex-basis:100%;font-size:.78rem;color:var(--muted);margin:0;min-height:1.15rem}
+#project-status.error{color:var(--err)}
+#dirty-flag{font-size:.78rem;color:#ffdc93;margin-right:.45rem}
+#dirty-flag.clean{color:#a6f0c6}
 .primary{border-color:#56d6bf;background:#49cfb4;color:#061625;font-weight:750}
 .primary:hover{background:#86edda}
 .workspace{display:grid;grid-template-columns:minmax(290px,1.03fr) minmax(320px,1fr);gap:1rem;min-height:650px}
@@ -34,6 +44,7 @@ header{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:s
 .panel-head{display:flex;align-items:center;justify-content:space-between;gap:.8rem;padding:.75rem 1rem;border-bottom:1px solid var(--line);background:#142039}
 .panel-head strong{font-size:.92rem}
 .panel-head small{color:var(--muted);font-size:.75rem}
+#source-label{display:inline-block;max-width:22ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .editor-body{height:min(67vh,740px);min-height:360px;display:flex;position:relative;background:#0d1527}
 .gutter{color:#6985a9;overflow:hidden;text-align:right;padding:1rem .85rem 1rem .5rem;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre;min-width:3rem;user-select:none;border-right:1px solid #243452}
 #source{display:block;border:0;outline:0;resize:none;flex:1;min-width:0;background:transparent;color:#d8eeff;padding:1rem;white-space:pre;tab-size:2;font:13px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}
@@ -97,9 +108,20 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       <button type="button" class="primary" id="compile">Compile &amp; preview</button>
     </div>
   </section>
+  <section class="project-tools" aria-label="Local project files">
+    <label for="project-name">Source file</label>
+    <input id="project-name" type="text" value="source.vibe" maxlength="80" autocomplete="off" spellcheck="false" aria-label="Source file name">
+    <input id="open-source-file" type="file" accept=".vibe" hidden>
+    <button type="button" id="open-source">Open .vibe</button>
+    <button type="button" id="save-source">Download .vibe</button>
+    <button type="button" id="save-snapshot">Save snapshot</button>
+    <button type="button" id="restore-snapshot" disabled>Restore snapshot</button>
+    <button type="button" id="clear-snapshot" disabled>Clear snapshot</button>
+    <p id="project-status" role="status" aria-live="polite">Source is local. No automatic saving or uploads.</p>
+  </section>
   <div class="workspace">
     <section class="panel" aria-label="Vibe source editor">
-      <div class="panel-head"><strong>source.vibe</strong><div><button type="button" id="suggest" aria-controls="suggestions" aria-expanded="false">Suggestions</button> <small>Ctrl+Space</small></div></div>
+      <div class="panel-head"><div><strong id="source-label">source.vibe</strong> <span id="dirty-flag" class="clean">Unchanged</span></div><div><button type="button" id="suggest" aria-controls="suggestions" aria-expanded="false">Suggestions</button> <small>Ctrl+Space</small></div></div>
       <div class="editor-body">
         <pre class="gutter" id="line-numbers" aria-hidden="true">1</pre>
         <textarea id="source" aria-label="Vibe source code" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"></textarea>
@@ -136,7 +158,7 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       </div>
     </section>
   </div>
-  <p class="hint"><strong>Safety:</strong> This tool listens only on your computer. It performs no file writes when compiling. The preview has an opaque sandbox origin with no parent-page access and an additional restrictive content policy. The current Vibe preservation gate is heuristic, not formal verification. Locally saved drafts inside a sandboxed preview may be unavailable.</p>
+  <p class="hint"><strong>Safety:</strong> You can open or download a local .vibe file and explicitly save/restore a source snapshot in this browser. No automatic saving or source uploads occur; browser snapshots are not encrypted and should not contain credentials. Loading examples replaces the current editor text. This tool listens only on your computer. It performs no server file writes when compiling. The preview has an opaque sandbox origin with no parent-page access and an additional restrictive content policy. The current Vibe preservation gate is heuristic, not formal verification. Locally saved drafts inside a sandboxed preview may be unavailable.</p>
 </main>
 <script>
 (() => {
@@ -152,6 +174,10 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
   let errorLine = null;
   let completionChoices = [];
   let completionSelected = 0;
+  const SNAPSHOT_KEY = "vibeweb:playground:source:v1";
+  const MAX_SOURCE = 20000;
+  const MAX_FILE_BYTES = 40000;
+  let sourceBaseline = "";
   const statementSuggestions = {
     root: ["intent App:", "preserve:", "bridge:", "page App:", "emit web"],
     page: ['title: "Page title"', 'heading: "Page heading"', "layout: grid",
@@ -255,6 +281,146 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
     const node = byId("state");
     node.textContent = message;
     node.className = "status" + (kind ? " " + kind : "");
+  }
+  function validFileName(value) {
+    return typeof value === "string" && value.length <= 80 &&
+      /^[A-Za-z0-9][A-Za-z0-9 ._-]*\.vibe$/.test(value) && !value.includes("..");
+  }
+  function fileName() {
+    return byId("project-name").value.trim();
+  }
+  function projectStatus(message, isError = false) {
+    const status = byId("project-status");
+    status.textContent = message;
+    status.className = isError ? "error" : "";
+  }
+  function projectState() {
+    const name = fileName();
+    byId("source-label").textContent = name || "untitled.vibe";
+    const dirty = source.value !== sourceBaseline;
+    const marker = byId("dirty-flag");
+    marker.textContent = dirty ? "Unsaved edits" : "Unchanged";
+    marker.className = dirty ? "" : "clean";
+    return dirty;
+  }
+  function loadSourceText(text, name) {
+    source.value = text;
+    sourceBaseline = text;
+    byId("project-name").value = name;
+    source.scrollTop = 0;
+    errorLine = null;
+    closeSuggestions();
+    updateLines();
+    projectState();
+    return compile();
+  }
+  function validSnapshot(record) {
+    return record !== null && typeof record === "object" &&
+      !Array.isArray(record) &&
+      Object.keys(record).sort().join(",") === "filename,source,version" &&
+      record.version === 1 && validFileName(record.filename) &&
+      typeof record.source === "string" &&
+      record.source.length <= MAX_SOURCE && !record.source.includes("\0");
+  }
+  function readSnapshot() {
+    try {
+      const raw = window.localStorage.getItem(SNAPSHOT_KEY);
+      if (raw === null) return { exists: false, record: null };
+      if (raw.length > MAX_FILE_BYTES) return { exists: true, record: null };
+      const record = JSON.parse(raw);
+      return { exists: true, record: validSnapshot(record) ? record : null };
+    } catch {
+      return { exists: false, record: null, unavailable: true };
+    }
+  }
+  function refreshSnapshot() {
+    const saved = readSnapshot();
+    byId("restore-snapshot").disabled = !saved.record;
+    byId("clear-snapshot").disabled = !saved.exists;
+    return saved;
+  }
+  function downloadText(text, name, contentType) {
+    const href = URL.createObjectURL(new Blob([text], { type: contentType }));
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = name;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(href), 2000);
+  }
+  function saveSource() {
+    const name = fileName();
+    if (!validFileName(name)) {
+      projectStatus("Choose a safe .vibe filename (letters, numbers, spaces, dots, _ or -).", true);
+      return;
+    }
+    downloadText(source.value, name, "text/plain;charset=utf-8");
+    sourceBaseline = source.value;
+    projectState();
+    projectStatus("Source download requested: " + name + ". Keep your downloaded copy.");
+  }
+  async function importSource(file) {
+    if (!file) return;
+    if (!validFileName(file.name)) {
+      projectStatus("Only .vibe files with a safe filename are accepted.", true);
+      return;
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      projectStatus("Source files must be 40 KB or smaller.", true);
+      return;
+    }
+    try {
+      const text = await file.text();
+      if (text.length > MAX_SOURCE || text.includes("\0")) {
+        projectStatus("Source must contain at most 20,000 characters and no NUL bytes.", true);
+        return;
+      }
+      await loadSourceText(text, file.name);
+      projectStatus("Opened local source: " + file.name + ". File was not uploaded or modified.");
+    } catch (error) {
+      projectStatus("Could not read local source file: " + String(error.message || error), true);
+    }
+  }
+  function saveSnapshot() {
+    const name = fileName();
+    if (!validFileName(name) || source.value.length > MAX_SOURCE || source.value.includes("\0")) {
+      projectStatus("Fix the filename or source size before saving a snapshot.", true);
+      return;
+    }
+    const record = { version: 1, filename: name, source: source.value };
+    try {
+      const serialized = JSON.stringify(record);
+      if (serialized.length > MAX_FILE_BYTES) {
+        projectStatus("Snapshot exceeds the browser's 40 KB limit.", true);
+        return;
+      }
+      window.localStorage.setItem(SNAPSHOT_KEY, serialized);
+      refreshSnapshot();
+      projectStatus("Snapshot saved in this browser only. No automatic saving or syncing.");
+    } catch {
+      projectStatus("Browser storage unavailable. Download the .vibe source instead.", true);
+    }
+  }
+  async function restoreSnapshot() {
+    const record = refreshSnapshot().record;
+    if (!record) {
+      projectStatus("No valid saved snapshot available.", true);
+      return;
+    }
+    if (!window.confirm("Restore the saved " + record.filename + " snapshot? Current editor text will be replaced.")) {
+      return;
+    }
+    await loadSourceText(record.source, record.filename);
+    projectStatus("Local snapshot restored: " + record.filename + ".");
+  }
+  function clearSnapshot() {
+    if (!window.confirm("Clear the saved VibeWeb source snapshot from this browser?")) return;
+    try {
+      window.localStorage.removeItem(SNAPSHOT_KEY);
+      refreshSnapshot();
+      projectStatus("Local snapshot cleared. Current editor text was kept.");
+    } catch {
+      projectStatus("Browser storage unavailable; could not clear snapshot.", true);
+    }
   }
   function updateLines() {
     const lineCount = Math.max(1, source.value.split("\n").length);
@@ -446,10 +612,8 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       const response = await fetch("/api/example?name=" + encodeURIComponent(examples.value));
       if (!response.ok) throw Error("Example unavailable");
       const data = await response.json();
-      source.value = data.source;
-      source.scrollTop = 0;
-      updateLines();
-      await compile();
+      await loadSourceText(data.source, examples.value + ".vibe");
+      projectStatus("Loaded starter example. Current editor text was replaced; no source files were changed.");
     } catch (error) {
       setState(String(error.message || error), "bad");
     }
@@ -468,6 +632,10 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       }
       examples.value = "packs";
       await loadExample();
+      const stored = refreshSnapshot();
+      if (stored.record) projectStatus("Saved browser snapshot available. Click Restore snapshot to load it.");
+      else if (stored.exists) projectStatus("Stored snapshot is incompatible. You can clear it.", true);
+      else if (stored.unavailable) projectStatus("Browser storage unavailable. Use Download .vibe to save work.", true);
     } catch (error) {
       setState(String(error.message || error), "bad");
     }
@@ -476,10 +644,16 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
     errorLine = null;
     updateLines();
     closeSuggestions();
+    projectState();
     if (!working) setState("Source changed. Compile to refresh output.");
   });
   source.addEventListener("scroll", () => { editorLines.scrollTop = source.scrollTop; });
   source.addEventListener("keydown", event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      saveSource();
+      return;
+    }
     if ((event.ctrlKey || event.metaKey) && (event.code === "Space" || event.key === " ")) {
       event.preventDefault();
       openSuggestions();
@@ -513,11 +687,29 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       const start = source.selectionStart, end = source.selectionEnd;
       source.setRangeText("  ", start, end, "end");
       updateLines();
+      projectState();
     }
   });
   byId("suggest").addEventListener("click", () => {
     source.focus();
     openSuggestions();
+  });
+  byId("open-source").addEventListener("click", () => byId("open-source-file").click());
+  byId("open-source-file").addEventListener("change", async () => {
+    const picker = byId("open-source-file");
+    const file = picker.files && picker.files[0];
+    try { await importSource(file); }
+    finally { picker.value = ""; }
+  });
+  byId("save-source").addEventListener("click", saveSource);
+  byId("save-snapshot").addEventListener("click", saveSnapshot);
+  byId("restore-snapshot").addEventListener("click", restoreSnapshot);
+  byId("clear-snapshot").addEventListener("click", clearSnapshot);
+  byId("project-name").addEventListener("input", () => {
+    projectState();
+    if (!validFileName(fileName())) {
+      projectStatus("Choose a valid .vibe filename before downloading or saving a snapshot.", true);
+    }
   });
   byId("compile").addEventListener("click", compile);
   byId("load").addEventListener("click", loadExample);
