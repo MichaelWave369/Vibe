@@ -6,12 +6,13 @@ folder is published by the included GitHub Actions workflow.
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 import re
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 MAX_ARCHIVE_BYTES = 2_000_000
 _FILENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]*\.vibe\Z")
-_WORKFLOW = "name: Deploy VibeWeb to GitHub Pages\non:\n  push:\n    branches: [main]\n  workflow_dispatch:\n\npermissions:\n  contents: read\n  pages: write\n  id-token: write\n\nconcurrency:\n  group: github-pages\n  cancel-in-progress: false\n\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    environment:\n      name: github-pages\n      url: ${{ steps.deployment.outputs.page_url }}\n    steps:\n      - name: Check out project\n        uses: actions/checkout@v4\n      - name: Configure Pages\n        uses: actions/configure-pages@v5\n      - name: Confirm published site exists\n        run: test -f site/index.html\n      - name: Upload static site\n        uses: actions/upload-pages-artifact@v4\n        with:\n          path: site\n      - name: Deploy to Pages\n        id: deployment\n        uses: actions/deploy-pages@v4\n"
+_WORKFLOW = Path(__file__).with_name("pages_workflow.yml").read_text(encoding="utf-8")
 
 
 def safe_source_filename(name: object) -> bool:
@@ -46,9 +47,9 @@ This bundle was generated from the native Vibe compiler.
 
 ## Contents
 
-- \`site/index.html\`: The compiled, standalone, framework-free website.
+- \`site/index.html\`: A compiled preview, regenerated from source during each deployment.
 - \`source/{filename}\`: The original editable Vibe source.
-- \`.github/workflows/deploy-pages.yml\`: GitHub Pages publishing workflow.
+- \`.github/workflows/deploy-pages.yml\`: Pinned compiler build and GitHub Pages publishing workflow.
 
 ## Publish to GitHub Pages
 
@@ -66,9 +67,17 @@ remain in the repository. Public repositories expose their Vibe source too.
 ## Making edits
 
 Edit \`source/{filename}\` in the VibeWeb Playground or your editor,
-recompile with the Vibe CLI, and update \`site/index.html\` with the new
-generated HTML before committing and pushing again. The included workflow
-publishes compiled output; it does not dynamically install Vibe.
+commit it, and push to \`main\`. GitHub Actions checks out the native Vibe
+compiler pinned to commit 5ed4ef6108b86e3b91c0cb24c55b25576af0cffd,
+installs it, recompiles your source, and runs the Vibe heuristic
+preservation gate before publishing \`site/\`. You do not need to edit
+\`site/index.html\` manually. This happens on every push to \`main\`
+or manually dispatched workflow run. If compilation fails, deployment
+does not occur and your old live site remains unchanged.
+
+To upgrade the language version, explicitly change the pinned \`ref:\`
+in \`.github/workflows/deploy-pages.yml\` to a reviewed compiler commit.
+The compiler checkout is excluded from the published site artifact.
 
 Browser-local storage in this published site uses its actual GitHub Pages
 origin. If that origin is shared with other apps, they may access its data.

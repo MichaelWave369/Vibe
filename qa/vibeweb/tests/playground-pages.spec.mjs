@@ -56,6 +56,13 @@ test("Phase 3M: export a complete GitHub Pages-ready project without publishing"
   expect(archive.workflow).toContain("actions/deploy-pages@v4");
   expect(archive.workflow).toContain("actions/upload-pages-artifact@v4");
   expect(archive.workflow).toContain("path: site");
+  expect(archive.workflow).toContain("repository: MichaelWave369/Vibe");
+  expect(archive.workflow).toContain("ref: 5ed4ef6108b86e3b91c0cb24c55b25576af0cffd");
+  expect(archive.workflow).toContain("python -m pip install --no-deps ./.vibe-toolchain");
+  expect(archive.workflow).toContain('python -m vibe.web "${sources[0]}" --out site');
+  expect(archive.workflow).toContain("rm -f site/index.html site/vibeweb.report.json");
+  expect(archive.workflow.indexOf("Rebuild and verify VibeWeb source"))
+    .toBeLessThan(archive.workflow.indexOf("Upload compiled site only"));
   await expect(page.locator("#project-status")).toContainText("ZIP download requested");
   await expect(page.locator("#dirty-flag")).toHaveText("Unsaved edits");
 });

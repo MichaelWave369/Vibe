@@ -361,3 +361,100 @@ def test_phase3m_playground_exposes_explicit_pages_export_only(local_server):
     assert "/api/export-pages" in document
     assert 'sandbox="allow-scripts"' in document
     assert "window.localStorage.setItem(SNAPSHOT_KEY" in document
+
+
+
+def _phase3n_bash_build_step(workflow: str) -> str:
+    """Extract the exact Bash run block emitted into the exported workflow."""
+    beginning = (
+        "      - name: Rebuild and verify VibeWeb source\n"
+        "        shell: bash\n"
+        "        run: |\n"
+    )
+    assert workflow.count(beginning) == 1
+    body = workflow.split(beginning, 1)[1].split("      - name: Configure Pages", 1)[0]
+    assert all(not line.strip() or line.startswith("          ") for line in body.splitlines())
+    return "\n".join(line[10:] for line in body.splitlines() if line.strip()) + "\n"
+
+
+def test_phase3n_exported_workflow_rebuilds_from_pinned_native_compiler():
+    from io import BytesIO
+    from zipfile import ZipFile
+    from vibe.playground_export import build_pages_archive
+
+    source = sample("counter")
+    compiled = compile_document(source)
+    assert compiled["ok"]
+    with ZipFile(BytesIO(build_pages_archive(source, "counter.vibe", compiled["html"]))) as zipped:
+        workflow = zipped.read(".github/workflows/deploy-pages.yml").decode()
+        guide = zipped.read("README.md").decode()
+        assert "recompile" in guide.lower() or "rebuild" in guide.lower()
+        assert "do not need to edit" in guide.lower()
+        assert "actions/checkout@v4" in workflow
+        assert "repository: MichaelWave369/Vibe" in workflow
+        assert "ref: 5ed4ef6108b86e3b91c0cb24c55b25576af0cffd" in workflow
+        assert "ref: main" not in workflow
+        assert "python -m pip install --no-deps ./.vibe-toolchain" in workflow
+        assert 'python -m vibe.web "${sources[0]}" --out site' in workflow
+        assert 'rm -f site/index.html site/vibeweb.report.json' in workflow
+        assert "report.get(\"bridge_passed\") is not True" in workflow
+        assert workflow.index("Rebuild and verify VibeWeb source") < workflow.index("Upload compiled site only")
+        assert "path: site" in workflow
+        assert "cancel-in-progress: false" in workflow
+        assert "pages: write" in workflow
+        assert "id-token: write" in workflow
+        assert "branches: [main]" in workflow
+        assert "workflow_dispatch:" in workflow
+        assert "source/*.vibe" in workflow
+        assert "${#sources[@]}" in workflow
+
+
+def test_phase3n_actual_bash_workflow_rebuilds_and_blocks_bad_source(tmp_path):
+    """Run exactly the exported workflow's compilation block on a sample project."""
+    import shutil
+    import subprocess
+    from io import BytesIO
+    from zipfile import ZipFile
+    from vibe.playground_export import build_pages_archive
+
+    if shutil.which("bash") is None:
+        pytest.skip("Bash required for generated GitHub Actions workflow integration")
+    src = sample("counter")
+    result = compile_document(src)
+    assert result["ok"] is True
+    payload = build_pages_archive(src, "My Counter.vibe", result["html"])
+    with ZipFile(BytesIO(payload)) as zipped:
+        zipped.extractall(tmp_path)
+        script = _phase3n_bash_build_step(
+            zipped.read(".github/workflows/deploy-pages.yml").decode()
+        )
+
+    source_path = tmp_path / "source" / "My Counter.vibe"
+    site = tmp_path / "site" / "index.html"
+    site.write_text("<!doctype html><title>Old stale site</title>", encoding="utf-8")
+    new_source = src.replace("The first VibeWeb page", "Updated from Vibe source")
+    assert new_source != src
+    source_path.write_text(new_source, encoding="utf-8")
+    good = subprocess.run(["bash", "-e", "-c", script], cwd=tmp_path,
+                          capture_output=True, text=True, timeout=30)
+    assert good.returncode == 0, (good.stdout, good.stderr)
+    html = site.read_text(encoding="utf-8")
+    assert "Updated from Vibe source" in html
+    assert "Old stale site" not in html
+    report = json.loads((tmp_path / "site" / "vibeweb.report.json").read_text())
+    assert report["bridge_passed"] is True and report["result"] == "emitted"
+
+    # The script removes stale HTML first, so invalid source cannot deploy it.
+    source_path.write_text(new_source.replace("count += 1", "eval(1)"), encoding="utf-8")
+    failure = subprocess.run(["bash", "-e", "-c", script], cwd=tmp_path,
+                             capture_output=True, text=True, timeout=30)
+    assert failure.returncode != 0
+    assert not site.exists(), "invalid Vibe source must not leave stale deployable index.html"
+
+    # A second .vibe source is rejected rather than silently picked.
+    source_path.write_text(new_source, encoding="utf-8")
+    (tmp_path / "source" / "extra.vibe").write_text(src, encoding="utf-8")
+    multiple = subprocess.run(["bash", "-e", "-c", script], cwd=tmp_path,
+                              capture_output=True, text=True, timeout=30)
+    assert multiple.returncode != 0
+    assert "exactly one" in multiple.stdout or "exactly one" in multiple.stderr
