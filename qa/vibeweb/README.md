@@ -138,3 +138,16 @@ layout and axe checks.
 This remains an opt-in, browser-local workflow. The compiler backend
 does **not** create or overwrite project files, and no cloud sync,
 repository commit operation or public hosting is involved.
+
+## Phase 3M: GitHub Pages project ZIP export QA
+
+`tests/playground-pages.spec.mjs` verifies the loopback playground's
+**Export Pages ZIP** action. The suite inspects the actual downloaded ZIP
+using Python's standard `zipfile`, confirms exact Vibe source round trips,
+checks the generated standalone site, the minimal GitHub Pages workflow,
+compiler failures, filename safety, mobile layout, and axe accessibility.
+
+`tests/test_playground.py` verifies deterministic in-memory ZIP creation,
+bounded ZIP paths, metadata/headers, same-origin request guards and
+failure-without-download behavior. No GitHub repository changes or actual
+deployment are performed by the tests.
