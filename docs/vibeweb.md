@@ -475,3 +475,41 @@ developer environment is not a public multi-tenant service and must not be
 exposed directly to the internet; deploying a hosted compiler requires
 additional authentication, process isolation, rate controls and security
 review.
+
+## Phase 3K: contextual completion, line diagnostics and source/output inspector
+
+The local VibeWeb Playground from Phase 3J now provides **opt-in contextual
+completion** with `Ctrl+Space` or the **Suggestions** button. Suggested
+statements are intentionally curated and selected by the current Vibe
+indentation/section (page, view, typing, components, state, bounds, etc.).
+Use Arrow Up/Down and Enter/Tab to choose, or Escape to dismiss. The editor
+still uses a dependency-free `textarea`, not a language server or a full
+syntax-aware Monaco environment. Autocomplete never executes the suggestion.
+
+Compile diagnostics now render line buttons for errors that the native
+parser can locate. Clicking a line scrolls to and selects the corresponding
+source, while the editor gutter marks that line. Edits clear the stale error
+highlight. Some verifier or semantic failures do not include a precise
+source line; these remain normal text diagnostics and are not falsely mapped.
+
+The new **Source map** tab lists a bounded, best-effort outline of recognized
+declarations, including their original line numbers, first matching
+generated-HTML lines and escaped excerpts. Source line buttons jump to
+the editor, and HTML line buttons highlight the generated markup inside
+the HTML inspector. This is **not a full source map**. A generated component
+may be used more than once, and certain metadata-only declarations have no
+direct HTML node. The outline is a navigation aid for known constructs.
+Neither compiler-provided source nor output HTML is inserted into the
+playground DOM as executable markup.
+
+```bash
+python -m vibe.playground --port 4320
+python -m pytest -q tests/test_playground.py
+```
+
+The Chromium QA suite covers completion, accepting/canceling suggestions,
+line navigation on syntax errors, source-to-HTML inspection, mobile layout,
+and automated axe accessibility checks. The compiler server remains bound
+to localhost and all preview sandbox restrictions remain unchanged. No
+network-connected autocomplete service, remote language model or third-party
+editor dependency is added.
