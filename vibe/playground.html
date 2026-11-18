@@ -222,8 +222,9 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
   }
   function openSuggestions() {
     const { section, prefix } = contextAtCursor();
-    const sourceLine = source.value.slice(source.value.lastIndexOf("\n", source.selectionStart - 1) + 1);
-    if (sourceLine.slice(source.selectionStart - (source.value.lastIndexOf("\n", source.selectionStart - 1) + 1)).trim()) {
+    const lineStart = source.value.lastIndexOf("\n", source.selectionStart - 1) + 1;
+    const sourceLine = source.value.slice(lineStart).split("\n", 1)[0];
+    if (sourceLine.slice(source.selectionStart - lineStart).trim()) {
       // No suggestions inside a line's existing suffix.
       closeSuggestions();
       return;
@@ -259,8 +260,117 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
   }
   function updateLines() {
     const lineCount = Math.max(1, source.value.split("\n").length);
-    editorLines.textContent = Array.from({ length: lineCount }, (_, i) => i + 1).join("\n");
+    const fragment = document.createDocumentFragment();
+    for (let line = 1; line <= lineCount; line++) {
+      const item = document.createElement("span");
+      item.textContent = String(line);
+      if (line === errorLine) item.className = "gutter-marked";
+      fragment.append(item);
+    }
+    editorLines.replaceChildren(fragment);
+    source.classList.toggle("source-has-error", errorLine !== null);
+    editorLines.scrollTop = source.scrollTop;
     byId("charcount").textContent = source.value.length + " / 20,000 characters";
+  }
+  function jumpToLine(line) {
+    if (!Number.isInteger(line) || line < 1) return;
+    const lines = source.value.split("\n");
+    if (line > lines.length) return;
+    const before = lines.slice(0, line - 1);
+    const start = before.reduce((sum, text) => sum + text.length + 1, 0);
+    source.focus();
+    source.setSelectionRange(start, start + lines[line - 1].length);
+    const lineHeight = Number.parseFloat(window.getComputedStyle(source).lineHeight) || 21;
+    source.scrollTop = Math.max(0, (line - 3) * lineHeight);
+    editorLines.scrollTop = source.scrollTop;
+    errorLine = line;
+    updateLines();
+  }
+  function renderDiagnostics(items) {
+    const container = byId("diagnostics");
+    container.replaceChildren();
+    if (!items.length) {
+      container.textContent = "No diagnostics.";
+      return;
+    }
+    const first = items.find(item => item.level === "error" && Number.isInteger(item.line));
+    errorLine = first ? first.line : null;
+    updateLines();
+    for (const item of items) {
+      const row = document.createElement("div");
+      row.className = "diag-item";
+      if (Number.isInteger(item.line) && item.line > 0) {
+        const go = document.createElement("button");
+        go.type = "button";
+        go.textContent = "Line " + item.line + (item.column ? ":" + item.column : "");
+        go.addEventListener("click", () => jumpToLine(item.line));
+        row.append(go);
+      }
+      const message = document.createElement("span");
+      message.className = "diag-text";
+      message.textContent = item.level.toUpperCase() + ": " + item.message;
+      row.append(message);
+      container.append(row);
+    }
+  }
+  function showHtml(html) {
+    const pre = byId("html-output");
+    pre.replaceChildren();
+    const fragment = document.createDocumentFragment();
+    html.split("\n").forEach((line, index) => {
+      const element = document.createElement("span");
+      element.className = "html-line";
+      element.dataset.line = String(index + 1);
+      element.textContent = line || " ";
+      fragment.append(element);
+    });
+    pre.append(fragment);
+  }
+  function showHtmlAtLine(line) {
+    tab("html");
+    const element = [...byId("html-output").children]
+      .find(child => Number(child.dataset.line) === line);
+    if (!element) return;
+    const panel = byId("view-html");
+    [...byId("html-output").children].forEach(child =>
+      child.classList.remove("html-focus-line"));
+    element.classList.add("html-focus-line");
+    const delta = element.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+    panel.scrollTop += delta - panel.clientHeight / 3;
+  }
+  function renderOutline(outline) {
+    const list = byId("map-output");
+    list.replaceChildren();
+    if (!Array.isArray(outline) || !outline.length) {
+      list.textContent = "No declaration anchors were generated.";
+      return;
+    }
+    for (const item of outline) {
+      const row = document.createElement("div");
+      row.className = "map-entry";
+      const heading = document.createElement("strong");
+      heading.textContent = item.kind + " · " + item.name;
+      row.append(heading);
+      const navigation = document.createElement("div");
+      navigation.className = "map-actions";
+      const sourceButton = document.createElement("button");
+      sourceButton.type = "button";
+      sourceButton.textContent = "Source line " + item.source_line;
+      sourceButton.addEventListener("click", () => jumpToLine(item.source_line));
+      navigation.append(sourceButton);
+      if (Number.isInteger(item.html_line)) {
+        const htmlButton = document.createElement("button");
+        htmlButton.type = "button";
+        htmlButton.textContent = "HTML line " + item.html_line;
+        htmlButton.addEventListener("click", () => showHtmlAtLine(item.html_line));
+        navigation.append(htmlButton);
+      }
+      row.append(navigation);
+      const excerpt = document.createElement("pre");
+      excerpt.textContent = item.html_excerpt || "No direct emitted HTML anchor.";
+      row.append(excerpt);
+      list.append(row);
+    }
   }
   function tab(name) {
     tabs.forEach(key => {
