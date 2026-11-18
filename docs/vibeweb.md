@@ -562,3 +562,63 @@ python -m vibe.playground --port 4320
 The Playwright suite covers opening source, exact download round trips,
 source dirty status, save/reload/restore/clear, invalid filenames and files,
 corrupt storage, 360px mobile layout, and axe A/AA automated checks.
+
+## Phase 3M: export a GitHub Pages-ready static project
+
+The loopback VibeWeb Playground adds an explicit **Export Pages ZIP** button
+beside the local project file tools. This is separate from **Save HTML** and
+**Download .vibe**: it compiles the current editor source with the **same
+native Vibe parser, typed SSA IR, web emitter and bridge gate**, and returns
+a complete ZIP without writing files on the server.
+
+The generated archive contains:
+
+```text
+site/index.html                          # Compiled standalone VibeWeb page
+site/.nojekyll                           # Disable Jekyll processing
+source/your-file.vibe                    # Original editable source
+.github/workflows/deploy-pages.yml       # GitHub Pages Actions deployment
+README.md                                # Step-by-step publish instructions
+```
+
+The included GitHub Actions workflow checks out the repository, configures
+GitHub Pages, verifies the `site/index.html` file exists, uploads **only**
+`site/` via `actions/upload-pages-artifact@v4`, and deploys it with
+`actions/deploy-pages@v4`. It runs on pushes to `main` or manual
+`workflow_dispatch`; its job needs `pages: write` and `id-token: write`.
+The workflow intentionally serves the already-compiled static output: **if
+you later change the `.vibe` source, compile it again and replace
+`site/index.html`** before committing.
+
+To publish, extract the downloaded ZIP into an empty local Git repository,
+commit and push its contents to `main`, then select **GitHub Actions** in
+that repository's **Settings → Pages**. The user must perform the GitHub
+repository creation, commit, push and Pages settings. A ZIP export does
+**not** publish, mutate the user's existing repositories, or authenticate to
+GitHub automatically.
+
+The exporter is restricted to a safe 6–80-character `.vibe` basename,
+at most 20,000 source characters and a 40 KB JSON request body. It accepts
+only validated source and produces compiled HTML after the native
+preservation check; invalid input or failed compiles return JSON diagnostics,
+**not** a half-built ZIP. ZIP entries are fixed, deterministic paths and
+contain no user-controlled directory segments; the archive is bounded at
+2 MB and generated entirely in memory. The endpoint preserves loopback
+Host restrictions, CSRF header/Origin checks and no-CORS policy.
+
+```bash
+python -m vibe.playground --port 4320
+python -m pytest -q tests/test_playground.py
+```
+
+The browser test suite downloads the ZIP, verifies its contents and
+recompilation safety, checks invalid sources, tests the mobile toolbar, and
+runs automated axe accessibility scans.
+
+**Security and privacy:** Websites published to GitHub Pages are public
+unless access restrictions apply through GitHub or another service. Public
+repositories expose the included Vibe source. Never publish credentials,
+private data, or anything you do not intend to share. A static VibeWeb site
+has no authentication or database. Browser-local storage is origin-scoped and
+is not secret or synchronized. The bundle is appropriate only for one
+standalone static page, not an authenticated service or multi-page build.

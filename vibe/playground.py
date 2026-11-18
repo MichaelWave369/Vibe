@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 from .emitter import emit_code
 from .ir import ast_to_ir
 from .playground_inspector import build_outline
+from .playground_export import archive_filename, build_pages_archive, safe_source_filename
 from .parser import ParseError, parse_source
 from .verifier import verify
 from .web import WebSpecError
@@ -102,13 +103,16 @@ class PlaygroundHandler(BaseHTTPRequestHandler):
         host = self.headers.get("Host", "")
         return bool(re.fullmatch(r"(?:127\.0\.0\.1|localhost)(?::\d{1,5})?", host))
 
-    def _headers(self, status: int, content_type: str, content: bytes) -> None:
+    def _headers(self, status: int, content_type: str, content: bytes, *, filename: str | None = None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
+        if filename is not None:
+            # Filename is first validated by the dedicated archive exporter.
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Content-Security-Policy",
                          "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
@@ -150,7 +154,8 @@ class PlaygroundHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         if self._reject_host():
             return
-        if urlsplit(self.path).path != "/api/compile":
+        route = urlsplit(self.path).path
+        if route not in {"/api/compile", "/api/export-pages"}:
             self._json(404, {"error": "Not found."})
             return
         # Cross-origin websites cannot set this non-simple header without a
@@ -178,10 +183,32 @@ class PlaygroundHandler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeError):
             self._json(400, {"error": "Malformed JSON request."})
             return
-        if not isinstance(payload, dict) or set(payload) != {"source"}:
-            self._json(400, {"error": "Expected only the source property."})
+        if not isinstance(payload, dict):
+            self._json(400, {"error": "Expected a JSON object."})
             return
-        self._json(200, compile_document(payload["source"]))
+        if route == "/api/compile":
+            if set(payload) != {"source"}:
+                self._json(400, {"error": "Expected only the source property."})
+                return
+            self._json(200, compile_document(payload["source"]))
+            return
+        if set(payload) != {"source", "filename"}:
+            self._json(400, {"error": "Expected source and filename only."})
+            return
+        if not safe_source_filename(payload["filename"]):
+            self._json(400, {"error": "Export requires a safe .vibe source filename."})
+            return
+        compiled = compile_document(payload["source"])
+        if not compiled["ok"]:
+            self._json(422, compiled)
+            return
+        try:
+            archive = build_pages_archive(payload["source"], payload["filename"], compiled["html"])
+        except ValueError as exc:
+            self._json(413, {"error": str(exc)})
+            return
+        self._headers(200, "application/zip", archive,
+                      filename=archive_filename(payload["filename"]))
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         self._json(405, {"error": "CORS preflight not supported."})

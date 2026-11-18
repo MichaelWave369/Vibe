@@ -114,10 +114,11 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
     <input id="open-source-file" type="file" accept=".vibe" hidden>
     <button type="button" id="open-source">Open .vibe</button>
     <button type="button" id="save-source">Download .vibe</button>
+    <button type="button" id="export-pages" title="Export compiled site, source and GitHub Pages workflow as a ZIP">Export Pages ZIP</button>
     <button type="button" id="save-snapshot">Save snapshot</button>
     <button type="button" id="restore-snapshot" disabled>Restore snapshot</button>
     <button type="button" id="clear-snapshot" disabled>Clear snapshot</button>
-    <p id="project-status" role="status" aria-live="polite">Source is local. No automatic saving or uploads.</p>
+    <p id="project-status" role="status" aria-live="polite">Source is local. No automatic saving, uploads or deployments.</p>
   </section>
   <div class="workspace">
     <section class="panel" aria-label="Vibe source editor">
@@ -158,7 +159,7 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       </div>
     </section>
   </div>
-  <p class="hint"><strong>Safety:</strong> You can open or download a local .vibe file and explicitly save/restore a source snapshot in this browser. No automatic saving or source uploads occur; browser snapshots are not encrypted and should not contain credentials. Loading examples replaces the current editor text. This tool listens only on your computer. It performs no server file writes when compiling. The preview has an opaque sandbox origin with no parent-page access and an additional restrictive content policy. The current Vibe preservation gate is heuristic, not formal verification. Locally saved drafts inside a sandboxed preview may be unavailable.</p>
+  <p class="hint"><strong>Pages export:</strong> Export Pages ZIP includes site/index.html, original source, setup guidance and a GitHub Actions workflow. Nothing is published until you extract it into a GitHub repo, commit, push and enable Pages. <strong>Safety:</strong> You can open or download a local .vibe file and explicitly save/restore a source snapshot in this browser. No automatic saving or source uploads occur; browser snapshots are not encrypted and should not contain credentials. Loading examples replaces the current editor text. This tool listens only on your computer. It performs no server file writes when compiling. The preview has an opaque sandbox origin with no parent-page access and an additional restrictive content policy. The current Vibe preservation gate is heuristic, not formal verification. Locally saved drafts inside a sandboxed preview may be unavailable.</p>
 </main>
 <script>
 (() => {
@@ -378,6 +379,56 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
       projectStatus("Opened local source: " + file.name + ". File was not uploaded or modified.");
     } catch (error) {
       projectStatus("Could not read local source file: " + String(error.message || error), true);
+    }
+  }
+  async function exportPages() {
+    const name = fileName();
+    if (!validFileName(name) || source.value.length > MAX_SOURCE ||
+        source.value.includes("\0")) {
+      projectStatus("Use a valid .vibe filename and bounded source before exporting.", true);
+      return;
+    }
+    const button = byId("export-pages");
+    if (button.disabled) return;
+    button.disabled = true;
+    const snapshot = source.value;
+    projectStatus("Compiling and preparing GitHub Pages ZIP locally...");
+    try {
+      const response = await fetch("/api/export-pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Vibe-Playground": "compile" },
+        body: JSON.stringify({ source: snapshot, filename: name }),
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        const items = Array.isArray(data.diagnostics) ? data.diagnostics : [];
+        if (items.length) {
+          renderDiagnostics(items);
+          byId("diagnostics").className = "error";
+        }
+        throw Error(data.error || items.map(item => item.message).join("; ") ||
+          "Vibe compiler refused the project export.");
+      }
+      if (!response.headers.get("Content-Type")?.includes("application/zip")) {
+        throw Error("Unexpected export format.");
+      }
+      const data = await response.blob();
+      if (data.size > 2_000_000) throw Error("Export exceeds the size limit.");
+      const label = name.slice(0, -5).trim().toLowerCase().replaceAll(" ", "-");
+      const filename = "vibeweb-" + label + "-pages.zip";
+      const url = URL.createObjectURL(data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+      projectStatus("Pages ZIP download requested: " + filename +
+        ". Extract into a repository and enable Pages via GitHub Actions to publish.");
+    } catch (error) {
+      projectStatus("Pages export failed: " + String(error.message || error), true);
+    } finally {
+      button.disabled = false;
     }
   }
   function saveSnapshot() {
@@ -702,6 +753,7 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
     finally { picker.value = ""; }
   });
   byId("save-source").addEventListener("click", saveSource);
+  byId("export-pages").addEventListener("click", exportPages);
   byId("save-snapshot").addEventListener("click", saveSnapshot);
   byId("restore-snapshot").addEventListener("click", restoreSnapshot);
   byId("clear-snapshot").addEventListener("click", clearSnapshot);
