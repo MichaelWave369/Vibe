@@ -581,14 +581,13 @@ source/your-file.vibe                    # Original editable source
 README.md                                # Step-by-step publish instructions
 ```
 
-The included GitHub Actions workflow checks out the repository, configures
-GitHub Pages, verifies the `site/index.html` file exists, uploads **only**
-`site/` via `actions/upload-pages-artifact@v4`, and deploys it with
-`actions/deploy-pages@v4`. It runs on pushes to `main` or manual
-`workflow_dispatch`; its job needs `pages: write` and `id-token: write`.
-The workflow intentionally serves the already-compiled static output: **if
-you later change the `.vibe` source, compile it again and replace
-`site/index.html`** before committing.
+The exported GitHub Actions workflow checks out the repository and a
+**pinned Vibe compiler**, recompiles `source/*.vibe` to `site/`, verifies
+the compiler's report, and uploads **only** the rebuilt `site/` via
+`actions/upload-pages-artifact@v4` before `actions/deploy-pages@v4`.
+It runs on pushes to `main` or manual `workflow_dispatch`, with
+`pages: write` and `id-token: write` permissions. See Phase 3N below
+for the compiler pin, failure behavior, and reproducibility limits.
 
 To publish, extract the downloaded ZIP into an empty local Git repository,
 commit and push its contents to `main`, then select **GitHub Actions** in
@@ -622,3 +621,57 @@ private data, or anything you do not intend to share. A static VibeWeb site
 has no authentication or database. Browser-local storage is origin-scoped and
 is not secret or synchronized. The bundle is appropriate only for one
 standalone static page, not an authenticated service or multi-page build.
+
+
+## Phase 3N: automatic source-to-site rebuild on every push
+
+GitHub Pages ZIP exports now include a workflow that **recompiles the original
+\`.vibe\` source on every push to \`main\` or manual workflow run**. The
+workflow requires exactly one file at \`source/*.vibe\`, so filenames with
+spaces work and ambiguous projects fail rather than silently choosing a page.
+The initial ZIP still contains \`site/index.html\` for offline inspection,
+but this bundled preview is never treated as authoritative during deploy.
+
+The generated Actions workflow checks out the project, then separately
+checks out the **public Vibe repository** pinned to commit
+\`5ed4ef6108b86e3b91c0cb24c55b25576af0cffd\` under a private-to-the-build
+\`.vibe-toolchain/\` checkout. It installs that exact compiler and executes:
+
+\`\`\`bash
+python -m vibe.web "source/your-file.vibe" --out site
+\`\`\`
+
+The workflow removes stale \`site/index.html\` and its report before
+compiling, requires nonempty regenerated HTML, and verifies
+\`site/vibeweb.report.json\` reports \`bridge_passed: true\`. Any parser,
+compiler, or heuristic preservation failure stops the job **before upload
+or deployment**. The existing live Pages version remains in place if a
+new build fails. The compiled \`site/\` folder is the **only deployment
+artifact**: the compiler checkout, raw \`.vibe\` source and workflow are
+not copied to the hosted website (although source remains visible in
+public GitHub repositories).
+
+The compiler is pinned deliberately, rather than following Vibe \`main\`
+every time. When new Vibe language features are needed, change the
+exported workflow's pinned \`ref:\` to a reviewed release/commit and test
+the site. The pin currently supports the language features available
+through Phase 3M; future syntax may require an intentional upgrade.
+
+**Editing a published project now needs only editing
+\`source/your-file.vibe\` and pushing the change.** The workflow compiles
+and deploys without requiring a local Python build or manual edits to
+\`site/index.html\`. Initial repository creation, commits, GitHub Pages
+configuration and any repository permissions are still the user's
+explicit responsibility. No GitHub repository is modified by exporting.
+
+The Python test suite extracts the ZIP and runs the **exact exported
+Bash build block** on a temporary project with a changed source file,
+verifying successful regeneration, a verified compiler report, rejection
+of invalid source without stale deployable output, and rejection of
+ambiguous multiple-\`.vibe\` source projects. Chromium verifies that the
+downloaded ZIP contains the pinned compiler source-build workflow.
+
+The build gate remains a **heuristic compiler check**, not a formal
+security guarantee. The workflow is a single-page static-site publisher
+and is not an authenticated backend. GitHub Actions must be enabled and
+have Pages deployment permissions for publication to succeed.
