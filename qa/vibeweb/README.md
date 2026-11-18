@@ -114,3 +114,15 @@ passes automated axe checks.
 No new React/Svelte benchmark claims are made. The playground is a
 developer tool, not a public code-execution website. Use
 `python -m vibe.playground --port 4320` locally.
+
+## Phase 3K editor intelligence
+
+`tests/playground-editor.spec.mjs` exercises the existing native local
+playground's editor enhancements with Chromium: Ctrl+Space completions,
+click-to-source compiler errors, generated HTML line navigation,
+and 360px mobile/axe checks. The source-to-output mapping is deliberately
+partial. No new React/Svelte performance comparison is claimed.
+
+```bash
+npm run test:browser --prefix qa/vibeweb
+```
