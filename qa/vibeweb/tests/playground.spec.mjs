@@ -57,6 +57,8 @@ test("playground doesn't render source strings as HTML in the editing shell", as
   await page.getByRole("combobox", { name: "Example to load" }).selectOption("counter");
   await page.getByRole("button", { name: "Load example" }).click();
   const source = page.getByRole("textbox", { name: "Vibe source code" });
+  await expect(source).toHaveValue(/intent CounterPage/);
+  await expect(page.frameLocator("#preview").getByRole("heading", { name: "The first VibeWeb page" })).toBeVisible();
   const text = await source.inputValue();
   await source.fill(text.replace('heading: "The first VibeWeb page"',
     'heading: "<img src=x onerror=alert(1)> safe example"'));
