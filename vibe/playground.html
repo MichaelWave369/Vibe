@@ -213,22 +213,20 @@ kbd{border:1px solid #657692;border-radius:5px;padding:.1rem .3rem;background:#1
     if (!choice) return;
     const cursor = source.selectionStart;
     const lineStart = source.value.lastIndexOf("\n", cursor - 1) + 1;
+    const lineEndIndex = source.value.indexOf("\n", cursor);
+    const lineEnd = lineEndIndex < 0 ? source.value.length : lineEndIndex;
     const before = source.value.slice(lineStart, cursor);
     const indent = (before.match(/^ */) || [""])[0].length;
-    source.setRangeText(choice, lineStart + indent, cursor, "end");
+    // Replacing an existing statement must not duplicate its remaining suffix.
+    source.setRangeText(choice, lineStart + indent, lineEnd, "end");
     closeSuggestions();
     source.focus();
     source.dispatchEvent(new Event("input", { bubbles: true }));
   }
   function openSuggestions() {
     const { section, prefix } = contextAtCursor();
-    const lineStart = source.value.lastIndexOf("\n", source.selectionStart - 1) + 1;
-    const sourceLine = source.value.slice(lineStart).split("\n", 1)[0];
-    if (sourceLine.slice(source.selectionStart - lineStart).trim()) {
-      // No suggestions inside a line's existing suffix.
-      closeSuggestions();
-      return;
-    }
+    // Offer contextual replacement even at the start of an existing statement.
+    // Acceptance replaces the entire current statement, not just the prefix.
     const values = statementSuggestions[section] || [];
     completionChoices = values.filter(value =>
       value.toLowerCase().startsWith(prefix.toLowerCase())).slice(0, 9);
